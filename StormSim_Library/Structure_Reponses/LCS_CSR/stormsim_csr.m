@@ -24,8 +24,6 @@ for ii = 1:length(storm_type)
                     if ~exist(fullfile(outfolder, 'LCS_DPA'),'dir')
                         mkdir(fullfile(outfolder, 'LCS_DPA'));
                     end
-                    % Generate Plot Structure
-                    S_damage_plotter(config, Resp.(storm_type{ii}).S, 0, 0, fullfile(outfolder, 'LCS_DPA'));
                 end
         end
     end

@@ -97,7 +97,7 @@ function [PF_Summary,Reliab_Summary] = stormsim_csr_peaks(config, structure, emp
 % Water density (kg/m^3)
 dw = config.water_density;
 % Storm duration (hr)
-Dstm = config.storm_duration*24; % Convert form days to hrs
+Dstm = config.storm_duration;
 % Get Requested CLs
 prc = [cellfun(@str2double,strsplit(config.project_CLs(2:end-1),{' '}))];
 
@@ -167,6 +167,13 @@ for lcS=1:length(LC_MCSimOUT)
     Tp = LC_MCSimOUT{lcS}(:,7); %Peak Wave Period
     % Number Of Simulations (# Of Storms)
     nSim = size(LC_MCSimOUT{lcS},1);
+    % Life Cycle Without Storms: No Failure (Reliability 1)
+    if nSim == 0
+        Reliab_ss(lcS,1) = 1;
+        Reliab_ls(lcS,1) = 1;
+        Reliab_all(lcS,1) = 1;
+        continue
+    end
 
     %% APPLY UNCERTAINTY TO Tp AND COMPUTE ADDITIONAL PARAMETERS
     % Mean wave period (sec)

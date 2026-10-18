@@ -142,8 +142,8 @@ nTimes_per_LC = cellfun(@(x) length(x(:,1)),LC_SimOUT_hyd);
 % Define Number of Years
 nYears = config.mcs_nYears;
 % Grab Submergance Switch
-compute_S_submerged = config.csr_compute_S_submerged;
-
+% compute_S_submerged = config.csr_compute_S_submerged;
+compute_S_submerged=0;
 %% GRAB INPUTS FROM "config"
 % ---------- PROJECT DETAILS ----------
 % Water density (kg/m^3)
@@ -173,7 +173,7 @@ cutoff_delta = config.csr_cutoff_offset;
 % Extract Strcutural Paramaters From Structure
 crest_elevation = structure.crest_elevation;
 crest_width = structure.crest_width;
-toe_elevation = abs(structure.toe_elevation);
+toe_elevation = structure.toe_elevation;
 seaside_slope = structure.seaside_slope;
 leeside_slope = structure.leeside_slope;
 armor_delta = structure.armor_delta;
@@ -389,8 +389,9 @@ disp([newline '      Computing Post Damage Statistics....']);
 %% STORE LAST COMPUTED DAMAGE FOR EACH LC
 % This will turn into a mean sigular value once percentiles are computed
 % Seaside
-S_final = cellfun(@(x) x(end),Ssea_no_repairs,'un',true);
-LS_final = cellfun(@(x) x(end),SLee_no_repairs,'un',true);
+% (Life Cycles Without Storms Keep The Initial Damage, 0)
+S_final = lc_values(Ssea_no_repairs, @(x) x(end));
+LS_final = lc_values(SLee_no_repairs, @(x) x(end));
 
 %% DIAGNOSTICS STRUCTURE
 diagnostics(1,:) = cellfun(@(a) table(WL{a},Hm0{a},...
@@ -455,17 +456,18 @@ if repair_switch > 0
         'Leeside_Repair_90_Percentile'});
 else
     % Seaside N Repairs
-    sea_repairs = sum(cellfun(@(x) max(x), Ssea_no_repairs, 'UniformOutput', true)>=Ssea_ULS);
+    sea_repairs = sum(lc_values(Ssea_no_repairs, @max)>=Ssea_ULS);
     % Leeside N Repairs
-    lee_repairs = sum(cellfun(@(x) max(x), SLee_no_repairs, 'UniformOutput', true)>=Slee_ULS);
+    lee_repairs = sum(lc_values(SLee_no_repairs, @max)>=Slee_ULS);
 end
 
 %% COMPUTE RELIABILITY
-if repair_switch == 1
+if repair_switch > 0
+    % One Repair_Indexes Row Per Life Cycle With At Least One Repair (sea_repairs/lee_repairs Are 0 When None Was Needed)
     % Seaside Reliability
-    Reliability_Seaside = 1 - length(sea_repairs)/nLC;
+    Reliability_Seaside = 1 - size(Seaside_Repair_Indexes, 1)/nLC;
     % Leeside Reliability
-    Reliability_Leeside = 1 - length(lee_repairs)/nLC;
+    Reliability_Leeside = 1 - size(Leeside_Repair_Indexes, 1)/nLC;
 else
     % Seaside Reliability
     Reliability_Seaside = 1 - sea_repairs/nLC;
@@ -506,6 +508,12 @@ CSR_Timeseries_DPA.SPcurves = SPcurves;
 CSR_Timeseries_DPA.diagnostics = diagnostics;
 
 %% AUX FUNCTIONS
+% ONE VALUE PER LIFE CYCLE (fun(x)); LIFE CYCLES WITHOUT STORMS KEEP THE INITIAL DAMAGE (0)
+    function v = lc_values(S, fun)
+        v = zeros(size(S));
+        has_storms = ~cellfun(@isempty, S);
+        v(has_storms) = cellfun(fun, S(has_storms));
+    end
 % DETERMINE STORM END ROW
     function  storm_end_row = find_storm_end(LC_SimOUT_hyd, NlcS, Ntime)
         storm_tstps = LC_SimOUT_hyd{NlcS}(Ntime:end,10); % 0:73 or 0:96 repeated for 70ish storms except missing first Ntime values
