@@ -1,4 +1,4 @@
-function [sample_storms, lcs_data] = sample_tc_storm(storm_peaks, simulation_years, prob_mass)
+function [sample_storms, lcs_data] = sample_tc_storm(storm_peaks, simulation_years, prob_mass, restrict_rate)
 %{
 LICENSING:
     This code is part of StormSim software suite developed by the U.S. Army
@@ -124,29 +124,64 @@ TC_Freq = prob_mass.TC_Freq;
 if simulation_years == 1e5
     SIM_Flag = 1e-4;
 else
-    SIM_Flag = 10^-(log10(simulation_years));
+    SIM_Flag = 1/simulation_years; % Force at least 1 event/yr
 end
 
 %% POISSON PROCESS
 % Assing SRR for all intensities as lambda
-TC_lambda = TC_SRR(1,end);
+TC_lambda = TC_SRR(1,end);  % Events/ Yr
+if ~isscalar(TC_lambda) || ~isfinite(TC_lambda) || TC_lambda < 0
+    error('sample_tc_storm: TC storm recurrence rate (prob_mass.TC_SRR(end)) must be a finite, non-negative number.');
+end
 % Make Distribuition Object
 TC_pd = makedist('Poisson','lambda',TC_lambda);
-% Initializing While Loop Exit Trigger
-TC_EPY=0;
-% Insert Comment
-while abs(TC_EPY-TC_lambda)>SIM_Flag %cannot be higher than NSIMyrs
-    % Sample Number Of TCs Sampled For The Simulation Year.
-    TC_MCS = random(TC_pd,[simulation_years,1]);
+% Sample Number Of TCs Sampled For The Simulation Year.
+TC_MCS = random(TC_pd,[simulation_years,1]);
+% restrict_rate = 0: Full Poisson Process, The First Draw Is Kept (A Life Cycle Can Have No Storms).
+% restrict_rate = 1: Rate-Matched Life Cycle (ERDC/CHL TR-20-5 Sec. 3.2-3.3; USGS OFR 2020-1001 p. 17-18): Yearly
+% Storm Counts Are Redrawn Until The Life-Cycle Storm Rate Is Within SIM_Flag Of The SRR (+/- 1 Storm Per Life Cycle).
+if restrict_rate == 1
+    max_draws = 1e6; % Safeguard Against An Endless Loop
     % Recomputes The Storm Rate Of The Simulation Period To Check Against SRR.
     TC_EPY = sum(TC_MCS)/simulation_years;
+    n_draws = 1;
+    while abs(TC_EPY-TC_lambda)>SIM_Flag && n_draws < max_draws %cannot be higher than NSIMyrs
+        % Sample Number Of TCs Sampled For The Simulation Year.
+        TC_MCS = random(TC_pd,[simulation_years,1]);
+        % Recomputes The Storm Rate Of The Simulation Period To Check Against SRR.
+        TC_EPY = sum(TC_MCS)/simulation_years;
+        n_draws = n_draws + 1;
+    end
+    if abs(TC_EPY-TC_lambda)>SIM_Flag
+        warning('sample_tc_storm: life-cycle storm rate %.4f not within %.4f of SRR %.4f after %d draws; using last draw.',...
+            TC_EPY, SIM_Flag, TC_lambda, n_draws);
+    end
+end
+% No Storms Sampled In This Life Cycle: Empty Outputs
+if sum(TC_MCS) == 0
+    lcs_data = zeros(0, 9);      % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SSL, Hm0, Tp, wDir, storm_duration ]
+    sample_storms = zeros(0, 4); % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
+    return
 end
 
 %% SAMPLE TROPICAL STORMS
 % Initialize Storm Counter
 n=1;
 lcs_data = zeros(sum(TC_MCS),9);
-cumulativeProb = cumsum(TC_SRR(1:3)./TC_SRR(end));
+% Grab Valid Storm Id List
+valid_storms = storm_peaks(:, 1);
+% Intensity Bin Populations (1-Low, 2-Mid, 3-High), Keeping Storms Present In storm_peaks
+smpl_bins = {smpl1, smpl2, smpl3};
+smpl_bins = cellfun(@(x) x(ismember(x, valid_storms)), smpl_bins, 'un', false);
+% Intensity Bins That Can Be Drawn: Must Have Storms. A Draw Landing In An Empty Bin Is Re-Drawn (As Before),
+% Which Always Ends Because At Least One Bin With A Positive Rate Has Storms (Checked Here).
+has_storms = ~cellfun(@isempty, smpl_bins);
+if ~any(has_storms & TC_SRR(1:3) > 0)
+    error('sample_tc_storm: no TC storms available in any intensity bin (prob_mass.smpl1-3 matched against storm_peaks).');
+end
+cumulativeProb = cumsum(TC_SRR(1:3))./sum(TC_SRR(1:3));
+% cumulativeProb = cumsum(TC_SRR(1:3)./TC_SRR(end)); % Original (Team Discussion): Normalized By Total SRR. Identical
+% When sum(TC_SRR(1:3)) == TC_SRR(end); Otherwise cumulativeProb(3) < 1 And Draws Above It Matched No Intensity Bin.
 % Loop Through Simulation Length
 for j = 1:simulation_years
     %
@@ -159,47 +194,27 @@ for j = 1:simulation_years
             lcs_data(n,4) = m;
             % Random Number from 0 - 1
             smpl_flag = rand;
-            % Determine Random Intensity To Sample
-            if smpl_flag < cumulativeProb(1)
-                IIdx = 1;
-            elseif smpl_flag < cumulativeProb(2)
-                IIdx = 2;
-            elseif smpl_flag < cumulativeProb(3)
-                IIdx = 3;
-            end
-            % Make Sure Resulting Intensity Has A Population
-            chk = [];
-            while isempty(chk)
-                % Look Into Resulting Intensity Population
-                chk = eval(['smpl' num2str(IIdx) ';']);
-                % Need to Switch Intensity if Not Available For Study
-                if isempty(chk)
-                    % Random Number from 0 - 1
-                    smpl_flag = rand;
-                    % Determine Random Intensity To Sample
-                    if smpl_flag < cumulativeProb(1)
-                        IIdx = 1;
-                    elseif smpl_flag < cumulativeProb(2)
-                        IIdx = 2;
-                    elseif smpl_flag < cumulativeProb(3)
-                        IIdx = 3;
-                    end
-                    % Try New Intensity
-                    chk = eval(['smpl' num2str(IIdx) ';']);
-                end
+            % Determine Random Intensity To Sample (First Bin Whose Cumulative Probability Exceeds The Draw)
+            IIdx = find(smpl_flag < cumulativeProb, 1);
+            % Make Sure Resulting Intensity Has A Population (Re-Draw Otherwise)
+            while isempty(IIdx) || ~has_storms(IIdx)
+                % Random Number from 0 - 1
+                smpl_flag = rand;
+                % Try New Intensity
+                IIdx = find(smpl_flag < cumulativeProb, 1);
             end
             % Stomr Intensity
             lcs_data(n,2) = IIdx; % 1-Low, 2-Mid, 3-High
-            % Grab Sampling Population From Intensity Bin
-            eval(['smpl = smpl' num2str(IIdx) ';']);
-            % Grab Valid Storm Id List
-            valid_storms = storm_peaks(:, 1);
+            % Grab Sampling Population From Intensity Bin (Storms Present In storm_peaks)
+            smpl = smpl_bins{IIdx};
             % Find Correnponding Frequency
-            [ai, bi] = ismember(smpl, valid_storms);
-            % Keep Match Storms
-            smpl = smpl(ai);
-            % Sample Random Storm From Instensity Bin
-            lcs_data(n, 1) = randsample(smpl, 1, true, TC_Freq(bi(ai)));
+            [~, bi] = ismember(smpl, valid_storms);
+            % Sample Random Storm From Instensity Bin (randsample Treats A Scalar As 1:n, So A Single Storm Is Taken Directly)
+            if isscalar(smpl)
+                lcs_data(n, 1) = smpl;
+            else
+                lcs_data(n, 1) = randsample(smpl, 1, true, TC_Freq(bi));
+            end
             % Increment Storm
             n=n+1;
             % Increment Number of Storm In Storm Year
