@@ -1,4 +1,4 @@
-function [structure] = create_structure_geometry(config, show_plot)
+function [structure] = create_structure_geometry(config)
 %{
     %% DESCRIPTION
         This function creates MATLAB struture object containing project structure geometry.
@@ -20,7 +20,6 @@ function [structure] = create_structure_geometry(config, show_plot)
                    crest_elevation: Structure crest elevation
                    crest_width: Structure crest width.
                    toe_elevation: Structure toe elevation (Negative below datum zero)
-                   sp_depth: CHS savepoint depth.
   
         ------- Rubblemound & Levee Only Fields -------
                    seaside_slope: Structure seaward slope.
@@ -47,6 +46,8 @@ function [structure] = create_structure_geometry(config, show_plot)
         This section meant to provide an easy way to make changes to config
         variable calls without having to alter core code.
 %}
+% Apply Structure-Level Rules (Idempotent, Already Applied When Called From call_input_parser)
+config = finalize_structure_config(config);
 % Structure Type
 struc_type = config.struc_type;
 
@@ -82,7 +83,7 @@ switch struc_type
         % Define Vars To Grab
         vars_2_grab = {'crest_width','toe_elevation','seaside_slope',...
             'leeside_slope','berm_crest_width','berm_crest_elevation','berm_seaward_slope',...
-            'armor_delta','crest_elevation','seaside_mass','water_density','offshore_slope'};
+            'armor_delta','crest_elevation','seaside_mass','water_density','roughness_ifactor','offshore_slope'};
 end
 
 % Temp Patch (Remove Berm Fields)
@@ -98,16 +99,6 @@ for ii = 1:length(vars_2_grab)
     % Extract Data And Store On Structure Variable
     structure.(vars_2_grab{ii}) = config.(vars_2_grab{ii});
 end
-
-%% CREATE CROSS_SECTION PLOT
-% Show/Close Figure According To User
-if show_plot == 1
-    % Create Figure
-    fig = plot_structure_geometry(config, structure);
-    fig.Visible = 'On';
-else
-    fig = plot_structure_geometry(config, structure);
-    close(fig);
-end
+structure.struc_type = struc_type;
 end
 
