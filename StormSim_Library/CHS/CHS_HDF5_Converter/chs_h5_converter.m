@@ -230,9 +230,10 @@ if (File_version == "V1" || File_version == "V3")
             %%%% GROUPS ATTRIBUTES %%%%
             if Has_Gattributes
                 % Find Save Point Depth Location In Group Attributes (Assuming: constant for all storms in dataset)
-                dummy_indx = strcmp({GAttributes(GA_indx).Name},'Save Point Depth');
+                % (Index Into GAttributes, Not Into The GA_indx Subset)
+                dummy_indx = GA_indx(strcmp({GAttributes(GA_indx).Name},'Save Point Depth'));
                 % Change Save Point Depth To Number
-                if any(dummy_indx)
+                if ~isempty(dummy_indx) && (ischar(GAttributes(dummy_indx).Value) || isstring(GAttributes(dummy_indx).Value))
                     GAttributes(dummy_indx).Value = str2double(GAttributes(dummy_indx).Value);
                 end
                 % Repeate Save Point Depth For All Storms In Dataset

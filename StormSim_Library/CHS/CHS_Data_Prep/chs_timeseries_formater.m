@@ -63,9 +63,9 @@ for stm = 1:num_storms
     wv_dtime = all_wv_dtime{stm};
     ad_dtime = all_ad_dtime{stm};
     
-    % Lake Ontario Special Case
+    % Lake Ontario Special Case: Wave Model Provides Tm, Convert To Tp (waves = [Hm0, Tp, wDir])
     if Tp_special == 1
-        waves(:,3) = waves(:,3) .* 1.2;
+        waves(:,2) = waves(:,2) .* 1.2;
     end
     
     %% EXTRACT ADCIRC DATA RESIDING INSIDE STWAVE TEMPORAL RANGE
@@ -86,6 +86,12 @@ for stm = 1:num_storms
     % Perform Interpolation
     WL_interp = interp1(ad_dtime, WL, date_final, 'linear');
     waves_interp = interp1(wv_dtime, waves, date_final, 'linear'); % Interpolates all 3 columns simultaneously
+    %% PRESERVE RAW PEAKS (SWL, Hm0, Tp, wDir)
+    % Hourly Interpolation Can Miss A Raw Peak Between Grid Points: Keep It At The Nearest Grid Point
+    WL_interp = preserve_raw_peak(WL_interp, date_final, WL, ad_dtime);
+    for cc = 1:size(waves, 2)
+        waves_interp(:, cc) = preserve_raw_peak(waves_interp(:, cc), date_final, waves(:, cc), wv_dtime);
+    end
     
     % Build Storm Data Matrix [ SSL, Hm0, Tp, wDir, date, dt ]
     storm_mat = [WL_interp, waves_interp, datenum(date_final), repmat(dt_final_datenum, len_final, 1)];
@@ -117,4 +123,20 @@ ts_storm2rm = unique([storms2rm(:); bad_storms_buffer]);
 if print_progress
     fprintf(1, '\b\b\b\b100%%\n');
 end
+end
+
+%% AUX FUNCTION: RAW PEAK PRESERVATION
+function interp_vals = preserve_raw_peak(interp_vals, t_grid, raw_vals, t_raw)
+% If The Raw Peak (Within The Interpolation Window) Exceeds The Interpolated Peak,
+% Write It At The Grid Point Nearest The Raw Peak Time. Only Applied When Higher, So
+% The Resulting Peak Always Equals The Raw Peak And Is Never Lower Than Before.
+in_window = t_raw >= t_grid(1) & t_raw <= t_grid(end);
+raw_vals = raw_vals(in_window);
+t_raw = t_raw(in_window);
+[raw_max, i_raw] = max(raw_vals, [], 'omitnan');
+if isempty(raw_max) || isnan(raw_max) || ~(raw_max > max(interp_vals, [], 'omitnan'))
+    return
+end
+[~, i_grid] = min(abs(t_grid - t_raw(i_raw)));
+interp_vals(i_grid) = raw_max;
 end
