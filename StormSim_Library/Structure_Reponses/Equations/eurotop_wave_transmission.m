@@ -74,7 +74,8 @@ Tp = Tp(:);
 Rc = Rc(:);
 L0p = grav*Tp.^2/2/pi;
 s0p = Hm0./L0p;
-xsi = tana/sqrt(s0p);
+xsi = nan(size(Hm0));
+xsi(s0p~=0) = tana./sqrt(s0p(s0p~=0));
 % HonD(:, 1) = Hm0/Dn50;
 % RonD(:, 1) = Rc/Dn50;
 % BonD(:, 1) = B/Dn50;
@@ -102,7 +103,7 @@ BonH(:, 1) = B./Hm0;
 %         if Dn50==0 %smooth structure?
 %             Kt = (-0.3*RonH + 0.75*(1-exp(-0.5*xsi)))*(cos(beta))^(2/3);
 %         else
-            temp1=(1.-exp(-0.5*xsi))';
+            temp1=(1.-exp(-0.5*xsi));
             Kt = -0.4*RonH + (0.64*BonH.^-0.31).*temp1;
 %         end
 %     case 6 %LCS, Goda
@@ -129,6 +130,7 @@ BonH(:, 1) = B./Hm0;
 %Kt(abs(beta)>0.70) = 0.0; %highly oblique waves
 Kt(Kt>0.80) = 0.80;
 Kt(Kt<0) = 0.0;
+Kt(isnan(xsi)) = 0;
 % Resahpe Variables
 Kt = reshape(Kt, var_shape);
 end

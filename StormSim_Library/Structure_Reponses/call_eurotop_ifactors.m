@@ -24,18 +24,18 @@ Rc = crest_ele - SWL;
 
 if add_berm
     % Berm Elevation (<0 Below Datum Zero)
-    berm_elev = structure.berm_elevation; %
+    berm_elev = structure.berm_crest_elevation;
     % Berm Width
-    berm_width = structure.berm_width;
+    berm_width = structure.berm_crest_width;
     % Berm Slope
-    berm_slope = structure.berm_slope;
+    berm_slope_tana = 1./structure.berm_seaward_slope;
 else
     % Berm Elevation (<0 Below Datum Zero)
     berm_elev = toe_ele; % This Translates to h == hb
     % Berm Width
     berm_width = 0;
     % Berm Slope
-    berm_slope = 1;  % Can't set to 0, Will cause 1/0 in Goda Pressure Calcs
+    berm_slope_tana = 1;  % Can't set to 0, Will cause 1/0 in Goda Pressure Calcs
 end
 
 
@@ -48,7 +48,7 @@ gammas.gamma_f = surface_roughness_influence_factor(gamma_f, Hm0);
 [gammas.gamma_beta_r2p, gammas.gamma_beta_q] = oblique_waves_influence_factor(size(Hm0));
 % Berm Influence Factor (Not used)
 if add_berm == 1
-    [gammas.gamma_b] = berm_influence_factor(berm_width, berm_elev, Hm0, SWL, berm_slope);
+    [gammas.gamma_b] = berm_influence_factor(berm_width, berm_elev, Hm0, SWL, berm_slope_tana);
 else
     gammas.gamma_b = ones(size(Hm0));
 end

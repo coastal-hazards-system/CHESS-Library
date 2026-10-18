@@ -6,28 +6,27 @@ function data_out = stormsim_pros_frequency_base(config, structure, data_in, out
     struc_id  = strrep(config.struc_id, '_', ' ');
     case_name = strrep(config.case_name, '_', ' ');
     save_name = fullfile(outPath, [proj_name, '_', struc_id]);
-    workflow = config.workflow;
     g = config.gravity_constant;
     rho_w = config.water_density;
     config.compute_q_vol = 0; % Force Q vol to 0
     
     crest_elev = structure.crest_elevation;
-    toe_elev   = abs(structure.toe_elevation);
+    toe_elev   = structure.toe_elevation;
     
     % Berm Logic
     if config.add_toe_berm
-        berm_elev  = abs(structure.berm_elevation);
-        berm_width = structure.berm_width;
-        berm_slope = structure.berm_slope;
+        berm_elev  = structure.berm_crest_elevation;
+        berm_width = structure.berm_crest_width;
+        berm_slope = structure.berm_seaward_slope;
     else
-        berm_elev  = abs(structure.toe_elevation);
+        berm_elev  = structure.toe_elevation;
         berm_width = 0;
         berm_slope = 1; 
     end
     
     % Rubblemound / Wall Logic
     if config.struc_type == 2
-        hw = structure.wall_bottom_elevation + crest_elev;
+        hw = crest_elev - structure.wall_bottom_elevation; % Wall Height (Same As compute_structure_response)
     else
         hw = NaN; % Failsafe if accessed outside struc_type 2
     end
@@ -100,7 +99,7 @@ function data_out = stormsim_pros_frequency_base(config, structure, data_in, out
                            [Resp.(field).X_low, Resp.(field).theta_low, Resp.(field).X_up,...
                                Resp.(field).theta_up, Resp.(field).Bx, Resp.(field).X_c_surge,...
                                Resp.(field).theta_center, Resp.(field).Bjet, Resp.(field).Vjet, Resp.(field).Fjet] = ...
-                               cellfun(@(a, b, c) floodwall_nappe_response(a, b, c, hw, rho_w), ...
+                               cellfun(@(a, b, c) floodwall_nappe_response(a, b, c, hw, rho_w, crest_elev), ...
                                SWL, Hm0, q, 'UniformOutput', false);
                        end
                         eb1_fields = fieldnames(Resp.(field));
