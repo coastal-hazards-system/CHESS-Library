@@ -1,0 +1,23 @@
+Category,Lower_Limit_m3_s_m,Upper_Limit_m3_s_m,Damage_Level
+Vehicles,0,1e-06,Safe driving at all speeds
+Vehicles,1e-06,1e-05,Unsafe driving at high speed
+Vehicles,1e-05,3e-05,Unsafe parking on vertical wall breakwaters
+Vehicles,3e-05,1e-04,Unsafe parking on horizontal composite breakwaters
+Vehicles,1e-04,inf,Unsafe at any speed
+Pedestrians,0,3e-05,Wet but not uncomfortable
+Pedestrians,3e-05,1e-04,Uncomfortable but not dangerous
+Pedestrians,1e-04,1e-03,"Dangerous on vertical wall breakwaters, grass sea dikes, and horizontal composite breakwaters"
+Pedestrians,1e-03,inf,Very dangerous
+Buildings,0,1e-06,No damage
+Buildings,1e-06,1e-03,"Minor damage to fittings, sign posts, etc."
+Buildings,1e-03,inf,Structural damage
+Embankment Seawalls,0,2e-05,No damage
+Embankment Seawalls,2e-05,2e-03,Damage if crest not protected
+Embankment Seawalls,2e-03,2e-02,Damage if back slope not protected
+Embankment Seawalls,2e-02,inf,Damage even if fully protected
+Grass Sea-Dikes,0,1e-03,No damage
+Grass Sea-Dikes,1e-03,1e-02,Start of damage
+Grass Sea-Dikes,1e-02,inf,Damage
+Revetments,0,5e-02,No damage
+Revetments,5e-02,2e-01,Damage if promenade not paved
+Revetments,2e-01,inf,Damage even for paved promenade
