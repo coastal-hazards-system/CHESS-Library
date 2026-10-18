@@ -1,4 +1,4 @@
-function [sampled_storms, lcs_data] = sample_xc_storm(storm_peaks, simulation_years, yearly_rate)
+function [sampled_storms, lcs_data] = sample_xc_storm(storm_peaks, simulation_years, yearly_rate, restrict_rate)
 
 %{
 LICENSING:
@@ -127,14 +127,34 @@ end
 %% POISSON PROCESS
 % Rate of extratropical cyclones (storms/year)
 XC_lambda = yearly_rate;
+if ~isscalar(XC_lambda) || ~isfinite(XC_lambda) || XC_lambda < 0
+    error('sample_xc_storm: XC yearly rate (Nstm_XC / Nyrs_XC) must be a finite, non-negative number.');
+end
 % Make Distribuition Object
 XC_pd = makedist('Poisson','lambda',XC_lambda);
-% Initializing While Loop Exit Trigger
-XC_EPY=0;
-% Insert Comment
-while abs(XC_EPY-XC_lambda)>SIM_Flag %cannot be higher than Nsimulation_years
-    XC_MCS = random(XC_pd,[simulation_years,1]);%sampled number of storms based on Poisson distribution
+XC_MCS = random(XC_pd,[simulation_years,1]);%sampled number of storms based on Poisson distribution
+% restrict_rate = 0: Full Poisson Process, The First Draw Is Kept (A Life Cycle Can Have No Storms).
+% restrict_rate = 1: Rate-Matched Life Cycle (ERDC/CHL TR-20-5 Sec. 3.2-3.3; USGS OFR 2020-1001 p. 17-18): Yearly
+% Storm Counts Are Redrawn Until The Life-Cycle Storm Rate Is Within SIM_Flag Of The Rate (+/- 1 Storm Per Life Cycle).
+if restrict_rate == 1
+    max_draws = 1e6; % Safeguard Against An Endless Loop
     XC_EPY = sum(XC_MCS)/simulation_years;
+    n_draws = 1;
+    while abs(XC_EPY-XC_lambda)>SIM_Flag && n_draws < max_draws %cannot be higher than Nsimulation_years
+        XC_MCS = random(XC_pd,[simulation_years,1]);%sampled number of storms based on Poisson distribution
+        XC_EPY = sum(XC_MCS)/simulation_years;
+        n_draws = n_draws + 1;
+    end
+    if abs(XC_EPY-XC_lambda)>SIM_Flag
+        warning('sample_xc_storm: life-cycle storm rate %.4f not within %.4f of rate %.4f after %d draws; using last draw.',...
+            XC_EPY, SIM_Flag, XC_lambda, n_draws);
+    end
+end
+% No Storms Sampled In This Life Cycle: Empty Outputs
+if sum(XC_MCS) == 0
+    lcs_data = zeros(0, 9);      % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SSL, Hm0, Tp, wDir, storm_duration ]
+    sampled_storms = zeros(0, 4); % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
+    return
 end
 
 %% SAMPLE XC STORM IDs
@@ -149,8 +169,12 @@ for j = 1:simulation_years
             SimOUT_XC(n,1) = 0;
             % Number of Storm In Storm Year
             SimOUT_XC(n,3) = m;
-            % Sample Random Storm
-            XC_INDEX(n,1) = randsample(storm_peaks(:,1), 1);
+            % Sample Random Storm (randsample Treats A Scalar As 1:n, So A Single Storm Is Taken Directly)
+            if isscalar(storm_peaks(:,1))
+                XC_INDEX(n,1) = storm_peaks(1,1);
+            else
+                XC_INDEX(n,1) = randsample(storm_peaks(:,1), 1);
+            end
             % Increment Storm
             n=n+1;
             % Increment Number Of Storm In Storm Year
