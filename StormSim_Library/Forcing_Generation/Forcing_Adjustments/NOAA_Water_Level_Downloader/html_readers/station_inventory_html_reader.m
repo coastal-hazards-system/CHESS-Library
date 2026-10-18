@@ -3,6 +3,9 @@ function [html_code,flag] = station_inventory_html_reader(StationList,inv_url,op
 indx=[];
 % Get station id
 station = StationList(ii).id;
+if isstruct(station)
+    station = station.id;
+end
 % Build station data inventory URL
 url = [inv_url station];
 % Read HTML script
@@ -12,7 +15,8 @@ while isempty(indx)==1 % SOMETIMES HTML CODE GETS CUT SHORT SO JUST KEEP ITERATI
    try
         html_code = webread(url,options);
         % Find index of dates available
-        indx = strfind(html_code,'data.push({''start''');
+%        indx = strfind(html_code,'data.push({''start''');
+indx = strfind(html_code,'<span data-bind=');
     catch ME
         % Host URL is unreacheable or does not exist
         if strcmp(ME.identifier,'MATLAB:webservices:UnknownHost')==1
