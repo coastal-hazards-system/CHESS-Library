@@ -3,7 +3,7 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 % Strucutre Type
 struc_type = config.struc_type;
 % Storm Duration [s]
-duration = config.storm_duration*24*3600; % Convert day to s
+duration = config.storm_duration*3600; % Convert hours to s
 % Define Requested Workflow
 workflow = config.workflow;
 % Gravity
@@ -22,8 +22,6 @@ calc_p2_p3 = config.compute_p2_p3;
 calc_nappe = config.compute_nappe;
 calc_wave_transmission = config.compute_wave_transmission;
 calc_dn50_submerged = config.compute_dn50_submerged;
-% Get Save Point Depth
-SPdepth = config.chs_sp_depth;
 % Remove Responses Based On Structure Type
 switch struc_type
     case 1 % Levee (R2p & OT)
@@ -59,17 +57,17 @@ crest_elev = structure.crest_elevation;
 % Define Structure Crest Width
 crest_width = structure.crest_width;
 % Define Structure Toe Elevation (<0 below datum zero)
-toe_elev = abs(structure.toe_elevation); % Flip convention
+toe_elev = structure.toe_elevation;
 if config.add_toe_berm
     % Berm Elevation (<0 Below Datum Zero)
-    berm_elev = abs(structure.berm_crest_elevation); %
+    berm_elev = structure.berm_crest_elevation;
     % Berm Width
     berm_width = structure.berm_crest_width;
     % Berm Slope
     berm_slope_tana = 1./structure.berm_seaward_slope;
 else
     % Berm Elevation (<0 Below Datum Zero)
-    berm_elev = abs(toe_elev); % This Translates to h == hb
+    berm_elev = toe_elev; % This Translates to h == hb
     % Berm Width
     berm_width = 0;
     % Berm Slope
@@ -91,9 +89,14 @@ switch struc_type
         % CEM P
         P = structure.cem_P;
     case  2
-        wall_bottom_elev = abs(structure.wall_bottom_elevation);
+        wall_bottom_elev = structure.wall_bottom_elevation;
         hw = crest_elev - wall_bottom_elev;
-        toe_elev = wall_bottom_elev;
+        % Toe: Berm Toe When A Toe Berm Is Included (Same Rule As adjust_project_forcing), Else The Wall Bottom
+        if ~config.add_toe_berm
+            toe_elev = wall_bottom_elev;
+        end
+        P=0;
+    case 1
         P=0;
 end
 % Water Density kg/m^3
@@ -116,7 +119,7 @@ end
 %% GET FORCING FIELDS
 % Grab Workflow Specific Fields
 switch workflow
-    case {1,4} % RB
+    case {1,2,4} % RB, DET
         % Create Forcing Variables For Simplicity
         SWL = project_forcing.SWL; % SWL
         Hm0 = project_forcing.Hm0; % Hm0
@@ -172,6 +175,11 @@ if no_resp~=0
                 [Resp.p2dyn, Resp.p2sta, Resp.p2total,...
                     Resp.p3dyn, Resp.p3sta, Resp.p3total, Resp.pu] = cellfun(@(a, b, c, d, e, f) goda_forces_on_vertical_p2p3(a, b, 1.8,...
                     0, c, d, e, hw, f, rho_w, g), Hm0, Ts, h, hb, Rc, Resp.p1, 'un', false);
+                % No Wave Attack (P1 NaN, e.g. Dry Toe): Secondary Pressures Are Undefined, Not Zero
+                p_names = {'p2dyn', 'p2sta', 'p2total', 'p3dyn', 'p3sta', 'p3total', 'pu'};
+                for pp = 1:length(p_names)
+                    Resp.(p_names{pp}) = cellfun(@nan_where, Resp.(p_names{pp}), Resp.p1, 'un', false);
+                end
             end
             %
             if calc_nappe == 1
@@ -179,7 +187,12 @@ if no_resp~=0
                     Resp.theta_up, Resp.Bx, Resp.X_c_surge,...
                     Resp.theta_center, Resp.Bjet, Resp.Vjet,...
                     Resp.Fjet] = cellfun(@(a, b, c) floodwall_nappe_response(a, b,...
-                    c, hw, rho_w), SWL, Hm0, Resp.q, 'un', false);
+                    c, hw, rho_w, crest_elev), SWL, Hm0, Resp.q, 'un', false);
+                % No Overtopping Estimate (q NaN, e.g. Dry Toe): Nappe Is Undefined
+                n_names = {'X_low', 'theta_low', 'X_up', 'theta_up', 'Bx', 'X_c_surge', 'theta_center', 'Bjet', 'Vjet', 'Fjet'};
+                for nn = 1:length(n_names)
+                    Resp.(n_names{nn}) = cellfun(@nan_where, Resp.(n_names{nn}), Resp.q, 'un', false);
+                end
             end
         case {1,3,4} % Levees & Rubblemound & LCBW
             % Reformat Slope If Needed
@@ -252,13 +265,20 @@ if no_resp~=0
         switch workflow
             case {1,4} % PROS
                 Resp.Hm0t = cellfun(@(x, y) x.*y, project_forcing.('Hm0_no_rep'), Kt, 'un', false); 
-            case 3 % LCS
+            case {2, 3} % DET, LCS
                 Resp.Hm0t = cellfun(@(x, y) x.*y, Hm0, Kt, 'un', false); % This is only correct for LCS, Deterministic Calc
         end
     end
-    % Damaging Depth Response
+    % Damaging Depth Response: Offshore Elevation From The Structure (Copied At Run Time By call_project_response.m;
+    % Storm DB Study Grid, Else Inputs, Checked By check_offshore_elevation.m), Else From config (Structures Built Outside
+    % A Run, e.g. Plots Of A Loaded Result)
     if calc_dd == 1
-        [Resp.DamDepthElev, Resp.DamDepth]= cellfun(@(x, y, z, a, b) damaging_depth(x, y, z, SPdepth,...
+        if isfield(structure, 'offshore_elevation') && ~isempty(structure.offshore_elevation)
+            offshore_elevation = structure.offshore_elevation;
+        else
+            offshore_elevation = config.offshore_elevation;
+        end
+        [Resp.DamDepthElev, Resp.DamDepth]= cellfun(@(x, y, z, a, b) damaging_depth(x, y, z, offshore_elevation,...
             calc_dd_ks, a, b, berm_width, berm_slope_tana, offshore_slope_tana, g), SWL, Hm0, Tp, h, hb, 'un', false);
     end
     % Compute Overtopping Volume
@@ -277,7 +297,7 @@ if get_max == 1
     var_names = {'Dn50', 'Dn50_Lee', 'Dn50_LCBW', 'FS_LCBW', 'R2p', 'R2p_SWL', 'q', 'q_wave_ot', 'p1', 'DamDepth', 'DamDepthElev', 'Hm0t'};
     % Evaluate According To Workflow
     switch workflow
-        case {1, 4} % Find Max Responses For Timeseries (RB3)
+        case {1, 2, 4} % Find Max Responses For Timeseries (RB3)
             %
             var_names = var_names(var_bool == 1);
             %
@@ -297,5 +317,14 @@ if get_max == 1
                 Resp.(var_names{vv}) = cell2mat(cellfun(@(x) max(x,[],1), Resp.(var_names{vv}), 'un', false));
             end
     end
+end
+end
+
+function x = nan_where(x, ref)
+% Sets x To NaN Where ref Is NaN (Same Size), Or Entirely When ref Is All NaN
+if isequal(size(x), size(ref))
+    x(isnan(ref)) = NaN;
+elseif all(isnan(ref(:)))
+    x(:) = NaN;
 end
 end

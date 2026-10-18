@@ -78,7 +78,7 @@ if any(fb_responses) || config.workflow == 4
     % Turn On Responses For FB Section
     config = config_editor(config, varnames, 1);
     % Run StormSim PROS-FB
-    HC_out = stormsim_pros_frequency_base(config, structure, HC_out, outPath);
+    HC_out = stormsim_pros_frequency_base(config, structure, HC_out, outPath, config.workflow);
 end
 
 % Enable Warnings Again

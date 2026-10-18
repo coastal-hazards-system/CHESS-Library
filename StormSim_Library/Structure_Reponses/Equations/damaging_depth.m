@@ -1,4 +1,4 @@
-function [DamDepthElev,DamDepth]= damaging_depth(SWL,Hm0,Ts,SPdepth,Ks,hs,d,Bm,berm_slope_tana,offshore_slope_tana, g)
+function [DamDepthElev,DamDepth]= damaging_depth(SWL,Hm0,Ts,offshore_elevation,Ks,hs,d,Bm,berm_slope_tana,offshore_slope_tana, g)
 %{
 LICENSING:
     This code is part of StormSim software suite developed by the U.S. Army
@@ -50,8 +50,8 @@ DESCRIPTION:
 
 INPUT/OUTPUT ARGUMENTS:
     DamDepthEelev: damaging depth elevation
-    DamDepth: damaging depth
-    SPdepth: datum depth of save point
+    DamDepth: damaging depth (DamDepthElev - offshore_elevation, clipped to 0 when negative; NaN kept)
+    offshore_elevation: offshore (savepoint) elevation, positive up, in the study datum (config.offshore_elevation)
     Hm0: zero moment significant wave height
     Tp:  peak wave period
     SWL: total water level
@@ -84,7 +84,9 @@ SWL = SWL(:);
 [Hb, ~]=goda_Hmax(Hm0,Ts,1.6,hs,d,Bm,berm_slope_tana,offshore_slope_tana, g);
 
 DamDepthElev = SWL + 0.7 * Ks * Hb;
-DamDepth = DamDepthElev - abs(SPdepth);
+DamDepth = DamDepthElev - offshore_elevation;
+% No Water Column Above The Offshore Bed (Storm Below An Offshore Elevation Above Datum): Clip To 0 (NaN Kept)
+DamDepth(DamDepth < 0) = 0;
 % Resahpe Variables 
 DamDepth = reshape(DamDepth, var_shape);
 DamDepthElev = reshape(DamDepthElev, var_shape);
