@@ -4,6 +4,11 @@ function [project_forcing, config] = call_project_forcing_adjuster(config, proje
 if  config.f_adjust == 0
     % Print Status
     disp('Adjusting project forcing datasets....');
+    % LCS Reference Case: Reuse Its Tide Start Hours Too (Same Storms -> Same Tides Across Alternatives)
+    config = load_reference_tide_indices(config, project_forcing);
+    % Storm Types With Timeseries: One Tide Start Hour Per Storm, Shared By Peaks And Timeseries.
+    % LCS CC: TC/XC Start Hours First, CC Derived From Them (Same Storm -> Same Tide), All Before Any Dataset
+    config = draw_tide_indices(config, project_forcing);
     % Scan For Data Types
     data_types = fieldnames(project_forcing);
     % Loop Across Each Data Type

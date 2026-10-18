@@ -13,32 +13,25 @@ g = config.gravity_constant;
 
 %% GRAB DETAILS FROM "structure"
 % Define Structure Toe Elevation (<0 below datum zero)
-toe_elev = abs(structure.toe_elevation); % Flip convention
+toe_elev = structure.toe_elevation;
+% Floodwall: Berm Toe When A Toe Berm Is Included, Else The Wall Bottom
+if isfield(config, 'struc_type') && config.struc_type == 2 && ~(isfield(config, 'add_toe_berm') && config.add_toe_berm == 1)
+    toe_elev = structure.wall_bottom_elevation;
+end
 
 %% GRAB PROJECT FORCING DATA
 switch config.workflow
-    case  {1, 4}
+    case  {1, 2, 4}
         SWL = [project_forcing.('SWL'), project_forcing.('SWL_no_rep')];% Water Level
         Hm0 = project_forcing.('Hm0');% Wave Height
         Tp = project_forcing.('Tp'); % Wave Period
-        % Get Size Vector
-        t_size = cellfun(@(x) size(x,1), SWL(:, 1), 'un', false);
     case {3} % LCS
         SWL = cellfun(@(x) x(:, 5), project_forcing, 'un', false); % Get SWL From LC
         Hm0 = cellfun(@(x) x(:, 6), project_forcing, 'un', false); % Get Hm0 From LC
         Tp = cellfun(@(x) x(:, 7), project_forcing, 'un', false); % Get Tp From LC
-        % Get Size Vector
-        if size(project_forcing{1}, 2) == 10 % 10 Cols Is Indicator Of Timeseries
-            t_size = cellfun(@(x) x(find([nan;x(2:end, 10);0]== 0)-1, 10)+1 , project_forcing, 'un', false);
-        else
-            t_size = cellfun(@(x) ones(length(x), 1), SWL, 'un', false);
-        end
-        % Logic Behind Previous Line
-        % Add nan on top -> Keep Dimensions Consistent But Remove 0 of first Storm
-        % Add Zero To End -> Want to flag final timestep of final storm
-        % - 1 -> Gives the end row index of each storm
-        % + 1 -> x(:, 10) goes from 0:n_stsp-1 hence need to add 1 to get proper length
 end
+% Time Steps Per Storm
+t_size = forcing_storm_lengths(config.workflow, project_forcing);
 
 %% SWL ADJUSTMENTS
 % Apply Random Tide To SWL
@@ -62,11 +55,14 @@ h = cellfun(@(x) x - toe_elev, SWL(:, 1), 'un', false);
 if apply_DL == 1
     [Hm0, Hm0_DL] = cellfun(@(x, y, z) apply_depth_limitation(x, y, z, g), Hm0, Tp, h,'un',false);
 end
+% Emergent Toe (h < 0): No Wave Attack, Regardless Of Depth Limitation. Hm0 = 0 Makes Wave Responses NaN
+% While Surge-Only Responses (e.g. Damaging Depth) Are Still Computed
+Hm0 = cellfun(@(x, z) x .* ~(z < 0), Hm0, h, 'un', false);
 
 %% STORE ADJUSTED DATA
 % Store Modifications
 switch config.workflow
-    case  {1, 4}
+    case  {1, 2, 4}
         project_forcing.SWL = SWL(:, 1); % Get SWL From LC
         project_forcing.SWL_no_rep = SWL(:,2);
         project_forcing.Hm0 = Hm0; % Get SWL From LC
