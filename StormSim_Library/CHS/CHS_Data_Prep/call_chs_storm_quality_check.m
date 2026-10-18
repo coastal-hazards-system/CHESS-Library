@@ -39,7 +39,7 @@ chs_region = config.region;
 % Save Point ID
 spID = config.sp_ID;
 % Storm Duration
-storm_duration = config.storm_duration/24; % Conver from hours to days
+storm_duration = config.storm_duration/24; % Convert from hours to days (storm DB column 6 is a datenum duration)
 %
 disp_on = config.print_progress;
 
@@ -199,6 +199,10 @@ end
 % Enforce No Bias Correction For XCs
 if strcmp(storm_type, 'XC')
     bias_tgr = 0;
+end
+% Record TC Bias Correction State (Plots Apply The Same Correction To Raw CHS SWL)
+if strcmp(storm_type, 'TC')
+    config.tc_bias_corrected = bias_tgr;
 end
 % Apply Bias Correction (If Applicable)
 if bias_tgr == 1
