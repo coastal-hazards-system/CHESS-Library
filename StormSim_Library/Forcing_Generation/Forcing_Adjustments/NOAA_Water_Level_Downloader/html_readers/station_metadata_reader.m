@@ -4,6 +4,9 @@ This function reads the metadata for the specified station.
 function [metadata] = station_metadata_reader(inventory,exp_url,options,ii)
 % Get station ID
 station = inventory(ii).id;
+if isstruct(station)
+    station = station.id;
+end
 % Generate station url
 url = [exp_url station '.json?expand=details,products,datums&units=metric'];
 ctr2=1; % While loop trigger
@@ -22,6 +25,9 @@ while ctr2<=8
             metadata = [];
             %             error(['Webread timeout, check connection status or station inventory homepage. ' newline ...
             %                 'Error on function: stationlist_product_filter at index: ',num2str(ii),'.' newline 'station id: ',station,''])
+        elseif ctr2 == 3
+             % try without datums 
+             url = [exp_url station '.json?expand=details,products&units=metric'];
         end
     end
 end

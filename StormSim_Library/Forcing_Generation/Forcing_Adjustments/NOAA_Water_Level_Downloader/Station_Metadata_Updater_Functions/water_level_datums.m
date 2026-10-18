@@ -1,6 +1,10 @@
 function [StationList] = water_level_datums(exp_url,options,StationList,ii)
 % Read Station Metadata
-[dummy] = station_metadata_reader(StationList, exp_url, options, ii);
+try
+    [dummy] = station_metadata_reader(StationList, exp_url, options, ii);
+catch
+    dummy = [];
+end
 %
 if ~isempty(dummy)
     % Reformat Metadata Structure

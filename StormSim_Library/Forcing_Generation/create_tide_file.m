@@ -1,36 +1,52 @@
-function [data_table] = create_tide_file(station, datum, start_date, outName)
+function [data_table] = create_tide_file(station, datum, start_date, outName, progress_fcn)
 % create_tide_file Downloads a Year's worth of tidal predictions from NOAA
-% CO-OPS API. Stations location and data availability can be found  
+% CO-OPS API and writes an hourly tide file for StormSim. Stations location
+% and data availability can be found
 % <a href="matlab: web('https://tidesandcurrents.noaa.gov/stations.html?type=Water+Levels')">here</a>.
 %
 % Inputs:
 %       station: NOAA CO-OPS unique station identifier. Number string with
 %                7 characters (i.e. '8638660').
 %
-%       datum: Preferred vertical datum. The fucntion supports 
-%              Mean Sea Level ('MSL') & North American Vertical Datum 1988
-%              ('NAVD').
-%       
-%       start_date: Start date for data download. Must be a datesring with  
-%                   'yyyyMMdd' format. Time must be in the GMT 
-%                   timezone. Data and product availability can be seen in
-%                   the station's data inventory page.
+%       datum: Vertical datum of the predictions. Any NOAA API datum code
+%              (e.g. 'MSL', 'MLLW', 'NAVD'); 'NAVD88' is accepted for 'NAVD'.
+%              It must match the datum of the storm (CHS) data, because the
+%              tide is added directly to the storm water levels.
 %
+%       start_date: Start date for data download. Must be a datestring with
+%                   'yyyyMMdd' format. Time must be in the GMT timezone.
+%                   Data and product availability can be seen in the
+%                   station's data inventory page.
 %
 %       outName: Output file name and location (.csv).
 %
+%       progress_fcn: (Optional) Function handle called as progress_fcn(fraction)
+%                     after each data request (e.g. to update a progress bar).
+%
 % Outputs:
-%       Sdata: Downloaded tidal prediction dataset.
+%       data_table: Hourly tidal predictions written to outName
+%                   (columns: Date, Prediction [m]). StormSim adds one row per
+%                   hourly storm time step (apply_random_tide.m).
 %
-%       StationList: Requested station metadata.
-%
-%       tidal_file: Downloaded preedcition data is written to a CSV file
-%       under outName.
+% Notes:
+%       Predictions are requested at a 6-minute interval (interval=6) in
+%       31-day chunks (API data request restriction) and interpolated to an
+%       hourly signal, which is what gets stored.
 %
 % Example Usage:
-%       data = create_tide_file('1617760', 'MSL', '1975-01-01 00:00:00', '1976-01-021 00:00:00', outName)
+%       data = create_tide_file('8423898', 'MSL', '20260101', 'stormsim_tidal_file.csv');
 
-%% INPUTS 
+if nargin < 5
+    progress_fcn = [];
+end
+station = char(station);
+datum = char(datum);
+% NOAA Datums Endpoint Uses NAVD88, The Data API Uses NAVD
+if strcmpi(datum, 'NAVD88')
+    datum = 'NAVD';
+end
+
+%% INPUTS
 % 1. Define your starting date
 initial_stdate = datetime(start_date, 'InputFormat', 'yyyyMMdd');
 
@@ -50,24 +66,35 @@ endate = min(endate, final_endate);
 stdate_str = string(stdate, 'yyyyMMdd');
 endate_str = string(endate, 'yyyyMMdd');
 
-
-
+%% DOWNLOAD 6-MINUTE PREDICTIONS (31-DAY REQUESTS)
 opts = weboptions("Timeout",300);
 data_table = [];
 for kk = 1:length(endate_str)
-
-
     url_pth =['https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date='...
-        char(stdate_str(kk)) '&end_date=' char(endate_str(kk)) '&station=' station '&product=predictions&datum=' datum '&time_zone=gmt&units=metric&format=csv'];
+        char(stdate_str(kk)) '&end_date=' char(endate_str(kk)) '&station=' station...
+        '&product=predictions&datum=' datum '&time_zone=gmt&units=metric&interval=6&format=csv'];
     data = webread(url_pth, opts);
-    data_table = [data_table;data];
+    % NOAA Returns Its Error Message As A One-Row Table Instead Of Data
+    if ~istable(data) || ~all(ismember({'DateTime', 'Prediction'}, data.Properties.VariableNames))
+        if istable(data) && ~isempty(data) % Message Text Is Split Across The Table Columns
+            parts = string(table2cell(data(1, :)));
+            msg = strjoin(parts(~ismissing(parts) & strlength(strtrim(parts)) > 0), ' ');
+        else
+            msg = strtrim(char(string(data)));
+        end
+        error('create_tide_file:noaaRequest', 'NOAA request failed for station %s (datum %s, %s-%s): %s',...
+            station, datum, char(stdate_str(kk)), char(endate_str(kk)), msg);
+    end
+    data_table = [data_table; data]; %#ok<AGROW>
+    if ~isempty(progress_fcn)
+        progress_fcn(kk/length(endate_str));
+    end
 end
 
-target_date = (initial_stdate : hours(1) : final_endate)';
-
+%% INTERPOLATE TO AN HOURLY SIGNAL (STORM DATA ARE HOURLY)
+target_date = (initial_stdate : hours(1) : final_endate + hours(23))';
 hourly_tide = interp1(data_table.DateTime, data_table.Prediction, target_date);
-
-data_table.Properties.VariableNames = {'Date','Prediction [m]'};
+data_table = table(target_date, hourly_tide, 'VariableNames', {'Date', 'Prediction [m]'});
 
 %% CREATE TIDAL FILE (MEANT FOR 1 STATION)
 % Parse Tidal File
