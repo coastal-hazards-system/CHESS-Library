@@ -6,7 +6,10 @@ Generic struct-field comparator with no domain knowledge of what the
 fields mean. Field names present in only one of the two structs are
 treated as "not changed" for that field (not an error) -- this makes
 it safe to compare a freshly-parsed config against an older cached
-config that may predate a field being introduced.
+config that may predate a field being introduced. NaN values compare
+equal to each other (isequaln): a NaN field (e.g. sp_lat/sp_lon when the
+CHS file has no savepoint coordinates, blank input table cells) that is NaN
+in both structs counts as unchanged.
 
 %% INPUTS
 a, b: Two structs to compare.
@@ -14,7 +17,7 @@ field_names: Cell array of field name strings to check.
 
 %% OUTPUTS
 changed: true if any named field is present in both structs and its
-         value differs (via isequal); false otherwise.
+         value differs (via isequaln); false otherwise.
 changed_field: Name of the first field found to differ, or '' if
                changed is false.
 
@@ -25,7 +28,7 @@ changed = false;
 changed_field = '';
 for kk = 1:numel(field_names)
     fld = field_names{kk};
-    if isfield(a, fld) && isfield(b, fld) && ~isequal(a.(fld), b.(fld))
+    if isfield(a, fld) && isfield(b, fld) && ~isequaln(a.(fld), b.(fld))
         changed = true;
         changed_field = fld;
         return
