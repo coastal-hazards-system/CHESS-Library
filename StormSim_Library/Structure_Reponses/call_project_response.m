@@ -9,20 +9,31 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
     use_timeseries = config.use_timeseries;
     use_whp        = config.create_whp;
     use_wlp        = config.create_wlp;
-    project_name   = config.project_name;
-    struc_id       = config.struc_id;
-    case_name      = config.case_name;
     
     % Core Output File Target
     save_target    = config.out_files.resp_data;
     % =====================================================================
 
+    % Resolved Offshore Elevation Into The Structure (Full PSE Transect In One Place): config Value After
+    % storm_db_info('apply') (Storm DB Study Grid, Else Inputs) And check_offshore_elevation.m. Shared By Library And GUI
+    % Runs; Appended To The Run Config File With The Structure. Not A Hotstart Dependency (Responses Are Always Recomputed)
+    structure.offshore_elevation = [];
+    structure.offshore_elevation_source = '';
+    if isfield(config, 'offshore_elevation')
+        structure.offshore_elevation = config.offshore_elevation;
+    end
+    if isfield(config, 'offshore_elevation_source')
+        structure.offshore_elevation_source = config.offshore_elevation_source;
+    end
+    save(config.out_files.config, 'structure', '-append');
+
     % Load Empirical Coefficients & Initialize Output Struct
     [emp_coeff] = load_empirical_coefficients();
     Resp        = struct();
     
-    % Establish Base Output Directory 
-    subDir = fullfile(config.outfolder, project_name, struc_id, case_name);
+    % Establish Output Directory (Workflow Folder Of The Alternative, stormsim_paths.m)
+    paths  = stormsim_paths(config);
+    subDir = paths.wf_dir;
 
     %% COMPUTE STRUCTURE RESPONSE BASED ON WORKFLOW
     switch workflow
@@ -30,7 +41,6 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
         case {1, 4} % ================= PROS WORKFLOW =================
             % Define workflow parameters
             wName  = ifthen(workflow == 4, 'FB', 'RB');
-            subDir = fullfile(subDir, 'PROS');
             ensure_directory(subDir);
 
             % Process Peaks Datasets (PROS)
@@ -62,17 +72,43 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
                 Resp.Timeseries.Default = stormsim_pros(config, ...
                     project_forcing.Timeseries.Default, structure, emp_coeff, save_path);
             end
+        case 2 % ============== DETERMINISTIC WORKFLOW ==============
+            ensure_directory(subDir);
 
-            % Plotting Outputs
-            if create_plots
-                disp('      Plotting StormSim: PROS Analysis outputs... ');
-                call_pros_plots(config, structure, project_forcing, Resp);
+            % Process Peaks Datasets (DET)
+            if use_peaks && isfield(project_forcing, 'Peaks')
+                disp('Running StormSim: Deterministic - Peaks....');
+
+                peak_fields = fieldnames(project_forcing.Peaks);
+                for i = 1:numel(peak_fields)
+                    fName = peak_fields{i};
+
+                    % Filter based on water level/height configurations
+                    if (strcmp(fName, 'WLP') && ~use_wlp) || (strcmp(fName, 'WHP') && ~use_whp)
+                        continue;
+                    end
+
+                    fprintf('   Processing %s dataset....\n', fName);
+                    Resp.Peaks.(fName) = stormsim_det(config, ...
+                        project_forcing.Peaks.(fName), structure, emp_coeff);
+                end
             end
 
+            % Process Timeseries Datasets (DET)
+            if use_timeseries && isfield(project_forcing, 'Timeseries')
+                disp('Running StormSim: Deterministic - Timeseries....');
+
+                Resp.Timeseries.Default = stormsim_det(config, ...
+                    project_forcing.Timeseries.Default, structure, emp_coeff);
+            end
         case 3 % ================== CSR WORKFLOW ==================
             % Define workflow parameters
-            subDir = fullfile(subDir, 'LCS');
             ensure_directory(subDir);
+            if lcs_sampling_mode(config) == 1
+                disp(['Notice: LCS sampling is rate restricted (lcs_restrict_sampling_rate = 1): each life cycle holds lambda x mcs_nYears +/- 1 storms ',...
+                    'and no convergence check is run. Life-cycle percentiles are conditional on rate-matched storm counts: they include storm ',...
+                    'selection, intensity and timing variability, but not storm-count variability.']);
+            end
 
             % Process Peaks Datasets (CSR)
             if use_peaks && isfield(project_forcing, 'Peaks')

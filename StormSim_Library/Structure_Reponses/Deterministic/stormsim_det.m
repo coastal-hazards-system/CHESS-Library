@@ -1,0 +1,85 @@
+function Resp = stormsim_det(config, project_forcing, structure, emp_coeff)
+%{
+    %% DESCRIPTION
+        StormSim: Deterministic (workflow 2). Computes structure responses
+        for every storm in one dataset (Peaks Default/WLP/WHP or
+        Timeseries), straight from the adjusted storm forcing: no
+        replicates, no uncertainty, no hazard curves.
+        Full histories are kept (one value per time step; Peaks have a
+        single step per storm). "Max" holds one value per storm: the
+        maximum of each variable over the storm, taken independently
+        (non-concurrent), except Rc, which takes the minimum (smallest
+        freeboard). Same reduction as compute_structure_response with
+        get_max = 1.
+
+    %% INPUTS
+        config: StormSim configuration. | struc
+        project_forcing: One dataset, project_forcing.(data).(match). | struc
+            Fields per storm type, from stormsim_det_formater and
+            adjust_project_forcing.
+        structure: StormSim structure geometry. | struc
+        emp_coeff: Empirical coefficients (load_empirical_coefficients). | struc
+
+    %% OUTPUTS
+        Resp.(storm_type) with fields:
+            storm_id: Storm IDs. | double (nStorms x 1)
+            time, dt: Time stamps [datenum] and time steps [days]. | cell
+            SWL, Hm0, Hm0_DL, Tp, h, Rc: Forcing per storm. | cell
+                Hm0 is the original (database) wave height, Hm0_DL the
+                depth limited one used by the response equations.
+                h = SWL - toe_elevation, Rc = crest_elevation - SWL.
+            <response>: Every response computed by
+                compute_structure_response (R2p, q, Dn50, ...). | cell
+            Max: One value per storm for every field above. | struc
+
+    %% DEV SIGNATURE
+        Developed by: Fabian A. Garcia Moreno ERDC-CHL
+%}
+storm_types = fieldnames(project_forcing);
+for st = 1:length(storm_types)
+    pf = project_forcing.(storm_types{st});
+    % Forcing As Used By The Response Equations
+    out.storm_id = pf.storm_id;
+    out.time = pf.time;
+    out.dt = pf.dt;
+    out.SWL = pf.SWL;
+    out.Hm0 = pf.Hm0_no_rep; % Database Wave Height
+    out.Hm0_DL = pf.Hm0; % After Depth Limitation (Equal To Hm0 When Off)
+    out.Tp = pf.Tp;
+    out.h = cellfun(@(x) x - structure.toe_elevation, pf.SWL, 'un', false);
+    out.Rc = cellfun(@(x) structure.crest_elevation - x, pf.SWL, 'un', false);
+    % Structure Responses (Full Histories)
+    R = compute_structure_response(config, structure, pf, emp_coeff, 0);
+    if ~isempty(R)
+        resp_names = fieldnames(R);
+        for rr = 1:length(resp_names)
+            out.(resp_names{rr}) = R.(resp_names{rr});
+        end
+    end
+    % One Value Per Storm
+    out.Max = storm_maxima(out);
+    Resp.(storm_types{st}) = out;
+    clear out
+end
+end
+
+function Max = storm_maxima(out)
+skip = {'storm_id', 'time', 'dt'};
+names = setdiff(fieldnames(out), skip, 'stable');
+Max.storm_id = out.storm_id;
+for kk = 1:length(names)
+    v = out.(names{kk});
+    if isnumeric(v) && numel(v) == numel(out.storm_id) % Already One Value Per Storm (Q_vol)
+        Max.(names{kk}) = v(:);
+    elseif iscell(v) && all(cellfun(@(x) isnumeric(x) && size(x, 2) == 1, v))
+        if strcmp(names{kk}, 'Rc')
+            Max.(names{kk}) = cellfun(@(x) min(x, [], 1), v);
+        else
+            Max.(names{kk}) = cellfun(@(x) max(x, [], 1), v);
+        end
+    end
+end
+% Time Of Peak SWL (Peaks: The Single Record)
+[~, ix] = cellfun(@(x) max(x, [], 1), out.SWL);
+Max.time = cellfun(@(t, i) t(i), out.time, num2cell(ix));
+end
