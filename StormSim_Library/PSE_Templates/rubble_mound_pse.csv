@@ -1,0 +1,50 @@
+StormSim Project General Inputs,,,,,Structure Responses,,,
+Model Variable Symbol,Description,Units,Value,,Model Variable Symbol,Field Names,Units,Value
+project_name,Project name,NA,Chicago Shoreline GRR,,compute_dn50_seaside,Compute Seaward Median Stone Size Response (Momentum Flux),NA,1
+struc_id,Structure/Trasnsect ID,NA,R7175_T3,,compute_dn50_leeside,Compute Landward Median Stone Size Response (Van Gent),NA,1
+case_name,Case Name,NA,Seawall_existing,,compute_dn50_submerged,Compute Dn50 Responses When Submerged (CEM VI-5-25),NA,1
+outfolder,StormSim Project output folder.,NA,SS_Outputs_7175_T3,,compute_r2p,Compute Run-up Response (Eurotop),NA,1
+project_datum,Project output datum. (Still not implemented. Used for plot title currently),NA,IGLD85,,compute_wave_transmission,Compute wave transmission (eurotop),NA,1
+project_CLs,"Percentiles to compute CLs (max 4, 50 is already being calculated)",NA,[84 90],,compute_q,Compute Overtopping Discharge Rate per Unit Width Response (Eurotop),NA,1
+workflow,"StormSim workflow to call for project. (1 - StormSim:PROS , 3- StormSim:LCS, 4- StormSim: PROS Frequency Base (FB))",NA,1,,compute_q_vol,Compute Overtopping Discharge Volume Unit Width Response (Eurotop) (RB3 Only),NA,1
+struc_type,"Structure type  (Levee - 1, Floodwalls - 2, Rubblemound - 3)",NA,3,,compute_damaging_depth,Comput Damaging Depth Response,NA,0
+storm_sampling,"Storm sampling scheme to use for project. (XC,TC or CC)",NA,XC,,compute_damaging_depth_Ks,Shielding Parameter To Use For Damaging Depths,NA,1
+swl_slr,Sea level rise applied as vertical offset to SWL.,[m],176.45,,,,,
+apply_random_tides,Apply random tide to storm SWL (0 - Off / 1 - On),NA,0,,StormSim: Monte Carlo Simulation (MCS) Module Inputs,,,
+apply_depth_limitation,Apply Depth Limitation To Waves  (0 - Off / 1 - On),NA,1,,Model Variable Symbol,Field Names,Units,Value
+use_peaks,Include forcing peaks files as part of the analysis.  (0 - Off / 1 - On),NA,0,,mcs_nLC,Number Of Life Cycles,NA,1000
+use_timeseries,Include forcing timeseries files as part of the analysis.  (0 - Off / 1 - On),NA,1,,mcs_nYears,Number Of Years To Be Simulated In A Life Cycle,[years],50
+create_wlp,Create Water Level Priority Peaks Dataset (WLP)  (0 - Off / 1 - On). (Requires peaks and timeseries files),NA,0,,,,,
+create_whp,Create Wave Height Priority Peaks Dataset (WLP)  (0 - Off / 1 - On). (Requires peaks and timeseries files),NA,0,,StormSim: Coastal Structure Reliability Damage  (CSR) Module,,,
+load_project_forcing,Load project_forcing StormSim File From Other case_name Under The Same project_name (0- Sample New Storms/1-Load Previous Storm Suite),NA,1,,Model Variable Symbol,Field Names,Units,Value
+ref_case_name,Define Reference case_name To Load project_forcing From,NA,none,,csr_call_dpa,Call StormSim: CSR-DPA (0/1),NA,0
+,,,,,csr_apply_structure_repair,Allow Structure Repair (0/1),NA,0
+StormSim Project Forcing Data,,,,,csr_compute_S_submerged,Compute Dn50 Responses When Submerged (CEM VI-5-25),NA,1
+Model Variable Symbol,Description,Units,Value,,csr_apply_cutoff_correction,Apply Cutoff Correction (0/1),NA,0
+storm_duration,Storm duration.,hrs,1,,csr_cutoff_offset,Cutoff Elevation Delta (Number>=0),[m],0
+chs_dependencies,CHS regional dependencies folder,NA,..\CHS_Dependencies,,,,,
+chs_zip,CHS Zip Folder or Custom Modeling .mat File (Relative Path),NA,Chicago_files\CHS-GLMH_XH_SimBslc0_Post0_SP37697_Timeseries.zip,,"StormSim: Probabilistic Run-up, Overtopping & Stone Sizing (PROS)",,,
+tide_file,Tidal file used to randomly sample tidal values for storm SWL. (Relative Path),NA,none,,Model Variable Symbol,Field Names,Units,Value
+,,,,,pros_compute_forcing_HC,"Compute Hazard for Waves and WL (1 - On, 2 - Off)",NA,1
+Structure Geometry,,,,,pros_use_aep,"Use AEP or AEF for hazard curves (1 - AEP, 0-AEF)",NA,0
+Model Variable Symbol,Field Names,Units,Value,,,,,
+crest_elevation,Crest Elevation/Top of Wall Elevation,[m],180.1,,,,,
+crest_width,Crest Width/Wall Width,[m],0.3,,,,,
+toe_elevation,Mound Toe Elevation (Negative Below Datum Zero),[m],176.2,,,,,
+seaside_slope,Mound/Berm Seaward Slope (cota),NA,3,,,,,
+leeside_slope,Mound Landward Slope (cota),NA,3,,,,,
+offshore_slope,Offshore slope (cota),NA,8,,,,,
+offshore_elevation,Offshore elevation positive up in the study datum (used when the storm DB study grid has none),[m],173.99,,,,,
+,,,,,,,,
+Structure Properties,,,,,,,,
+Model Variable Symbol,Field Names,Units,Value,,,,,
+armor_delta,Armor Immersed Relative Density Delta,NA,1.65,,,,,
+seaside_mass,Seaside Stone Mass,[kg],1000,,,,,
+leeside_mass,Leeside Stone Mass,[kg],1000,,,,,
+water_density,Water Density,[kg/m^3],1000,,,,,
+cem_P,Mean Value Of Structure Notational Permeability Coefficient (P),[Figure VI-5-11 CEM],0.4,,,,,
+seaside_design_S,StormSim:PROS Design Seaside Limit Damage State (Estimate stone size),NA,2,,,,,
+leeside_design_S,StormSim:PROS Design Leeside Limit Damage State (Estimate stone size),NA,2,,,,,
+seaside_S_uls,StormSim: LCS-CSR Seaside Ultimate Limit State (ULS),NA,15,,,,,
+leeside_S_uls,StormSim: LCS-CSR Leeside Ultimate Limit State (ULS),NA,15,,,,,
+roughness_ifactor,"Roughness Coefficient, 2 for grass; 1 for concrete, asphalt, or closed blocks; 0.9 for basalt or placed revetment blocks; 0.8 for stepped structure; Table 6.2 from EurOtop (2018) (rubble mound )",NA,0.9,,,,,
