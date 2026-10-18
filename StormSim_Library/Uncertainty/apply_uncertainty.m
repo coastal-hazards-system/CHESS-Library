@@ -22,19 +22,31 @@ switch config.workflow
         Tp = cellfun(@(x) x(:, 7), project_forcing, 'un', false); % Get Tp From LC
         RandNorm =cellfun(@(x) zeros(size(x)), SWL, 'un', false);
 end
+% Lake Specific Switch 
+switch config.region
+    case {'CHS-GLM','CHS-GLH'}
+        mean_lake_level = 176.45; % uncertainty needs to be computed for surge not TWL
+    otherwise
+        mean_lake_level = 0;
+end
 
 %% APPLY SWL UNCERTAINTY FOR STRUCTURE RESPONSE COMPUTATIONS
 % Apply uncertainty using a random normal distribution
 % ------------------ SWL ------------------
+SWL = cellfun(@(x, y) x - mean_lake_level, SWL ,'un',false);
 SWL = cellfun(@(x, y) pcha_forcing_uncertainty(x, swl_u_a, swl_u_r, y),SWL, RandNorm,'un',false);
+SWL = cellfun(@(x, y) x + mean_lake_level, SWL ,'un',false);
 
 %% APPLY Hm0 & Tp UNCERTAINTY FOR STRUCTURE RESPONSE COMPUTATIONS
-% Check For Hm0 == 0
+% Check For Hm0 == 0 (No Waves In The Database: Excluded From Uncertainty, Restored To 0 Below)
+no_waves = cellfun(@(x) x == 0, Hm0, 'un', false);
 Hm0_w_Uncert = cellfun(@(x) Hm0_replace(1,x), Hm0, 'un', false);
 % Apply Uncertainty
 Hm0_w_Uncert = cellfun(@(x, y) pcha_forcing_uncertainty(x, hm0_u_a, hm0_u_r, y), Hm0_w_Uncert, RandNorm, 'un', false);
 % Check For Hm0 < 0.01
 Hm0  = cellfun(@(x) Hm0_replace(2,x), Hm0_w_Uncert, 'un', false);
+% Storms Without Waves Stay At Hm0 = 0: Wave Responses NaN, Surge Responses (e.g. Damaging Depth) Still Computed
+Hm0  = cellfun(@zero_where, Hm0, no_waves, 'un', false);
 % Tp
 Tp_U = sqrt(1+hm0_u_r)-1; %0.0724
 Tp = cellfun(@(x, y) x.*(1+Tp_U.*y), Tp, RandNorm, 'un', false);
@@ -54,6 +66,9 @@ switch config.workflow
 end
 
 %% Define internal Aux Function
+    function x = zero_where(x, m)
+        x(m) = 0;
+    end
     function Hm0 = Hm0_replace(cond,Hm0)
         switch cond
             case 1 % Hm0 == 0
