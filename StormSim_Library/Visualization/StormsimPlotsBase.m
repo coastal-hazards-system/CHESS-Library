@@ -517,7 +517,9 @@ classdef StormsimPlotsBase
                 linkaxes([ax,ax2],'x');
             end
             
-            ax.Parent.Parent.Position = [100 100 992 699];
+            if isa(ax.Parent.Parent, 'matlab.ui.Figure') % Not A Panel/Tab Holding The Grid (e.g. GUI Results Tab Mirror)
+                ax.Parent.Parent.Position = [100 100 992 699];
+            end
             function config_out = config_editor(config_out, var_to_look, value)
                 % Turn Off Responses For RB Section
                 for ii = 1:length(var_to_look)

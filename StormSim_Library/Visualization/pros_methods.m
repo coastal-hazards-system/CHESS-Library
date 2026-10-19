@@ -376,7 +376,9 @@ classdef pros_methods < StormsimPlotsBase
             ax_clone = uiaxes(plotGrid, 'Color', 'none', 'Tag', 'clone');
             ax_clone.Layout.Row = 1; ax_clone.Layout.Column = 1;
             ax_clone.PositionConstraint = 'innerposition';
+            set(ax_clone, 'FontSize', self.base_fnt - 2, 'FontWeight', 'bold');
             ax_clone.XLabel.String = ax_geom.XLabel.String;
+            ax_clone.XLabel.FontSize = self.base_fnt;
 
             % Invisible Anchor for Colorbar (trapped in Col 2)
             ax_anchor = uiaxes(plotGrid, 'Visible', 'off', 'Tag', 'cb_anchor', 'HandleVisibility', 'off');
@@ -394,7 +396,7 @@ classdef pros_methods < StormsimPlotsBase
             % Setup Left Axis
             yyaxis(ax_clone, 'left');
             ax_clone.YAxis(1).Scale = aux_methods.tern(d_left.y_log_scale == 1, 'log', 'linear');
-            ylabel(ax_clone, d_left.y_label, 'Color', 'b', 'FontWeight', 'bold');
+            ylabel(ax_clone, d_left.y_label, 'Color', 'b', 'FontWeight', 'bold', 'FontSize', self.base_fnt);
 
             % Prepare color scales
             set(ax_clone, 'ColorScale', 'log');
@@ -411,7 +413,8 @@ classdef pros_methods < StormsimPlotsBase
                 hc = colorbar(ax_anchor, 'Location','west');
                 hc.Ticks = cb_ticks;
                 hc.TickLabels = string(cb_ticks);
-                ylabel(hc, 'ARI [yrs]', 'FontWeight', 'bold');
+                hc.FontSize = self.base_fnt - 2;
+                ylabel(hc, 'ARI [yrs]', 'FontWeight', 'bold', 'FontSize', self.base_fnt);
 
                 % Left Side Scatter
                 [~, ~, ss_left] = add_events(ax_clone, d_left.POT, 0, max(left_x, [], "omitnan"),...
@@ -424,7 +427,7 @@ classdef pros_methods < StormsimPlotsBase
             % Setup Right Axis
             yyaxis(ax_clone, 'right');
             ax_clone.YAxis(2).Scale = aux_methods.tern(d_right.y_log_scale == 1, 'log', 'linear');
-            ylabel(ax_clone, d_right.y_label, 'FontWeight', 'bold');
+            ylabel(ax_clone, d_right.y_label, 'FontWeight', 'bold', 'FontSize', self.base_fnt);
 
             % RE-LOCK COLOR SCALE FOR RIGHT SIDE
             set(ax_clone, 'ColorScale', 'log');

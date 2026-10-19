@@ -58,10 +58,11 @@ Outputs:
   WHP). 
 
   Files (.mat):
-    1. Raw converted CHS HDF5 files -> exported to project folder with
-    suffix "_raw_files"
-    2. Formated and screened  CHS File Data, prob_masses, parsed inputs (config) -> exported to project folder with
-    suffix "CHS_region_SP####"
+    1. Raw converted CHS HDF5 files -> exported to <outfolder>\<project>\Event_Database
+    as <db>_raw_files.mat (<db> = config.storm_db, default <CHS region>_SP####)
+    2. Formated and screened CHS File Data, prob_masses -> <outfolder>\<project>\Event_Database\<db>.mat;
+    parsed inputs (config) -> <outfolder>\<project>\PSE\<struc_id>\<case_name>\<workflow folder>\
+    <db>_<workflow>_config_file.mat (layout: Setup/stormsim_paths.m)
   Vars:
     1. config: Contains parsed information from StormSim input file | 1 x 1 | structure, with nFields 
 
@@ -147,7 +148,7 @@ Outputs:
 
 %}
 t3 = tic;
-[project_forcing] = call_project_forcing_formater(config, storm, prob_mass);
+[project_forcing, config] = call_project_forcing_formater(config, storm, prob_mass);
 t3 = toc(t3);
 
 %% STEP 4: APPLY UNCERTAINTY TO PROJECT FORCING
