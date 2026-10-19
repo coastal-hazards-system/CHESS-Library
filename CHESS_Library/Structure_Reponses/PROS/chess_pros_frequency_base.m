@@ -30,7 +30,15 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
     else
         hw = NaN; % Failsafe if accessed outside struc_type 2
     end
-    
+
+    % Mean Lake Level (EB2 SWL Uncertainty Is Computed On Surge, Not TWL)
+    switch config.region
+        case {'CHS-GLM','CHS-GLH'}
+            mean_lake_level = 176.45; % uncertainty needs to be computed for surge not TWL
+        otherwise
+            mean_lake_level = 0;
+    end
+
     emp_coeff = load_empirical_coefficients();
     storm_types = fieldnames(data_in);
     data_out = struct();
@@ -119,9 +127,9 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                    normU_hm0 = randn(length(SWL{1}),MCsim);
                    normU_tp = (1+tp_u.*normU_hm0);
                    % SWL
-                   project_forcing.SWL = {pcha_forcing_uncertainty_EB2(SWL{1},...
+                   project_forcing.SWL = {pcha_forcing_uncertainty_EB2(SWL{1} - mean_lake_level,...
                        swl_u(1), swl_u(2),...
-                       normU_swl, storm_name)};
+                       normU_swl, storm_name) + mean_lake_level};
                    % Hm0
                    project_forcing.Hm0 = {pcha_forcing_uncertainty_EB2(Hm0{1},...
                        hm0_u(1), hm0_u(2),...
@@ -130,8 +138,10 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                    project_forcing.Tp = {Tp{1}.*normU_tp};
                    % Storm Duration
                    project_forcing.dt  = {repmat(datenum(0,0,0,config.storm_duration,0,0), size(SWL{1}))};
-                   %
-                   Resp.(field) = compute_structure_response(config, structure, project_forcing, emp_coeff, 0);
+                   % Per-Sample MC Forcing (No _no_rep Fields): Tag As PROS-FB Even When Called From A PROS-RB Run (pros_methods.call_pros_fb)
+                   config_fb = config;
+                   config_fb.workflow = 4;
+                   Resp.(field) = compute_structure_response(config_fb, structure, project_forcing, emp_coeff, 0);
                    %
                    if ~isempty(Resp.(field))
                        fnames = fieldnames(Resp.(field));
