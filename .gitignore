@@ -1,8 +1,18 @@
--.DS_Store
--*.asv
--*.mat
--**/*.mat
--*.zip
--*.h5
--*.docx
+.DS_Store
+*.asv
+*.mat
+**/*.mat
+*.zip
+*.h5
+*.docx
+ignore_this
+CHESS_Library/Forcing_Generation/Forcing_Adjustments/NOAA-Test*
+CHS_Dependencies
+Test_Env
+CHESS-Library.wiki
+Dont_Scan
+Changelog
+CHESS_Outputs
+unit_test
+
 
