@@ -1,4 +1,4 @@
-classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
+classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
     % Properties that correspond to app components
     properties (Access = public)
@@ -57,7 +57,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         ExtrudeFigureButton_2         matlab.ui.control.Button
         ExtrudeTableButton_2          matlab.ui.control.Button
         StormDBAxes                   matlab.ui.control.UIAxes
-        StormSimRunTab                matlab.ui.container.Tab
+        CHESSRunTab                   matlab.ui.container.Tab
         RunViewerGrid                 matlab.ui.container.GridLayout
         GridLayout3_7                 matlab.ui.container.GridLayout
         simStatusBar                  matlab.ui.control.TextArea
@@ -71,7 +71,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         WorkflowInputsTable           matlab.ui.control.Table
         GridLayout3_4                 matlab.ui.container.GridLayout
         WorkflowDropDown              matlab.ui.control.DropDown
-        DefineStormSimWorkflowLabel   matlab.ui.control.Label
+        DefineCHESSWorkflowLabel      matlab.ui.control.Label
         GridLayout3_3                 matlab.ui.container.GridLayout
         TidesFileDropDown             matlab.ui.control.DropDown
         TideFileDropDownLabel         matlab.ui.control.Label
@@ -130,7 +130,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
 
 
     properties (Access = private)
-        ss_projects % Loaded StormSim projects
+        chess_projects % Loaded CHESS projects
         wProj % Active project Handle
         proj_indx
         pse_indx
@@ -139,7 +139,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         simState % Description
         tableState % Description
         stormCache % [NEW] Loaded storm Data Keyed By File (containers.Map)
-        simContext % [NEW] Project|PSE|Alternative Last Shown On StormSim Run Tab
+        simContext % [NEW] Project|PSE|Alternative Last Shown On CHESS Run Tab
         resultsState % [NEW] Loaded Results (Resp, config, structure, project_forcing, storm DB) For plot_project_responses
         resultsPlotOptions % [NEW] Results Plot Options Per Plot Type (Right-Click "Plot Options...", Session Only)
         resultsMenu % [NEW] Results Axes Right-Click Menu (Created In startupFcn)
@@ -147,7 +147,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         resultsTablePopout % DET Response Table Pop-Out (uifigure From det_methods.response_table)
         simKey % [NEW] Saved Simulation Key (Config File Of Alternative + Workflow + Run Tab Storm DB) Last Resolved By sync_saved_sim
         declinedSimKey = '' % Saved Simulation Key Whose Load Was Declined ("Keep current inputs"): Results Tab Kept Cleared While sim_key() Equals It
-        oldDbWarned = {} % Storm DB Files (output_paths.storm_db) Already Alerted As Older StormSim Version (Once Per Session)
+        oldDbWarned = {} % Storm DB Files (output_paths.storm_db) Already Alerted As Older CHESS Version (Once Per Session)
         plotFontSize = 12 % Base Font Of Every GUI Plot, Tab And Pop-Out (Library Rule: Title +2, Labels Base, Ticks -2)
         resultsMirror % Panel Over PSEAxes_3 (Same Grid Cell) Showing A Multi-Panel Results Plot When The Cell Is Big Enough (Created In startupFcn)
         resultsMirrorFits = [] % Fit State Of The Shown Multi-Panel Results Plot ([] If None): The Tab Resize Redraws Only When It Flips
@@ -157,7 +157,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
     methods (Access = private)
         function append_project(app, wProj)
             % Append SS Project & Make It Active
-            app.ss_projects = [app.ss_projects; wProj];
+            app.chess_projects = [app.chess_projects; wProj];
             app.set_active_selection(wProj.name, '', '');
             % Keep Per-Alternative Fields Sized
             app.project_field_ini();
@@ -352,7 +352,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 app.auxLib.error_dlgbox('Not a StormSim project archive: it must hold one project folder <name> with <name>/StormSim_project_<name>.mat.');
                 return
             end
-            if ~isempty(app.ss_projects) && any(strcmp(top, {app.ss_projects.name}))
+            if ~isempty(app.chess_projects) && any(strcmp(top, {app.chess_projects.name}))
                 app.auxLib.error_dlgbox(['Project "' top '" is already loaded.']);
                 return
             end
@@ -515,7 +515,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             wProj = S.ss_project;
-            if ~isempty(app.ss_projects) && any(strcmp(wProj.name, {app.ss_projects.name}))
+            if ~isempty(app.chess_projects) && any(strcmp(wProj.name, {app.chess_projects.name}))
                 app.auxLib.error_dlgbox(['Project "' wProj.name '" is already loaded.']);
                 return
             end
@@ -979,7 +979,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             % Update Project Tree
             app.update_project_tree();
             % No Projects Loaded
-            if isempty(app.ss_projects)
+            if isempty(app.chess_projects)
                 app.ProjectDropDown.Items = {};
                 app.PSEDropDown.Items = {};
                 app.AlternativeDropDown.Items = {};
@@ -989,7 +989,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             % Project Dropdown
-            projList = {app.ss_projects.name};
+            projList = {app.chess_projects.name};
             app.ProjectDropDown.Items = projList;
             app.ProjectDropDown.Value = projList{app.proj_indx};
             app.ProjectPathEditField.Value = app.wProj.get_project_field('path', '', '', 'proj');
@@ -1832,7 +1832,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             if isempty(app.proj_indx)
                 return
             end
-            ss_project = app.ss_projects(app.proj_indx); %#ok<ADPROP,*ADPROPLC>
+            ss_project = app.chess_projects(app.proj_indx); %#ok<ADPROP,*ADPROPLC>
             save(fullfile(ss_project.path, ss_project.name, ['StormSim_project_' ss_project.name '.mat']), 'ss_project'); %#ok<ADPROP>
         end
 
@@ -1855,14 +1855,14 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             app.proj_indx = [];
             app.pse_indx = [];
             app.alt_indx = [];
-            if isempty(app.ss_projects)
+            if isempty(app.chess_projects)
                 return
             end
-            app.proj_indx = find(strcmp(proj_name, {app.ss_projects.name}), 1);
+            app.proj_indx = find(strcmp(proj_name, {app.chess_projects.name}), 1);
             if isempty(app.proj_indx)
                 app.proj_indx = 1;
             end
-            app.wProj = app.ss_projects(app.proj_indx);
+            app.wProj = app.chess_projects(app.proj_indx);
             % PSE
             pseList = app.wProj.pse_list;
             if isempty(pseList)
@@ -2171,8 +2171,8 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             % Clear Project Tree
             delete(app.ProjectTree.Children);
             act_node = [];
-            for kk = 1:length(app.ss_projects)
-                wObj = app.ss_projects(kk);
+            for kk = 1:length(app.chess_projects)
+                wObj = app.chess_projects(kk);
                 % Create Project Node
                 proj_node = uitreenode(app.ProjectTree, 'Text', wObj.name,...
                     'NodeData', struct('type', 'proj'));
@@ -3360,12 +3360,12 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             app.StormDBTable.Layout.Row = 1;
             app.StormDBTable.Layout.Column = 2;
 
-            % Create StormSimRunTab
-            app.StormSimRunTab = uitab(app.TabGroup);
-            app.StormSimRunTab.Title = 'StormSim Run';
+            % Create CHESSRunTab
+            app.CHESSRunTab = uitab(app.TabGroup);
+            app.CHESSRunTab.Title = 'CHESS Run';
 
             % Create RunViewerGrid
-            app.RunViewerGrid = uigridlayout(app.StormSimRunTab);
+            app.RunViewerGrid = uigridlayout(app.CHESSRunTab);
             app.RunViewerGrid.ColumnWidth = {'1x'};
             app.RunViewerGrid.RowHeight = {22, 22, 22, 22, 22, '1.1x', 22, 22, '1x', 22, '0.3x'};
             app.RunViewerGrid.RowSpacing = 4;
@@ -3497,17 +3497,17 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             app.GridLayout3_4.Layout.Row = 5;
             app.GridLayout3_4.Layout.Column = 1;
 
-            % Create DefineStormSimWorkflowLabel
-            app.DefineStormSimWorkflowLabel = uilabel(app.GridLayout3_4);
-            app.DefineStormSimWorkflowLabel.FontSize = 15;
-            app.DefineStormSimWorkflowLabel.FontWeight = 'bold';
-            app.DefineStormSimWorkflowLabel.Layout.Row = 1;
-            app.DefineStormSimWorkflowLabel.Layout.Column = 1;
-            app.DefineStormSimWorkflowLabel.Text = '2. Define StormSim Workflow ';
+            % Create DefineCHESSWorkflowLabel
+            app.DefineCHESSWorkflowLabel = uilabel(app.GridLayout3_4);
+            app.DefineCHESSWorkflowLabel.FontSize = 15;
+            app.DefineCHESSWorkflowLabel.FontWeight = 'bold';
+            app.DefineCHESSWorkflowLabel.Layout.Row = 1;
+            app.DefineCHESSWorkflowLabel.Layout.Column = 1;
+            app.DefineCHESSWorkflowLabel.Text = '2. Define CHESS Workflow ';
 
             % Create WorkflowDropDown
             app.WorkflowDropDown = uidropdown(app.GridLayout3_4);
-            app.WorkflowDropDown.Items = {'StormSim: PROS-RB', 'StormSim: Deterministic', 'StormSim:LCS', 'StormSim: PROS-FB'};
+            app.WorkflowDropDown.Items = {'CHESS: PROS-RB', 'CHESS: Deterministic', 'CHESS:LCS', 'CHESS: PROS-FB'};
             app.WorkflowDropDown.ItemsData = [1 2 3 4];
             app.WorkflowDropDown.ValueChangedFcn = createCallbackFcn(app, @WorkflowDropDownValueChanged, true);
             app.WorkflowDropDown.Layout.Row = 1;
@@ -3760,7 +3760,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
     methods (Access = public)
 
         % Construct app
-        function app = StormSim_UI_canvas_exported
+        function app = CHESS_UI_canvas_exported
 
             % Create UIFigure and components
             createComponents(app)
