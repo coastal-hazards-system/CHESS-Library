@@ -8,7 +8,7 @@ function config = finalize_structure_config(config)
         No file I/O. Safe to call more than once (idempotent).
 
     %% INPUTS
-        config: StormSim configuration. | struc
+        config: CHESS configuration. | struc
             Required fields:
                 struc_type: Structure type (1 - Levee, 2 - Floodwall,
                             3 - Rubblemound, 4 - Low Crested Breakwater)
@@ -17,7 +17,7 @@ function config = finalize_structure_config(config)
                 wall_bottom_elevation: Required for floodwalls without berm.
 
     %% OUTPUTS
-        config: Updated StormSim configuration. | struc
+        config: Updated CHESS configuration. | struc
 
     %% DEV SIGNATURE
         Developed by: Fabian A. Garcia Moreno ERDC-CHL

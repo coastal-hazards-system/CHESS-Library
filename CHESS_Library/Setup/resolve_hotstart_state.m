@@ -6,7 +6,7 @@ Compares the current run's config against a previously cached
 carries over: the u_engine/f_adjust flags that gate
 call_uncertainty_engine.m and
 call_project_forcing_adjuster.m. The cache is this run's own file
-(stormsim_paths.m): its name holds the storm database (<region>_SP<sp_ID>
+(chess_paths.m): its name holds the storm database (<region>_SP<sp_ID>
 by default), so a different savepoint or region never finds it and runs
 cold; nothing is deleted. The hotstart level (hotstart_plan.m, acted on
 by apply_hotstart_level.m; both shared with the GUI) decides:
@@ -14,7 +14,7 @@ by apply_hotstart_level.m; both shared with the GUI) decides:
     'reuse_sampling' The cached project_forcing.mat is deleted (it holds
                      adjusted/perturbed values) and rebuilt from the storm
                      database, then adjusted/perturbed once. LCS keeps its
-                     sampled life cycles: stormsim_lcs rebuilds them from
+                     sampled life cycles: chess_lcs rebuilds them from
                      this case's own sampling seed file, and the cached
                      run's tide start hours are kept (random tides on in
                      both runs, same tide file). Without a seed file that
@@ -91,7 +91,7 @@ if exist(config.out_files.config, 'file')
         config.hotstart_level = 'cold';
     end
 else
-    paths = stormsim_paths(config);
+    paths = chess_paths(config);
     disp_toggle(config.print_progress, sprintf('Hotstart: no cache found for storm database ''%s'', running cold start....', paths.db));
     % Uncertainty Engine Field Initialization
     config.u_engine = 0;

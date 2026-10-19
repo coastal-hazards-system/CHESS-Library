@@ -31,8 +31,8 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
     [emp_coeff] = load_empirical_coefficients();
     Resp        = struct();
     
-    % Establish Output Directory (Workflow Folder Of The Alternative, stormsim_paths.m)
-    paths  = stormsim_paths(config);
+    % Establish Output Directory (Workflow Folder Of The Alternative, chess_paths.m)
+    paths  = chess_paths(config);
     subDir = paths.wf_dir;
 
     %% COMPUTE STRUCTURE RESPONSE BASED ON WORKFLOW
@@ -45,7 +45,7 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
 
             % Process Peaks Datasets (PROS)
             if use_peaks && isfield(project_forcing, 'Peaks')
-                disp('Running StormSim: Probabilistic Response Of Structures (PROS) - Peaks....');
+                disp('Running CHESS: Probabilistic Response Of Structures (PROS) - Peaks....');
                 
                 peak_fields = fieldnames(project_forcing.Peaks);
                 for i = 1:numel(peak_fields)
@@ -59,17 +59,17 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
                     fprintf('   Processing %s dataset....\n', fName);
                     save_path = fullfile(subDir, sprintf('%s1_%s', wName, fName));
                     
-                    Resp.Peaks.(fName) = stormsim_pros(config, ...
+                    Resp.Peaks.(fName) = chess_pros(config, ...
                         project_forcing.Peaks.(fName), structure, emp_coeff, save_path);
                 end
             end
 
             % Process Timeseries Datasets (PROS)
             if use_timeseries && isfield(project_forcing, 'Timeseries')
-                disp('Running StormSim: Probabilistic Response Of Structures (PROS) - Timeseries....');
+                disp('Running CHESS: Probabilistic Response Of Structures (PROS) - Timeseries....');
                 save_path = fullfile(subDir, [wName, '3']);
                 
-                Resp.Timeseries.Default = stormsim_pros(config, ...
+                Resp.Timeseries.Default = chess_pros(config, ...
                     project_forcing.Timeseries.Default, structure, emp_coeff, save_path);
             end
         case 2 % ============== DETERMINISTIC WORKFLOW ==============
@@ -77,7 +77,7 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
 
             % Process Peaks Datasets (DET)
             if use_peaks && isfield(project_forcing, 'Peaks')
-                disp('Running StormSim: Deterministic - Peaks....');
+                disp('Running CHESS: Deterministic - Peaks....');
 
                 peak_fields = fieldnames(project_forcing.Peaks);
                 for i = 1:numel(peak_fields)
@@ -89,16 +89,16 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
                     end
 
                     fprintf('   Processing %s dataset....\n', fName);
-                    Resp.Peaks.(fName) = stormsim_det(config, ...
+                    Resp.Peaks.(fName) = chess_det(config, ...
                         project_forcing.Peaks.(fName), structure, emp_coeff);
                 end
             end
 
             % Process Timeseries Datasets (DET)
             if use_timeseries && isfield(project_forcing, 'Timeseries')
-                disp('Running StormSim: Deterministic - Timeseries....');
+                disp('Running CHESS: Deterministic - Timeseries....');
 
-                Resp.Timeseries.Default = stormsim_det(config, ...
+                Resp.Timeseries.Default = chess_det(config, ...
                     project_forcing.Timeseries.Default, structure, emp_coeff);
             end
         case 3 % ================== CSR WORKFLOW ==================
@@ -112,23 +112,23 @@ function [Resp] = call_project_response(config, project_forcing, structure, crea
 
             % Process Peaks Datasets (CSR)
             if use_peaks && isfield(project_forcing, 'Peaks')
-                disp('Running StormSim: Coastal Structure Reliability - Peaks....');
+                disp('Running CHESS: Coastal Structure Reliability - Peaks....');
                 
                 peak_fields = fieldnames(project_forcing.Peaks);
                 for i = 1:numel(peak_fields)
                     fName = peak_fields{i};
                     fprintf('   Processing %s dataset....\n', fName);
                     
-                    Resp.Peaks.(fName) = stormsim_csr(config, ...
+                    Resp.Peaks.(fName) = chess_csr(config, ...
                         project_forcing.Peaks.(fName), structure, emp_coeff, 'peaks', subDir);
                 end
             end
 
             % Process Timeseries Datasets (CSR)
             if use_timeseries && isfield(project_forcing, 'Timeseries')
-                disp('Running StormSim: Coastal Structure Reliability - Timeseries....');
+                disp('Running CHESS: Coastal Structure Reliability - Timeseries....');
                 
-                Resp.Timeseries.Default = stormsim_csr(config, ...
+                Resp.Timeseries.Default = chess_csr(config, ...
                     project_forcing.Timeseries.Default, structure, emp_coeff, 'timeseries', subDir);
             end
     end

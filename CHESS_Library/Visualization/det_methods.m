@@ -1,6 +1,6 @@
-classdef det_methods < StormsimPlotsBase
-    % DET_METHODS StormSim: Deterministic workflow plots (workflow = 2).
-    % Instantiated via StormsimPlots(...). Resp layout (stormsim_det.m):
+classdef det_methods < CHESSPlotsBase
+    % DET_METHODS CHESS: Deterministic workflow plots (workflow = 2).
+    % Instantiated via CHESSPlots(...). Resp layout (chess_det.m):
     %   Resp.(Peaks|Timeseries).(Default|WLP|WHP).(XC|TC) -> full histories + .Max (one value per storm)
     % Every field (forcing: SWL, Hm0, Hm0_DL, Tp, h, Rc; and responses) can be used on any axis.
     % Labels, units and log scaling come from response_library_headers.m.
@@ -14,7 +14,7 @@ classdef det_methods < StormsimPlotsBase
 
     methods (Access=public)
         function self = det_methods(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
-            self = self@StormsimPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system);
+            self = self@CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system);
         end
 
         function fields = available_fields(self, ds_query)

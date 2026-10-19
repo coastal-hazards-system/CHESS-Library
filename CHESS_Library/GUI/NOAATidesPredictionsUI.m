@@ -26,7 +26,7 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
     end
 
     properties (Access = private)
-        wProj % Active StormSim Project (Tide Files Are Saved In <project>\Tides And Added To wProj.tide_files_list)
+        wProj % Active CHESS Project (Tide Files Are Saved In <project>\Tides And Added To wProj.tide_files_list)
         stations % NOAA Harmonic Tidal Prediction Stations (Library: noaa_tide_stations)
         autoFileName % Last Output File Name Set Automatically (User Edits Are Kept)
         progressPatch % Progress Bar Patch In progresAxes
@@ -49,7 +49,7 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
             end
             name = sprintf('%s_%s_%s.csv', app.StationIDDropDown.Value, app.VerticalDatumDropDown.Value,...
                 char(string(app.DatePicker_2.Value, 'yyyy')));
-            if isempty(app.autoFileName) || strcmp(app.EditField.Value, app.autoFileName) || strcmp(app.EditField.Value, 'stormsim_tidal_file.csv')
+            if isempty(app.autoFileName) || strcmp(app.EditField.Value, app.autoFileName) || strcmp(app.EditField.Value, 'chess_tidal_file.csv')
                 app.EditField.Value = name;
             end
             app.autoFileName = name;
@@ -61,7 +61,7 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
 
         % Code that executes after component creation
         function startupFcn(app, wProj)
-            % NOAA Tidal Prediction Download For A StormSim Project
+            % NOAA Tidal Prediction Download For A CHESS Project
             app.wProj = wProj;
             app.GetDataButton.Enable = 'off'; % Enabled Once A Station And Its Datums Are Loaded
             % Progress Bar
@@ -348,7 +348,7 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
             app.EditField.Placeholder = 'Tidal file';
             app.EditField.Layout.Row = 1;
             app.EditField.Layout.Column = 2;
-            app.EditField.Value = 'stormsim_tidal_file.csv';
+            app.EditField.Value = 'chess_tidal_file.csv';
 
             % Show the figure after all components are created
             app.UIFigure.Visible = 'on';

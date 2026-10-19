@@ -16,7 +16,7 @@ The lists map onto the three hotstart levels of hotstart_level.m:
     'full'           -> none of the above changed
 
 deps.sampling: Fields that decide WHICH storms the LCS life cycles hold
-    (stormsim_lcs.m and the samplers it calls): life cycle count and
+    (chess_lcs.m and the samplers it calls): life cycle count and
     length, and the sampling mode. A change draws new life cycles.
     mcs_nLC is also read by Uncertainty/apply_uncertainty.m; it is
     declared here only (resampling regenerates everything downstream).

@@ -1,11 +1,11 @@
-classdef pros_methods < StormsimPlotsBase
+classdef pros_methods < CHESSPlotsBase
     % PROS_METHODS PROS/frequency-domain workflow plots (workflow = 1 or 4).
-    % Instantiated via StormsimPlots(...).
+    % Instantiated via CHESSPlots(...).
  %% PUBLIC METHODS
     methods (Access=public)
         % Method: Response Hazard Curve Plot 
         function ax = hc_plot(self, ax, ds_names, field_to_plot, add_events)
-            % Plots StormSim: PROS Hazard Curve for specified field on Resp data structure.
+            % Plots CHESS: PROS Hazard Curve for specified field on Resp data structure.
 
             % Pull Requested Data Out Of SS Data Structure
             sim_data = aux_methods.pull_data(ds_names, self.Resp);
@@ -126,7 +126,7 @@ classdef pros_methods < StormsimPlotsBase
                 set(htitle,'String','Confidence Levels');
             end
         end
-        % Method: StormSim: PROS-RB vs StormSim: PROS-FB
+        % Method: CHESS: PROS-RB vs CHESS: PROS-FB
         function [ax, fb_data] = frequency_base_comparison_plot(self, ax, ds_names, field_to_plot)
             % Define Plot Field
             plt_fld = 'y_plot';
@@ -312,7 +312,7 @@ classdef pros_methods < StormsimPlotsBase
             % 2. GRID CLEANUP & PADDING (Fix 4: Cutoffs)
             % ==========================================
             if isempty(ax_geom) || ~isvalid(ax_geom)
-                fig = uifigure('Name', 'StormSim Overlay Debugger', 'Position', [100 100 1000 600]);
+                fig = uifigure('Name', 'CHESS Overlay Debugger', 'Position', [100 100 1000 600]);
                 % Create the nested-style 1x2 grid we've been using
                 plotGrid = uigridlayout(fig, [1 2]);
                 plotGrid.ColumnWidth = {'1x', 100}; % Dedicated Colorbar Column
@@ -672,8 +672,8 @@ classdef pros_methods < StormsimPlotsBase
                 case 'Timeseries'
                     wName = 'FB3';
             end
-            % Build Out Path (Workflow Folder Of The Alternative, stormsim_paths.m)
-            paths = stormsim_paths(self.config);
+            % Build Out Path (Workflow Folder Of The Alternative, chess_paths.m)
+            paths = chess_paths(self.config);
             outPath = fullfile(paths.wf_dir, wName);
             % Pull Out response Data
             resp_data = self.Resp.(ds_names.data_type).(ds_names.match_type);
@@ -684,8 +684,8 @@ classdef pros_methods < StormsimPlotsBase
             % Only Keep Forcing HC
             v_indx = ~any(cell2mat(cellfun(@(x) strcmp({resp_data.(ds_names.storm_type).var}', x), {'SWL','SSL','Hm0','Tp'}, 'un', false)),2);
             resp_data.(ds_names.storm_type)(v_indx) = [];
-            % Run StormSim PROS-FB
-            fb_data = stormsim_pros_frequency_base(self.config, self.structure, resp_data, outPath, 4);
+            % Run CHESS PROS-FB
+            fb_data = chess_pros_frequency_base(self.config, self.structure, resp_data, outPath, 4);
             fb_data = fb_data.(ds_names.storm_type);
         end
         % -----------------------------------------

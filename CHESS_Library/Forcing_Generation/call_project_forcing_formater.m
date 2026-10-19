@@ -5,7 +5,7 @@ function [project_forcing, config]  = call_project_forcing_formater(config, stor
 % The coverage check below can reset config.u_engine/config.f_adjust to 0
 % when a cached project_forcing.mat does not cover the current request --
 % later pipeline stages only see that reset if the second output is
-% captured. No caller inside StormSim_Library currently enforces this.
+% captured. No caller inside CHESS_Library currently enforces this.
 %% GRAB INPUT FROM "config"
 % Define Requested Workflow (1 -> RB1 Approach, other-> Life-Cycle Base)
 workflow = config.workflow;
@@ -31,7 +31,7 @@ if exist(existing_file, 'file') == 2
         disp('A project_forcing already exist for this alternative. Trying to load....');
         disp(['Successfully loaded:' existing_file]);
         load_pass = true;
-        % LCS: Mode The Cached Life Cycles Were Sampled With (Sampling Seed File, Written By stormsim_lcs)
+        % LCS: Mode The Cached Life Cycles Were Sampled With (Sampling Seed File, Written By chess_lcs)
         if workflow == 3
             seed_file = lcs_sampling_seed_file(existing_file);
             if isfile(seed_file)
@@ -57,20 +57,20 @@ if ~load_pass
     storm = restamp_peaks_storm_duration(storm, config.storm_duration);
     % Define Events Per Case
     switch workflow
-        case {1,4} % StormSim: PROS (RB1, RB3, FB)
+        case {1,4} % CHESS: PROS (RB1, RB3, FB)
             check_peaks_timeseries_ids(storm, storm_sampling);
             % Reshape Forcing Parameters For RB Analysis (nStorms * normal_discretizations)
-            project_forcing = stormsim_pros_formater(storm_sampling, storm, prob_mass, config.print_progress);
+            project_forcing = chess_pros_formater(storm_sampling, storm, prob_mass, config.print_progress);
             % Save Peaks Life Cycle Structures
             save(existing_file,'project_forcing','-v7.3');
-        case 2 % StormSim: Deterministic (No Replicates)
+        case 2 % CHESS: Deterministic (No Replicates)
             check_peaks_timeseries_ids(storm, storm_sampling);
-            project_forcing = stormsim_det_formater(storm_sampling, storm, config.print_progress);
+            project_forcing = chess_det_formater(storm_sampling, storm, config.print_progress);
             % Save Project Forcing
             save(existing_file,'project_forcing','-v7.3');
-        case 3 % StormSim: LCS
-            % Call StormSim: Monte Carlo Storm Sampler (config: Adds lcs_effective_sampling_rate)
-            [project_forcing, config] = stormsim_lcs(config, storm, prob_mass);
+        case 3 % CHESS: LCS
+            % Call CHESS: Monte Carlo Storm Sampler (config: Adds lcs_effective_sampling_rate)
+            [project_forcing, config] = chess_lcs(config, storm, prob_mass);
             % Save Peaks Life Cycle Structures
             save(existing_file,'project_forcing','-v7.3');
     end
@@ -81,7 +81,7 @@ end
 
 %% AUX FUNCTION: PEAKS AND TIMESERIES MUST HOLD THE SAME STORM IDS IN THE SAME ORDER
 % PROS/DET Pair Them By Row (One Tide Start Hour Per Storm Shared By Both: draw_tide_indices.m).
-% LCS Is Not Checked: It Pulls Hydrographs By Storm ID (stormsim_lcs.m timeseries_lc_creation)
+% LCS Is Not Checked: It Pulls Hydrographs By Storm ID (chess_lcs.m timeseries_lc_creation)
 function check_peaks_timeseries_ids(storm, storm_sampling)
 if strcmp(storm_sampling, 'CC')
     storm_types = {'TC', 'XC'};
@@ -98,11 +98,11 @@ for st = storm_types
         n = min(numel(pk_id), numel(ts_id));
         k = find(pk_id(1:n) ~= ts_id(1:n), 1);
         if ~isempty(k)
-            error('stormsim:peaksTimeseriesIdMismatch',...
+            error('chess:peaksTimeseriesIdMismatch',...
                 '%s storm IDs of Peaks (%s) and Timeseries differ: first mismatch at row %d (Peaks ID %d, Timeseries ID %d).',...
                 st{1}, mt{1}, k, pk_id(k), ts_id(k));
         elseif numel(pk_id) ~= numel(ts_id)
-            error('stormsim:peaksTimeseriesIdMismatch',...
+            error('chess:peaksTimeseriesIdMismatch',...
                 '%s storm counts of Peaks (%s) and Timeseries differ: %d vs %d storms.',...
                 st{1}, mt{1}, numel(pk_id), numel(ts_id));
         end

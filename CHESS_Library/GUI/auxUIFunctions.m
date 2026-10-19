@@ -279,24 +279,24 @@ classdef auxUIFunctions < handle
             uiwait(fig);
 
             % Define Callbacks
-            function button_pushed(fig, answer, ss_ui)
-                ss_ui.dialog_answer = answer;
+            function button_pushed(fig, answer, chess_ui)
+                chess_ui.dialog_answer = answer;
                 close(fig);
             end
 
-            function name_change(src, event, answer, ss_ui, name_list, btn_obj)
+            function name_change(src, event, answer, chess_ui, name_list, btn_obj)
                 if any(ismember(answer, name_list))
                     % Set Name Field To Empty
                     src.Value = '';
-                    ss_ui.dialog_answer = [];
+                    chess_ui.dialog_answer = [];
                     % Call Error Window
-                    ss_ui.error_dlgbox('Defined name must be unique. Please look at project tree.');
+                    chess_ui.error_dlgbox('Defined name must be unique. Please look at project tree.');
                     % Enable SUbmit Button
                     btn_obj.Enable = false;
-                elseif ~isempty(ss_ui.dialog_answer)
+                elseif ~isempty(chess_ui.dialog_answer)
                     % Enable SUbmit Button
                     btn_obj.Enable = true;
-                elseif isempty(ss_ui.dialog_answer)
+                elseif isempty(chess_ui.dialog_answer)
                     % Enable SUbmit Button
                     btn_obj.Enable = false;
                 end
@@ -380,8 +380,8 @@ classdef auxUIFunctions < handle
             uiwait(fig);
 
             % Define Callbacks
-            function button_pushed(fig, answer, ss_ui)
-                ss_ui.dialog_answer = answer;
+            function button_pushed(fig, answer, chess_ui)
+                chess_ui.dialog_answer = answer;
                 close(fig);
             end
         end

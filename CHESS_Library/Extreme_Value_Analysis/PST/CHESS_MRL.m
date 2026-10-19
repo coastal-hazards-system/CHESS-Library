@@ -1,7 +1,7 @@
-%% StormSim_MRL.m
+%% CHESS_MRL.m
 %{
 SOFTWARE NAME:
-    StormSim-SST-Fit (Statistics)
+    CHESS-SST-Fit (Statistics)
 
 DESCRIPTION:
    This script applies the mean residual life (MRL) methodology to
@@ -10,7 +10,7 @@ function.
 
 INPUT ARGUMENTS:
   - POT_samp: empirical distribution of the Peaks-Over-Threshold sample, as
-      computed in StormSim_SST_Fit.m
+      computed in CHESS_SST_Fit.m
   - Nyrs: record length in years of the input time series data set;
       specified as a positive scalar
      
@@ -37,7 +37,7 @@ HISTORY OF REVISIONS:
 
 ***************  ALPHA  VERSION  **  FOR INTERNAL TESTING ONLY ************
 %}
-function [MRL_output] = StormSim_MRL(GPD_TH_crit, PEAKS, Nyrs)
+function [MRL_output] = CHESS_MRL(GPD_TH_crit, PEAKS, Nyrs)
 
 %% Step 1: Use sorted POT dataset as initial values of threshold parameter.
 th = sort(PEAKS, 'ascend'); %threshold parameter; sorted in ascending order

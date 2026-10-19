@@ -1,10 +1,10 @@
-classdef lcs_methods < StormsimPlotsBase
+classdef lcs_methods < CHESSPlotsBase
     % LCS_METHODS Life-cycle simulation workflow plots (workflow = 3).
-    % Instantiated via StormsimPlots(...).
+    % Instantiated via CHESSPlots(...).
 
     methods (Access=public)
         function self = lcs_methods(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
-            self = self@StormsimPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system);
+            self = self@CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system);
         end
     end
 
@@ -127,10 +127,10 @@ classdef lcs_methods < StormsimPlotsBase
             y_label     = 'Event Type Distribution [\%]'; % LaTeX Labels (initiate_axes): % Must Be Escaped
             x_label     = 'Event Type';
             if isempty(lc_index)
-                title_label = {'StormSim: LCS Event Sampling Distribution Over Entire Simulation',...
+                title_label = {'CHESS: LCS Event Sampling Distribution Over Entire Simulation',...
                     ['Total Number of Events (N): ' num2str(total_events) ' ($N_{mean}$ per LC: ' num2str(round(stms_per_lc,1)) ')']};
             else
-                title_label = {['StormSim: LCS Event Sampling Distribution For Life Cycle ' strjoin(arrayfun(@num2str, lc_index, 'un', false), ', ')],...
+                title_label = {['CHESS: LCS Event Sampling Distribution For Life Cycle ' strjoin(arrayfun(@num2str, lc_index, 'un', false), ', ')],...
                     ['Total Number of Events (N): ' num2str(total_events)]};
             end
             % Initialize Axes
@@ -214,7 +214,7 @@ classdef lcs_methods < StormsimPlotsBase
             %       (XC: Uniform Over Nstm_XC Storms | TC: Intensity Bin Rates x TC_Freq Within Bin; Needs storm & dsw)
             %   (6) Convergence Over mcs_nLC (Targets Of lcs_convergence_check): Running Mean Vs lambda*N*(1 +/- tol),
             %       Running Percentiles (project_CLs) Vs Exact Poisson Percentiles +/- max(1, tol*x_p);
-            %       Full Poisson Sampling: nLC_req And Verdict (config.lcs_convergence_results From stormsim_lcs When Present,
+            %       Full Poisson Sampling: nLC_req And Verdict (config.lcs_convergence_results From chess_lcs When Present,
             %       Else Computed) | Rate Matched: Running Mean And Percentiles Only, No Targets Or Convergence Check
             % Inputs: ax -> Figure, Grid Layout Or Axes (subplot_manager) | ds_query -> storm_type, data_type, match_type
             % Uses: self.project_forcing (LCS), self.config (mcs_nYears, Nstm_XC, Nyrs_XC, project_CLs, lcs_* Sampling Settings),
@@ -355,7 +355,7 @@ classdef lcs_methods < StormsimPlotsBase
                 tol = self.config.lcs_convergence_tol;
                 x_p = poissinv(prc/100, m);
                 pct_tol = max(1, tol*x_p);
-                % Result Of The Check Run By stormsim_lcs When Available, Else Computed Here
+                % Result Of The Check Run By chess_lcs When Available, Else Computed Here
                 if isfield(self.config, 'lcs_convergence_results') && isfield(self.config.lcs_convergence_results, ds_query.storm_type)
                     conv = self.config.lcs_convergence_results.(ds_query.storm_type);
                 else
@@ -925,7 +925,7 @@ classdef lcs_methods < StormsimPlotsBase
 
 
             % 6. Colorbar & Styling
-            customColormap = ss_colormap;
+            customColormap = chess_colormap;
             colormap(ax, customColormap);
             %
             hb = colorbar(ax);

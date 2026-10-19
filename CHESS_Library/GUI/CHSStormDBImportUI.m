@@ -1424,7 +1424,7 @@ classdef CHSStormDBImportUI < handle
         function info = get_db_info(obj)
             % Storm Database Details (Library storm_db_info.m). Databases Imported Before db_info Existed Have None
             if ~storm_db_info('valid', obj.db_info)
-                error('Storm database "%s" has no db_info (imported with an older StormSim version): rebuild the storm database (import it again).', obj.db_name);
+                error('Storm database "%s" has no db_info (imported with an older CHESS version): rebuild the storm database (import it again).', obj.db_name);
             end
             info = obj.db_info;
         end

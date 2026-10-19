@@ -1,4 +1,4 @@
-function StormSim_JPM_plot(JPM_output, jpm_options, plot_options)
+function CHESS_JPM_plot(JPM_output, jpm_options, plot_options)
 %
 % Colors for percentiles plots
 cs={'r-.','b--','b--','r-.'};
@@ -13,7 +13,7 @@ ax = axes('xscale','log','XGrid','on','XMinorTick','on',...
 % Hold Properties
 hold(ax, 'on');
 % Title
-title({'StormSim-JPM '; ['Station: ',JPM_output.staID]}, 'FontSize',12);
+title({'CHESS-JPM '; ['Station: ',JPM_output.staID]}, 'FontSize',12);
 % Format X Axis
 if jpm_options.use_AEP == 1
     xlim(ax, [1e-4 1]);

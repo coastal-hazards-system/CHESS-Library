@@ -44,7 +44,7 @@ end
 [gammas.gamma_v, gammas.gamma_star] = wall_influence_factor(crest_ele,wall_bottom_elev,Rc,strucType);
 % Surface roughness Influence Factor
 gammas.gamma_f = surface_roughness_influence_factor(gamma_f, Hm0);
-% Oblique wave coefficients - Not implemented in StormSim as of 9/03/20
+% Oblique wave coefficients - Not implemented in CHESS as of 9/03/20
 [gammas.gamma_beta_r2p, gammas.gamma_beta_q] = oblique_waves_influence_factor(size(Hm0));
 % Berm Influence Factor (Not used)
 if add_berm == 1

@@ -1,4 +1,4 @@
-function project_forcing = stormsim_pros_formater(storm_sampling, storm, prob_mass, print_progress)
+function project_forcing = chess_pros_formater(storm_sampling, storm, prob_mass, print_progress)
 %% PREP INPUTS
 % Execute Code Block According To Strom Type Being Calle
 switch storm_sampling
@@ -8,7 +8,7 @@ switch storm_sampling
         storm_types = {storm_sampling};
 end
 
-%% RESHAPE FORCING PARAMETERS FOR STORMSIM:PROS
+%% RESHAPE FORCING PARAMETERS FOR CHESS:PROS
 % Loop Across Each Storm Type
 for st = 1:length(storm_types)
     % Disp

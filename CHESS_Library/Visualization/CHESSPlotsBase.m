@@ -1,7 +1,7 @@
-classdef StormsimPlotsBase
-    % STORMSIMPLOTSBASE Base class for StormSim plotting.
+classdef CHESSPlotsBase
+    % CHESSPLOTSBASE Base class for CHESS plotting.
     % Holds shared data and input-screening methods available to all workflows.
-    % Do not instantiate directly — use StormsimPlots(...) instead.
+    % Do not instantiate directly — use CHESSPlots(...) instead.
 
     properties
         base_fnt
@@ -15,7 +15,7 @@ classdef StormsimPlotsBase
     end
 
     methods (Access=public)
-        function self = StormsimPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+        function self = CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
             self.base_fnt        = base_fnt;
             self.Resp            = Resp;
             self.storm           = storm;
@@ -432,7 +432,7 @@ classdef StormsimPlotsBase
             end
 
             % Mimic PROS Forcing Adjustment (No reps), Peaks Duration From The Run's config (call_project_forcing_formater Rule)
-            pf = stormsim_pros_formater(ds_query.storm_type, restamp_peaks_storm_duration(self.storm, self.config.storm_duration), struct('TC_Freq', []), 0);
+            pf = chess_pros_formater(ds_query.storm_type, restamp_peaks_storm_duration(self.storm, self.config.storm_duration), struct('TC_Freq', []), 0);
             % Keep Only Requested Data Product
             pf = pf.(ds_query.data_type).(ds_query.match_type).(ds_query.storm_type);
             % Remove Replicates

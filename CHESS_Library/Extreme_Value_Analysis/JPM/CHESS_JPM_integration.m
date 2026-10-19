@@ -1,4 +1,4 @@
-function JPM_outputs = StormSim_JPM_integration(response_data, jpm_options, plot_options)
+function JPM_outputs = CHESS_JPM_integration(response_data, jpm_options, plot_options)
 %% INITIALIZE RESPONSE FIELDS
 % Get Input Dataset
 Resp = response_data.data(:, 2); % Response Data

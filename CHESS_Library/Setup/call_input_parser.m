@@ -1,7 +1,7 @@
 function [config, structure] = call_input_parser(input_filename)
 %{
     %% DESCRIPTION
-    This function parses StormSim's project input file and creates "config"
+    This function parses CHESS's project input file and creates "config"
     data structure. Variable names are controlled by symbols in "str_ref"
     column.
     CHS input (.zip / CHS_Data .mat): the storm files are checked by name
@@ -18,7 +18,7 @@ function [config, structure] = call_input_parser(input_filename)
     storm database's db_info is applied to config.
 
     %% INPUTS
-    fname: StormSim project input file name.
+    fname: CHESS project input file name.
     
     %% OUTPUTS
     config: MATLAB data structure containing input file data parsed out as
@@ -30,13 +30,13 @@ function [config, structure] = call_input_parser(input_filename)
 
 %% GRAB AND DEFINE INPUTS
 % Add Filename To Config
-config.stormsim_input_file = input_filename;
+config.chess_input_file = input_filename;
 % Add Gravity Constant
 config.gravity_constant = 9.80665; % m/s^2
 
 %% PARSE INPUT FILE AND CREATE CONFIG STRUCTURE
-% Every Section Row Of The Input File (.xlsx Or .csv, Layout Independent: read_stormsim_input.m), By Symbol (Last Wins)
-[~, input_rows] = read_stormsim_input(input_filename);
+% Every Section Row Of The Input File (.xlsx Or .csv, Layout Independent: read_chess_input.m), By Symbol (Last Wins)
+[~, input_rows] = read_chess_input(input_filename);
 for jj = 1:size(input_rows, 1)
     config.(input_rows{jj, 1}) = input_rows{jj, 4};
 end
@@ -79,7 +79,7 @@ switch data_case
         config.region = study.region;
         config.sp_ID = study.sp_ID;
         config.sp_ID_wave = study.sp_ID_wave;
-        % Without CHS_Dependencies For The Region StormSim Runs XC Only (TC Needs Its Probability Masses)
+        % Without CHS_Dependencies For The Region CHESS Runs XC Only (TC Needs Its Probability Masses)
         if ~strcmp(config.storm_sampling, 'XC') && ~chs_dependencies_available(config.chs_dependencies, config.region)
             error(chs_dependencies_message(config.storm_sampling, config.region));
         end
@@ -113,8 +113,8 @@ end
 
 %% STORM DATABASE & ALTERNATIVE FOLDERS
 % <outfolder>\<project>\Event_Database\<db>.mat (+ _raw_files.mat), Shared By Every PSE/Alternative;
-% Run Files Under <outfolder>\<project>\PSE\<struc_id>\<case_name>\<workflow folder> (stormsim_paths.m)
-paths = stormsim_paths(config);
+% Run Files Under <outfolder>\<project>\PSE\<struc_id>\<case_name>\<workflow folder> (chess_paths.m)
+paths = chess_paths(config);
 if ~exist(paths.event_db_dir,'dir')
     mkdir(paths.event_db_dir);
 end
@@ -122,11 +122,11 @@ if ~exist(paths.wf_dir,'dir')
     mkdir(paths.wf_dir);
 end
 
-%% VERIFY IF STORMSIM FILES ALREADY EXIST FOR CURRENT SIMULATION
-ss_storm = isfile(paths.storm_db); % Existing storm .mat created by StormSim
-ss_raw = isfile(paths.chs_data); % Existing CHS_Data .mat created by StormSim
-% Check For StormSim Processed storm .mat: Its db_info Sets Nyrs_XC/Nstm_XC, TC Bias Correction, Bias & Uncertainty
-if ss_storm
+%% VERIFY IF CHESS FILES ALREADY EXIST FOR CURRENT SIMULATION
+chess_storm = isfile(paths.storm_db); % Existing storm .mat created by CHESS
+chess_raw = isfile(paths.chs_data); % Existing CHS_Data .mat created by CHESS
+% Check For CHESS Processed storm .mat: Its db_info Sets Nyrs_XC/Nstm_XC, TC Bias Correction, Bias & Uncertainty
+if chess_storm
     db_info = [];
     if any(strcmp(who('-file', paths.storm_db), 'db_info'))
         load(paths.storm_db, 'db_info');
@@ -135,7 +135,7 @@ if ss_storm
         config = storm_db_info('apply', db_info, config);
     elseif strcmp(data_case, 'storm_data')
         % Older Database (No db_info) Of A Storm .mat Input: Created Again From The Provided File Below
-        ss_storm = false;
+        chess_storm = false;
     end
     % CHS Input Without db_info: call_chs_data_formater.m Rebuilds The Database From The Raw File (Or Stops)
 end
@@ -152,12 +152,12 @@ if strcmp(data_case, 'chs_data')
             [~, sp_coords] = chs_data_attributes(CHS_Data);
             config = set_sp_coords(config, sp_coords, 'CHS_Data attributes');
             % Copy File To Add Naming Convention
-            if ~ss_raw
+            if ~chess_raw
                 copyfile(config.chs_zip, paths.chs_data);
             end
         case '.zip'
-            if ss_raw
-                % Load StormSim Processed CHS_Data
+            if chess_raw
+                % Load CHESS Processed CHS_Data
                 load(paths.chs_data, 'CHS_Data');
                 % Storm File Names From Loaded Data Structure
                 [file_list_paths, file_list, h5_ext] = ...
@@ -182,7 +182,7 @@ end
 % This code section is executed if user provided a "storm" type dataset
 % through config.chs_zip. "storm" meaning a dataset containing surge and
 % wave data for each event matched in time.
-if ~ss_storm && strcmp(data_case, 'storm_data')
+if ~chess_storm && strcmp(data_case, 'storm_data')
     % Load storm & prob_mass From Provided .mat
     load(config.chs_zip, 'storm', 'prob_mass');
     % Validate "storm" dataset
@@ -211,7 +211,7 @@ if ~ss_storm && strcmp(data_case, 'storm_data')
     % No Savepoint Coordinates In A Storm .mat: Study Grid Row By Savepoint ID
     bnu = storm_db_bias_uncertainty(config.chs_dependencies, config.region, config.sp_ID, []);
     db_info = storm_db_info('create', bnu, 0, Nyrs_XC, Nstm_XC, [fname fext]);
-    % Create StormSim storm file
+    % Create CHESS storm file
     save(paths.storm_db, 'storm', 'prob_mass', 'db_info');
     config = storm_db_info('apply', db_info, config);
 end
@@ -225,7 +225,7 @@ config = finalize_config(config);
 %% LOAD COMPUTATIONAL ENVIRONMENT
 % No Storm Database Files Yet -> 1 (Print Welcome Message) , 0 (No Print)
 % Set-up Computational Environment
-[config, structure] = call_environment_setup(config, ~ss_storm && ~ss_raw);
+[config, structure] = call_environment_setup(config, ~chess_storm && ~chess_raw);
 
 %% AUX FUNCTIONS
 % Function 1: Identify What Type Of Modeling Data Is Provided By User

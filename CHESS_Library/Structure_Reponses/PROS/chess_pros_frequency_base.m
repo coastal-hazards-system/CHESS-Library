@@ -1,4 +1,4 @@
-function data_out = stormsim_pros_frequency_base(config, structure, data_in, outPath, workflow)
+function data_out = chess_pros_frequency_base(config, structure, data_in, outPath, workflow)
     % ==========================================
     % 1. INITIALIZE CONFIG & STRUCTURE DETAILS
     % ==========================================
@@ -160,7 +160,7 @@ function data_out = stormsim_pros_frequency_base(config, structure, data_in, out
                 [~, ~, ~, unit_label, lbl_name, y_label, y_scale_log] = response_library_headers(config, v_name);
                 
                 % Formatted Strings
-                title_str = {sprintf('StormSim: PROS-FB | %s | %s', case_name, struc_id), ...
+                title_str = {sprintf('CHESS: PROS-FB | %s | %s', case_name, struc_id), ...
                              sprintf('%s | %s [%s]', storm_name, lbl_name, unit_label)};
                 out_name  = sprintf('%s_%s_%s_Hazard_Curve.png', save_name, v_name, storm_name);
                 

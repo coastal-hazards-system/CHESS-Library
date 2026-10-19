@@ -2,7 +2,7 @@ function [storm_names, is_storm] = chs_storm_file_names(file_names)
 %{
     %% DESCRIPTION
         CHS storm files of a list of file names: the one rule deciding which
-        CHS files StormSim reads. A storm file has a .h5 extension (any case)
+        CHS files CHESS reads. A storm file has a .h5 extension (any case)
         and a Peaks or Timeseries data type token (last name token, as read
         by chs_h5_converter.m: <region>_<storm type>_<simulation>_<post
         type>_SP<id>_<model>_<data type>). Every other file (HC/AEP/AEF .h5

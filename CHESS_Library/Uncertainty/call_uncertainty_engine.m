@@ -1,12 +1,12 @@
 function [project_forcing, config] = call_uncertainty_engine(config, project_forcing)
 %% APPLY FORCING AND STRCUCTURAL UNCERTAINTY
-if config.workflow == 2 % StormSim: Deterministic -> Forcing Used As Recorded
+if config.workflow == 2 % CHESS: Deterministic -> Forcing Used As Recorded
     disp('Deterministic workflow: no uncertainty applied to project forcing....');
     config.u_engine = 1;
 elseif config.u_engine == 0 % Uncertainty Has Not Been Applied To Project Forcing Replicates
     % Display Status Message
     disp('Applying uncertainty to project forcing....');
-    %% STORMSIM: PROS (STRUCTURE DESIGN)
+    %% CHESS: PROS (STRUCTURE DESIGN)
     % Scan For Data Types
     data_types = fieldnames(project_forcing);
     % Loop Across Each Data Type

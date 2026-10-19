@@ -52,7 +52,7 @@ for kk = 1:numel(types)
         return
     end
 end
-% XC WLP/WHP Life Cycles Are Copies Of The Default Ones (stormsim_lcs.m): Only xc_peaks.Default Is Needed
+% XC WLP/WHP Life Cycles Are Copies Of The Default Ones (chess_lcs.m): Only xc_peaks.Default Is Needed
 if ismember('XC', types) && (~isfield(S, 'xc_peaks') || ~isfield(S.xc_peaks, 'Default'))
     why_not = 'the sampling seed file lacks the sampled XC peak values';
 end

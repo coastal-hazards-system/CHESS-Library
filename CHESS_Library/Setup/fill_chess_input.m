@@ -1,4 +1,4 @@
-function fout = fill_stormsim_input(ifile, outpath, fields_2_change, values_2_change)
+function fout = fill_chess_input(ifile, outpath, fields_2_change, values_2_change)
 % Get Sotrage Folder
 [fpath, ~, ~] = fileparts(outpath);
 % Create Output Dir If Needed

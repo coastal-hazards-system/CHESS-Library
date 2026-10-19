@@ -47,7 +47,7 @@ switch staID
         unit_label = 'm';
         y_label = ['$H_{m_{0t}}$ [' unit_label ']'];
         var_name = '$H_{m_{0t}}$';
-    case 'Hm0_DL' % Depth Limited Hm0 (StormSim: Deterministic)
+    case 'Hm0_DL' % Depth Limited Hm0 (CHESS: Deterministic)
         U_a = 0;U_r = 0;
         uncert_treatment_jpm = 'none';
         unit_label = 'm';

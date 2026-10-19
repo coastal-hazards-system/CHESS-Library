@@ -3,7 +3,7 @@ function tf = chs_dependencies_available(chs_dependencies, region)
     %% DESCRIPTION
         True when the CHS_Dependencies folder exists and covers the CHS
         region (TC probability masses, study grid, bias & uncertainty).
-        Without it StormSim runs XC only: a CHS input builds its storm
+        Without it CHESS runs XC only: a CHS input builds its storm
         database with XC only and a TC/CC request stops with an error.
 
     %% INPUTS

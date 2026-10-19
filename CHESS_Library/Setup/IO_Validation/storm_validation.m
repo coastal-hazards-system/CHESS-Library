@@ -23,7 +23,7 @@ Data Structure Fields -> storm.(st_type).(data_type).(match_type)
         
 Storm Type Specific Fields -> storm.XC.XX
     For XC storms there are two additional fields that are needed in order
-    to run StormSim workflows. XX represents the folowing:
+    to run CHESS workflows. XX represents the folowing:
         -> Nyrs_XC: Record length in extra-tropical storm suite (years)
         -> Nstm_XC: Number of extra-tropical storms in storm suite.
 % ---------------------------------------------
@@ -34,7 +34,7 @@ pass_cnt = config.use_peaks + config.use_timeseries;
 st_types = fieldnames(storm); % XC, TC
 % Check For storm variable contents compliance
 if ~any(contains(st_types, {'XC','TC'}))
-    error('Error: StormSim only supports "XC" and/or "TC" storm types. Rename fields as such....');
+    error('Error: CHESS only supports "XC" and/or "TC" storm types. Rename fields as such....');
 else % Fields Exist
     % Remove Unsupported Fields
     storm = rmfield(storm, st_types(~contains(st_types, {'XC','TC'})));

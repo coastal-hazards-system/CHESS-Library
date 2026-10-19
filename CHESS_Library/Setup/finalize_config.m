@@ -10,7 +10,7 @@ function config = finalize_config(config)
         caller for response uncertainties are kept.
 
     %% INPUTS
-        config: StormSim configuration. | struc
+        config: CHESS configuration. | struc
             Required fields:
                 struc_type, workflow, use_peaks, use_timeseries,
                 create_wlp, create_whp, project_CLs, outfolder,
@@ -18,7 +18,7 @@ function config = finalize_config(config)
                 storm_db (or region and sp_ID when storm_db is empty)
 
     %% OUTPUTS
-        config: Updated StormSim configuration. | struc
+        config: Updated CHESS configuration. | struc
 
     %% DEV SIGNATURE
         Developed by: Fabian A. Garcia Moreno ERDC-CHL
@@ -134,8 +134,8 @@ if ~all(isfield(config, u_fields))
 end
 
 %% OUTPUT FILES
-% Alternative Run Files (<db>_<workflow>_*, stormsim_paths.m)
-paths = stormsim_paths(config);
+% Alternative Run Files (<db>_<workflow>_*, chess_paths.m)
+paths = chess_paths(config);
 config.out_files.config = paths.out_files.config;
 config.out_files.resp_data = paths.out_files.resp_data;
 config.out_files.project_forcing = paths.out_files.project_forcing;

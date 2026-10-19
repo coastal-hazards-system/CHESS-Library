@@ -4,13 +4,13 @@ function reuse = lcs_reference_reuse(config)
         Decides, before LCS sampling, which storm types are reused from the reference
         case (load_project_forcing = 1, ref_case_name), the sampling mode the life cycles
         end up with, and the storm types that get the convergence check. Shared by
-        stormsim_lcs and the GUI (convergence dialog) so both apply the same rule:
+        chess_lcs and the GUI (convergence dialog) so both apply the same rule:
             - A storm type is reused only when the reference project forcing file exists
               AND the reference's sampling seed file holds the sampling mode
               (lcs_restrict_sampling_rate) and that storm type's sampled life cycles
               (sampled_ids). A reference without a usable seed file reuses nothing: its
               storm types are sampled fresh, as if load_project_forcing = 0 (seed_found
-              = false; stormsim_lcs warns).
+              = false; chess_lcs warns).
             - Reused storms were sampled under the mode stored in the seed file, which
               then becomes the effective mode. Otherwise the configured
               lcs_restrict_sampling_rate is the effective mode.
@@ -20,12 +20,12 @@ function reuse = lcs_reference_reuse(config)
               resolve_hotstart_state.m): when no reference is used, this case's own
               cached sampling is reused instead (its sampling seed file: sampled_ids,
               mode and raw XC peaks), the same way as a reference.
-        Prints nothing: stormsim_lcs reports the outcome.
+        Prints nothing: chess_lcs reports the outcome.
 
     %% INPUTS
         config: Run configuration (load_project_forcing, ref_case_name, outfolder,
             project_name, struc_id, case_name, workflow, storm_db or region/sp_ID
-            (stormsim_paths.m), storm_sampling, lcs_restrict_sampling_rate; optional
+            (chess_paths.m), storm_sampling, lcs_restrict_sampling_rate; optional
             hotstart_level, out_files.project_forcing). | struct
 
     %% OUTPUTS
@@ -51,9 +51,9 @@ function reuse = lcs_reference_reuse(config)
     %% DEV SIGNATURE
         Developed by: Fabian A. Garcia Moreno ERDC-CHL
 %}
-% Reference Case: Same Project/PSE, Alternative ref_case_name, LCS, Same Storm DB As This Run (stormsim_paths.m)
-paths = stormsim_paths(config);
-ref_paths = stormsim_paths(config.outfolder, config.project_name, config.struc_id, config.ref_case_name, 3, paths.db);
+% Reference Case: Same Project/PSE, Alternative ref_case_name, LCS, Same Storm DB As This Run (chess_paths.m)
+paths = chess_paths(config);
+ref_paths = chess_paths(config.outfolder, config.project_name, config.struc_id, config.ref_case_name, 3, paths.db);
 reuse.file = ref_paths.out_files.project_forcing;
 switch config.storm_sampling
     case 'CC'

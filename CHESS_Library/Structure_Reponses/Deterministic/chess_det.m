@@ -1,7 +1,7 @@
-function Resp = stormsim_det(config, project_forcing, structure, emp_coeff)
+function Resp = chess_det(config, project_forcing, structure, emp_coeff)
 %{
     %% DESCRIPTION
-        StormSim: Deterministic (workflow 2). Computes structure responses
+        CHESS: Deterministic (workflow 2). Computes structure responses
         for every storm in one dataset (Peaks Default/WLP/WHP or
         Timeseries), straight from the adjusted storm forcing: no
         replicates, no uncertainty, no hazard curves.
@@ -13,11 +13,11 @@ function Resp = stormsim_det(config, project_forcing, structure, emp_coeff)
         get_max = 1.
 
     %% INPUTS
-        config: StormSim configuration. | struc
+        config: CHESS configuration. | struc
         project_forcing: One dataset, project_forcing.(data).(match). | struc
-            Fields per storm type, from stormsim_det_formater and
+            Fields per storm type, from chess_det_formater and
             adjust_project_forcing.
-        structure: StormSim structure geometry. | struc
+        structure: CHESS structure geometry. | struc
         emp_coeff: Empirical coefficients (load_empirical_coefficients). | struc
 
     %% OUTPUTS

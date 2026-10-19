@@ -1,4 +1,4 @@
-function customColormap = ss_colormap(~)
+function customColormap = chess_colormap(~)
 % Define the number of colors
 numColors = 64;
 % Number of colors for the transition zone

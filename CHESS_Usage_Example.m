@@ -1,29 +1,29 @@
 clc;clear all;close all;
-addpath(genpath('StormSim_Library'));
+addpath(genpath('CHESS_Library'));
 % diary 'Log.txt';
 %% USER INPUTS
 %{
 CHS Grid File 
 CHS Bias And Uncertainty 
 %}
-% Define StormSim Input File Name
-stormsim_input_file = 'StormSim_Inputs.xlsx'; % Include relative path if not in parent directory
+% Define CHESS Input File Name
+chess_input_file = 'CHESS_rubble_mound_inputs.xlsx'; % Include relative path if not in parent directory
 
 %% STEP 1: SET-UP PROJECT ENVIRONMENT
 %{
  Description:
-   In order to use the full functionalities included within the StormSim
+   In order to use the full functionalities included within the CHESS
    library it is necesary to provide an input file. Please copy and fill
-   out the provided "StormSim_Inputs.xlsx" template. Do not change the
+   out the provided "CHESS_rubble_mound_inputs.xlsx" template. Do not change the
    values written under "Model Variable Symbol" as this will brake the
    toolbox in its entirety.
   Outputs:
-   1. config: Contains parsed information from StormSim input file | 1 x 1 | structure, with nFields 
+   1. config: Contains parsed information from CHESS input file | 1 x 1 | structure, with nFields 
    2. structure: Contains parsed information for the specified structure type. | 1x1 | structure, with nFields
 %}
 t1 = tic;
-% Parse StormSim Configuration File
-[config, structure] = call_input_parser(stormsim_input_file);
+% Parse CHESS Configuration File
+[config, structure] = call_input_parser(chess_input_file);
 t1 = toc(t1);
 
 %% STEP 2: IMPORT, PROCESS & FORMAT COASTAL HAZARD SYSTEM (CHS) DATA (h5 -> MATLAB Memory)
@@ -62,9 +62,9 @@ Outputs:
     as <db>_raw_files.mat (<db> = config.storm_db, default <CHS region>_SP####)
     2. Formated and screened CHS File Data, prob_masses -> <outfolder>\<project>\Event_Database\<db>.mat;
     parsed inputs (config) -> <outfolder>\<project>\PSE\<struc_id>\<case_name>\<workflow folder>\
-    <db>_<workflow>_config_file.mat (layout: Setup/stormsim_paths.m)
+    <db>_<workflow>_config_file.mat (layout: Setup/chess_paths.m)
   Vars:
-    1. config: Contains parsed information from StormSim input file | 1 x 1 | structure, with nFields 
+    1. config: Contains parsed information from CHESS input file | 1 x 1 | structure, with nFields 
 
     2. storm: Contains screened and formated CHS storm data. | 1 X 1 | structure, with nfields
               Peaks storm data is formated in nStorms x 5 
@@ -90,14 +90,14 @@ t2 = toc(t2);
  Description:
    Once input storm data has been formated the next step is to generate the
    project forcing. In this step the input storm data will be transformed (reshaped)
-   according to the user specfiied workflow. StormSim provides users with 2 Response Base
-   methods: StormSim: PROS (Design) & StormSim:LCS (Performance). Additionally, there is a
-   Frequency Base method (StormSim: PROS-FB) that leverages StormSim: PROS to compute storm
+   according to the user specfiied workflow. CHESS provides users with 2 Response Base
+   methods: CHESS: PROS (Design) & CHESS:LCS (Performance). Additionally, there is a
+   Frequency Base method (CHESS: PROS-FB) that leverages CHESS: PROS to compute storm
    forcing (SWL, Hm0, Tp) hazard curves and computes structure responses as
    f(hazards). Workflow ID specification on config file are:
-        1 -> StormSim: Probabilistic Response Of Structures (PROS)
+        1 -> CHESS: Probabilistic Response Of Structures (PROS)
         3-> StorSim: Life Cycle Simulation (LCS) & Coastal Structure Reliability (LCS-CSR)
-        4-> StormSim: PROS-Frequency Base (PROS-FB)
+        4-> CHESS: PROS-Frequency Base (PROS-FB)
 Inputs:
    Vars:
     1. config

@@ -30,7 +30,7 @@ function [structure] = create_structure_geometry(config)
                    seaside_limit_S: Rubblemound structure seaward face damage limit (S).
                    cem_P: Mean permeability coefficient (From CEM).
     
-              --- StormSim: MCS/CSR Only Fields ---
+              --- CHESS: MCS/CSR Only Fields ---
                    water_density: Water Density.
                    seaside_mass: Rubblemound structure seaward face stone mass.
                    seaside_init_S: Structure seaward face damage initiation limit (S).
