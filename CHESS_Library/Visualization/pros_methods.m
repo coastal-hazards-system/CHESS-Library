@@ -147,12 +147,8 @@ classdef pros_methods < CHESSPlotsBase
             plt = fb_data(var_indx);
             % Check If Field Is Available (Was isempty(plt_pass): Always False, So Missing Data Never Showed The No-Data Note)
             no_data = isempty(plt) || isempty(plt.(plt_fld));
-            % Plot If Data Available
-            if no_data
-                % Clear Axes
-                cla(ax);
-                aux_methods.display_no_data(ax, self.base_fnt);
-            else
+            % Plot If Data Available (FB Curve Missing: Keep RB Plot, Skip FB Lines)
+            if ~no_data
                 % Limit AEF Vector
                 s_lim_indx = plt.(plt_fld_x)>=x_lim(1);
                 % Grab CLs
@@ -173,6 +169,15 @@ classdef pros_methods < CHESSPlotsBase
                     row = dataTipTextRow('RowID', 1:length(plt.(plt_fld_x)(s_lim_indx,1)));
                     % Append New Data Tip
                     p.DataTipTemplate.DataTipRows(end+1) = row;
+                end
+                % Expand Y Lim To Include FB Curves (hc_plot Sets It From RB Only)
+                fb_y = plt.(plt_fld)(s_lim_indx, :);
+                fb_y = fb_y(isfinite(fb_y)); % Finite Values Only (Inf Would Break YLim)
+                if strcmp(ax.YScale, 'log')
+                    fb_y = fb_y(fb_y > 0); % Log Axes: Positive Values Only
+                end
+                if ~isempty(fb_y)
+                    ax.YLim = [min([ax.YLim(1); fb_y(:)]), max([ax.YLim(2); fb_y(:)])];
                 end
             end
         end
