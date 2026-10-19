@@ -10,7 +10,7 @@
 function[S,u1p] = leeside_armor_stone_damage(SLast,...
     H, Tmm1, u1p_last, LDn, Lslp, Sslp, WL, Rc, Nz, Delta, K_ls1, K_ls2, crest_width, crest_elevation, grav, compute_S_submerged, cutoff_switch, cutoff)
 %============================================================
-% Inside CHESS the input for period is already converted with parent code stormsim_csr_dpa.m /1.1;     % spectral mean wave period in sec
+% Inside CHESS the input for period is already converted with parent code chess_csr_dpa.m /1.1;     % spectral mean wave period in sec
 %============================================================
 % Coeffs from Melby 2009
 if SLast>0

@@ -1,7 +1,7 @@
 function [emp_coeff] = load_empirical_coefficients()
 %% READ & FORMAT EMPIRICAL COEFFICIENTS FILE
 % Import Empirical Coefficients Reference Document
-emp_coeff2 = readcell('StormSim_empirical_coefficients.txt'); % [ variable_name, description, Units, Value, Std ]
+emp_coeff2 = readcell('CHESS_empirical_coefficients.txt'); % [ variable_name, description, Units, Value, Std ]
 % Remove Headers
 emp_coeff2 = emp_coeff2(2:end,:);
 % Grab Fieldnames

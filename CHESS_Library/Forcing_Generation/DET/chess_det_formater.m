@@ -1,8 +1,8 @@
-function project_forcing = stormsim_det_formater(storm_sampling, storm, print_progress)
+function project_forcing = chess_det_formater(storm_sampling, storm, print_progress)
 %{
     %% DESCRIPTION
-        Formats the storm suite for StormSim: Deterministic (workflow 2).
-        Same layout as stormsim_pros_formater (data type > match type >
+        Formats the storm suite for CHESS: Deterministic (workflow 2).
+        Same layout as chess_pros_formater (data type > match type >
         storm type) but without replicates: every storm is used once, as
         recorded in the storm database. SWL/Hm0/Tp and their *_no_rep
         copies start out identical; adjust_project_forcing later adjusts
@@ -11,7 +11,7 @@ function project_forcing = stormsim_det_formater(storm_sampling, storm, print_pr
 
     %% INPUTS
         storm_sampling: 'XC', 'TC' or 'CC'. | char
-        storm: StormSim storm database. | struc
+        storm: CHESS storm database. | struc
         print_progress: Toggle status print outs. | logical
 
     %% OUTPUTS

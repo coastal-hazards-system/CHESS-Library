@@ -1,4 +1,4 @@
-function [SST_output] = StormSim_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, gprMdl, pst_options, plot_options)
+function [SST_output] = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, gprMdl, pst_options, plot_options)
 %% INITIALIZE FIELDS
 % Set up probabilities for HC summary
 if pst_options.('use_AEP') %Select AEPs
@@ -91,7 +91,7 @@ gpd_pass = (length(ecdf_y)>=20 && Nyrs>=20) || pst_options.apply_GPD_to_SS;
 %% Apply the GPD when empirical POT sample size is >20 and RL >20 yrs. Otherwise, compute HC using empirical.
 if gpd_pass %apply GPD
     %% Apply "Mean Residual Life" Automated Threshold Detection
-    MRL_output = StormSim_MRL(pst_options.GPD_TH_crit, ecdf_y, Nyrs);
+    MRL_output = CHESS_MRL(pst_options.GPD_TH_crit, ecdf_y, Nyrs);
 
     %% MRL GPD Threshold condition
     mrl_th = MRL_output.Selection.Threshold;
@@ -204,7 +204,7 @@ if gpd_pass && plot_options.create_plots
     % hold Axes Properties
     hold(ax,'on');
     % Title
-    title(ax, {'StormSim-SST '; [plot_options.staID ' Bootstrap Sample Plot']},'FontSize',12);
+    title(ax, {'CHESS-SST '; [plot_options.staID ' Bootstrap Sample Plot']},'FontSize',12);
     % Define X Axis
     if pst_options.use_AEP == 1
         AEF_ecdf = aef2aep(AEF_ecdf);

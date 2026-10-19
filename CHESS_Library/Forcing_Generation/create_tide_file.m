@@ -1,6 +1,6 @@
 function [data_table] = create_tide_file(station, datum, start_date, outName, progress_fcn)
 % create_tide_file Downloads a Year's worth of tidal predictions from NOAA
-% CO-OPS API and writes an hourly tide file for StormSim. Stations location
+% CO-OPS API and writes an hourly tide file for CHESS. Stations location
 % and data availability can be found
 % <a href="matlab: web('https://tidesandcurrents.noaa.gov/stations.html?type=Water+Levels')">here</a>.
 %
@@ -25,7 +25,7 @@ function [data_table] = create_tide_file(station, datum, start_date, outName, pr
 %
 % Outputs:
 %       data_table: Hourly tidal predictions written to outName
-%                   (columns: Date, Prediction [m]). StormSim adds one row per
+%                   (columns: Date, Prediction [m]). CHESS adds one row per
 %                   hourly storm time step (apply_random_tide.m).
 %
 % Notes:
@@ -34,7 +34,7 @@ function [data_table] = create_tide_file(station, datum, start_date, outName, pr
 %       hourly signal, which is what gets stored.
 %
 % Example Usage:
-%       data = create_tide_file('8423898', 'MSL', '20260101', 'stormsim_tidal_file.csv');
+%       data = create_tide_file('8423898', 'MSL', '20260101', 'chess_tidal_file.csv');
 
 if nargin < 5
     progress_fcn = [];

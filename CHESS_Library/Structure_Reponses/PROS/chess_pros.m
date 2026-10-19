@@ -1,4 +1,4 @@
-function HC_out = stormsim_pros(config, project_forcing, structure, emp_coeff, outPath)
+function HC_out = chess_pros(config, project_forcing, structure, emp_coeff, outPath)
 %% INITIALIZE FIELDS AND PROMT USER
 % Turn Off Warnings
 warning('off');
@@ -7,7 +7,7 @@ use_aep = config.pros_use_aep;
 % Force LCBW FS To False, Not supported on PROS 
 % config.compute_dn50_lcbw = 0;
 % Display PROS Message
-disp(['      Running StormSim: PROS....']);
+disp(['      Running CHESS: PROS....']);
 % Get Secondary Responses Switch
 varnames = fieldnames(config);
 varnames = varnames(contains(varnames, {'compute_p2_p3', 'compute_nappe'}));
@@ -32,7 +32,7 @@ if config.workflow == 4 % PROS-FB
     config = config_editor(config, varnames, 0);
 end
 
-%% STORMSIM: PROS - XC
+%% CHESS: PROS - XC
 if contains(config.storm_sampling, {'XC','CC'})
     % 1. Compute Structure Responses
     [Resp] = compute_structure_response(config, structure, project_forcing.('XC'), emp_coeff, 1);
@@ -42,7 +42,7 @@ if contains(config.storm_sampling, {'XC','CC'})
     HC_out.XC = call_hazard_curve_builder(config, [], Resp, 'XC', use_aep, outPath);
 end
 
-%% STORMSIM: PROS - TC
+%% CHESS: PROS - TC
 if contains(config.storm_sampling, {'TC','CC'})
     % 1. Compute Structure Responses
     [Resp] = compute_structure_response(config, structure, project_forcing.('TC'), emp_coeff, 1);
@@ -52,7 +52,7 @@ if contains(config.storm_sampling, {'TC','CC'})
     HC_out.TC = call_hazard_curve_builder(config, project_forcing.TC.TC_Prob, Resp, 'TC', use_aep, outPath);
 end
 
-%% STORMSIM: PROS - COMBINE HAZARDS
+%% CHESS: PROS - COMBINE HAZARDS
 if contains(config.storm_sampling, {'CC'})
     if isfield(HC_out, 'TC') & isfield(HC_out, 'XC')
         if ~isempty(HC_out.('TC')) & ~isempty(HC_out.('XC'))
@@ -77,8 +77,8 @@ if any(fb_responses) || config.workflow == 4
     disp('         Computing Frequency Base Responses Hazard Curves...');
     % Turn On Responses For FB Section
     config = config_editor(config, varnames, 1);
-    % Run StormSim PROS-FB
-    HC_out = stormsim_pros_frequency_base(config, structure, HC_out, outPath, config.workflow);
+    % Run CHESS PROS-FB
+    HC_out = chess_pros_frequency_base(config, structure, HC_out, outPath, config.workflow);
 end
 
 % Enable Warnings Again

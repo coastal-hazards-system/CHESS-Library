@@ -32,7 +32,7 @@ classdef ProjectCreationUI < handle
     properties (Access=public)
         uifig            matlab.ui.Figure
         project_created
-        ss_project
+        chess_project
         proj_indx
         proj_name
         path_warning % Long Project Folder Warning Text For The Caller To Show ('' When The Path Is Short Enough)
@@ -46,9 +46,9 @@ classdef ProjectCreationUI < handle
             obj.force_pass = false;
             obj.path_warning = '';
             obj.auxLib = auxUIFunctions();
-            %ss_project = [ss_project; stormsimProject('dummy', '.\', 'NAVD88', [0, 16, 84, 0], 'SI')];
-            obj.ss_project = stormsimProject('dummy', '.\', 'NAVD88', [0, 16, 84, 0], 'SI');%ss_project;
-            obj.proj_indx = strcmp('dummy', {obj.ss_project.name});
+            %chess_project = [chess_project; chessProject('dummy', '.\', 'NAVD88', [0, 16, 84, 0], 'SI')];
+            obj.chess_project = chessProject('dummy', '.\', 'NAVD88', [0, 16, 84, 0], 'SI');%chess_project;
+            obj.proj_indx = strcmp('dummy', {obj.chess_project.name});
         end
     end
 
@@ -249,7 +249,7 @@ classdef ProjectCreationUI < handle
         end
 
         function ProjectPathButtonPushed(obj, event)
-            selpath = uigetdir([], 'Select Output Folder For StormSim Project');
+            selpath = uigetdir([], 'Select Output Folder For CHESS Project');
             if all(selpath == 0)
                 % Do nothing
             elseif exist(selpath, 'dir')
@@ -263,7 +263,7 @@ classdef ProjectCreationUI < handle
             obj.force_pass = false;
             pth_update(obj);
             if all(obj.ProjectPathLamp.Color == [0 1 0])
-                obj.ss_project(obj.proj_indx).set_project_field('path',obj.ProjectPathEditField.Value, '', '', 'proj');
+                obj.chess_project(obj.proj_indx).set_project_field('path',obj.ProjectPathEditField.Value, '', '', 'proj');
             end
         end
 
@@ -274,17 +274,17 @@ classdef ProjectCreationUI < handle
                 % Execute According to Response
                 if obj.auxLib.dialog_answer
                     % replcae Project Entry (If Needed)
-                    if any(contains(obj.ProjectNameEditField.Value, {obj.ss_project.name}))
+                    if any(contains(obj.ProjectNameEditField.Value, {obj.chess_project.name}))
                         % Overwrite proj_indx
-                        obj.proj_indx = strcmp(obj.ProjectNameEditField.Value, {obj.ss_project.name});
+                        obj.proj_indx = strcmp(obj.ProjectNameEditField.Value, {obj.chess_project.name});
                         % CLs
                         CLs = [obj.ConfidenceLimitsEditField.Value, obj.ConfidenceLimitsEditField_2.Value,...
                             obj.ConfidenceLimitsEditField_3.Value, obj.ConfidenceLimitsEditField_4.Value];
                         % Reset Project
-                        obj.ss_project(obj.proj_indx) = stormsimProject(obj.ProjectNameEditField.Value, obj.ProjectPathEditField.Value, ...
+                        obj.chess_project(obj.proj_indx) = chessProject(obj.ProjectNameEditField.Value, obj.ProjectPathEditField.Value, ...
                             obj.VerticalDatumEditField.Value, CLs, obj.UnitSystemDropDown.Value);
                         % Remove Appended Entry
-                        obj.ss_project(end) = [];
+                        obj.chess_project(end) = [];
                     end
                     % Delete Dir To Replace With New One
                     if exist(fullfile(obj.ProjectPathEditField.Value, obj.ProjectNameEditField.Value), 'dir')
@@ -311,11 +311,11 @@ classdef ProjectCreationUI < handle
                 CLs = [obj.ConfidenceLimitsEditField.Value, obj.ConfidenceLimitsEditField_2.Value,...
                     obj.ConfidenceLimitsEditField_3.Value, obj.ConfidenceLimitsEditField_4.Value];
                 % Initialize Project Entry Data Structure
-                obj.ss_project(obj.proj_indx).set_project_field('name',obj.ProjectNameEditField.Value, '', '', 'proj');
-                obj.ss_project(obj.proj_indx).set_project_field('path',obj.ProjectPathEditField.Value, '', '', 'proj');
-                obj.ss_project(obj.proj_indx).set_project_field('vdatum',obj.VerticalDatumEditField.Value, '', '', 'proj');
-                obj.ss_project(obj.proj_indx).set_project_field('CLs',CLs, '', '', 'proj');
-                obj.ss_project(obj.proj_indx).set_project_field('unitsys',obj.UnitSystemDropDown.Value, '', '', 'proj');
+                obj.chess_project(obj.proj_indx).set_project_field('name',obj.ProjectNameEditField.Value, '', '', 'proj');
+                obj.chess_project(obj.proj_indx).set_project_field('path',obj.ProjectPathEditField.Value, '', '', 'proj');
+                obj.chess_project(obj.proj_indx).set_project_field('vdatum',obj.VerticalDatumEditField.Value, '', '', 'proj');
+                obj.chess_project(obj.proj_indx).set_project_field('CLs',CLs, '', '', 'proj');
+                obj.chess_project(obj.proj_indx).set_project_field('unitsys',obj.UnitSystemDropDown.Value, '', '', 'proj');
                 obj.proj_name = obj.ProjectNameEditField.Value;
                 % Long Folder Path: Warning Text For The Caller (Creation Proceeds)
                 n_max = ProjectCreationUI.max_output_path_length(obj.ProjectPathEditField.Value, obj.ProjectNameEditField.Value);
@@ -365,7 +365,7 @@ classdef ProjectCreationUI < handle
             if isempty(obj.ProjectNameEditField.Value)
                 obj.ProjectNameEditField.FontColor = [1 0 0];
                 obj.ProjectNameLamp.Color = [1 0 0];
-            elseif any(contains(obj.ProjectNameEditField.Value, {dir_list.name})) || any(contains(obj.ProjectNameEditField.Value, {obj.ss_project.name}))
+            elseif any(contains(obj.ProjectNameEditField.Value, {dir_list.name})) || any(contains(obj.ProjectNameEditField.Value, {obj.chess_project.name}))
                 obj.ProjectNameEditField.FontColor = [0.85, 0.85, 0.85];
                 obj.ProjectNameLamp.Color = [1 1 0];
             else
@@ -380,13 +380,13 @@ classdef ProjectCreationUI < handle
     methods (Static)
         function n = max_output_path_length(base_path, proj_name)
             % Estimated Longest Output Path Under The Project Folder (Characters). Longest Writer: The Run Files
-            % (Library stormsim_paths, Used By StormSim_UI_canvas get_config_path):
+            % (Library chess_paths, Used By CHESS_UI_canvas get_config_path):
             %   <base>\<project>\PSE\<pse>\<alt>\<workflow folder>\<db>_<workflow name>_project_responses.mat
             % Workflow 1: Longest Folder/Name ('PROS'/'PROS-RB'); '_project_responses.mat' Is The Longest Suffix
             % (Of _config_file/_project_forcing/_sampling_seed/_project_responses .mat). PSE, Alternative And
             % Storm DB Names Are Not Known At Project Creation: 32 Characters Allowed For Each
             name_allowance = repmat('x', 1, 32);
-            paths = stormsim_paths(base_path, proj_name, name_allowance, name_allowance, 1, name_allowance);
+            paths = chess_paths(base_path, proj_name, name_allowance, name_allowance, 1, name_allowance);
             n = numel(paths.out_files.resp_data);
         end
     end

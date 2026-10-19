@@ -25,7 +25,7 @@ classdef PSECreationUI < handle
         pse_geometry struct
         pse_table cell
         pse_type char
-        ss_project
+        chess_project
         pse_name
         alt_name
         auxLib
@@ -33,9 +33,9 @@ classdef PSECreationUI < handle
 
     %% DEFINE CLASS INSTANTIATION METHOD (CONSTRUCTOR)
     methods (Access = public)
-        function obj = PSECreationUI(pse_type, ss_project, alt_pse_name)
+        function obj = PSECreationUI(pse_type, chess_project, alt_pse_name)
             %
-            obj.ss_project = ss_project;
+            obj.chess_project = chess_project;
             obj.auxLib = auxUIFunctions();
             % Create UIFigure and components
             create_ui(obj, pse_type);
@@ -45,27 +45,27 @@ classdef PSECreationUI < handle
             obj.pse_type = pse_type;
             obj.pse_to_copy = alt_pse_name;
             % Populate PSE Table
-            intialize_table(obj, pse_type, obj.ss_project.unitsys);
+            intialize_table(obj, pse_type, obj.chess_project.unitsys);
             %
-            pse_list = obj.ss_project.get_project_field('pse_list', '', '', 'proj');
+            pse_list = obj.chess_project.get_project_field('pse_list', '', '', 'proj');
             passCond = ~isempty(pse_list);
             %
             if passCond % Already Have 1 or More PSEs
                 if isempty(alt_pse_name) % New PSE Being Added
                     % Add Alternative
-                    obj.ss_project.add_project_field('pse_list', obj.alt_name, obj.pse_name, obj.alt_name, 'pse');
-                    obj.ss_project.add_project_field('alternative_list', {{obj.alt_name}}, obj.pse_name, obj.alt_name, 'pse');
-                    obj.ss_project.add_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
+                    obj.chess_project.add_project_field('pse_list', obj.alt_name, obj.pse_name, obj.alt_name, 'pse');
+                    obj.chess_project.add_project_field('alternative_list', {{obj.alt_name}}, obj.pse_name, obj.alt_name, 'pse');
+                    obj.chess_project.add_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
                 else % New Alternative Being Added
                     % Set PSE Name To Existing
                     obj.pse_name = alt_pse_name;
                     % Get ALternative List
-                    alt_list = obj.ss_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
+                    alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
                     % Grab Table From Existing Alternative
-                    load_pse_table = obj.ss_project.get_project_field('pse_tables', obj.pse_name, alt_list{1}, 'alt');
+                    load_pse_table = obj.chess_project.get_project_field('pse_tables', obj.pse_name, alt_list{1}, 'alt');
                     % Assign Loaded Table To Alternative
-                    obj.ss_project.add_project_field('alternative_list', 'dummy', obj.pse_name, obj.alt_name, 'alt');
-                    obj.ss_project.add_project_field('pse_tables', {load_pse_table}, obj.pse_name, obj.alt_name, 'alt');
+                    obj.chess_project.add_project_field('alternative_list', 'dummy', obj.pse_name, obj.alt_name, 'alt');
+                    obj.chess_project.add_project_field('pse_tables', {load_pse_table}, obj.pse_name, obj.alt_name, 'alt');
                     obj.PSETable.Data = load_pse_table;
                     % Set PSE Name And Lock It
                     obj.PSENameEditField.Value = alt_pse_name;
@@ -73,14 +73,14 @@ classdef PSECreationUI < handle
                     obj.PSENameEditField.Enable = false;
                 end
             else % First PSE In Project
-                obj.ss_project.set_project_field('pse_list', obj.pse_name, obj.pse_name, obj.alt_name, 'pse');
-                obj.ss_project.set_project_field('pse_tables', {obj.PSETable.Data}, obj.pse_name, obj.alt_name, 'pse');
-                obj.ss_project.set_project_field('alternative_list', {obj.alt_name}, obj.pse_name, obj.alt_name, 'pse');
+                obj.chess_project.set_project_field('pse_list', obj.pse_name, obj.pse_name, obj.alt_name, 'pse');
+                obj.chess_project.set_project_field('pse_tables', {obj.PSETable.Data}, obj.pse_name, obj.alt_name, 'pse');
+                obj.chess_project.set_project_field('alternative_list', {obj.alt_name}, obj.pse_name, obj.alt_name, 'pse');
             end
             % Create Geometry
-            obj.pse_geometry = obj.ss_project.create_geometry(obj.pse_name, obj.alt_name, pse_type);
+            obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, pse_type);
             % Plot Geometry
-            obj.ss_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
+            obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
             % Verify If Berm BOx SHould Be Checked
             obj.AddBermCheckBox.Value = logical(obj.pse_geometry.add_toe_berm);
         end
@@ -89,8 +89,8 @@ classdef PSECreationUI < handle
     %% DEFINE CLASS UI COMPONENT CREATION METHOD
     methods (Access = private)
         function intialize_table(obj, pse_type, unitsys)
-            % PSE Table Rows Come From StormSim-Library Template (Geometry + Properties)
-            tpl = obj.ss_project.get_library_template(pse_type);
+            % PSE Table Rows Come From CHESS-Library Template (Geometry + Properties)
+            tpl = obj.chess_project.get_library_template(pse_type);
             rows = [tpl.geometry; tpl.properties];
             % Toe Berm Is Optional Only When Template Defines add_toe_berm
             % (Hidden For Floodwalls Until Conceptual Models Are Set: Library finalize_structure_config Removes Them)
@@ -121,7 +121,7 @@ classdef PSECreationUI < handle
             dims = {'[m]', 'length'; '[kg]', 'mass'};
             for dd = 1:size(dims, 1)
                 pull_indx = strcmp(rows(:, 3), dims{dd, 1});
-                [conv, ~, lbl] = obj.ss_project.convert_units(1, dims{dd, 2}, 'SI', unitsys);
+                [conv, ~, lbl] = obj.chess_project.convert_units(1, dims{dd, 2}, 'SI', unitsys);
                 rows(pull_indx, 4) = cellfun(@(x) x*conv, rows(pull_indx, 4), 'un', false);
                 rows(pull_indx, 3) = {['[' lbl ']']};
             end
@@ -143,15 +143,15 @@ classdef PSECreationUI < handle
 
             % Create PSEAxes
             obj.PSEAxes = uiaxes(obj.GridLayout);
-            title(obj.PSEAxes, ['Project: ' obj.ss_project.name ' | PSE Type: ' pse_type]);
-            switch obj.ss_project.unitsys
+            title(obj.PSEAxes, ['Project: ' obj.chess_project.name ' | PSE Type: ' pse_type]);
+            switch obj.chess_project.unitsys
                 case 'SI'
                     lunit = 'm';
                 case 'Imperial'
                     lunit = 'ft';
             end
             xlabel(obj.PSEAxes, ['X Distance [' lunit ']']);
-            ylabel(obj.PSEAxes, ['Elevation [' lunit '] (' obj.ss_project.vdatum ')']);
+            ylabel(obj.PSEAxes, ['Elevation [' lunit '] (' obj.chess_project.vdatum ')']);
             zlabel(obj.PSEAxes, 'Z');
             obj.PSEAxes.Box = 'on';
             obj.PSEAxes.XGrid = 'on';
@@ -254,14 +254,14 @@ classdef PSECreationUI < handle
 %             else
 %                 opMode = 'alt';
 %             end
-%             obj.ss_project.delete_project_field('pse_tables', obj.pse_name, obj.alt_name, opMode);
-%             obj.ss_project.delete_project_field('pse_geometry', obj.pse_name, obj.alt_name, opMode);
-%             alt_list = obj.ss_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
+%             obj.chess_project.delete_project_field('pse_tables', obj.pse_name, obj.alt_name, opMode);
+%             obj.chess_project.delete_project_field('pse_geometry', obj.pse_name, obj.alt_name, opMode);
+%             alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
 %             if length(alt_list) == 1
-%                 obj.ss_project.delete_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
-%                 obj.ss_project.delete_project_field('pse_list', obj.pse_name, obj.alt_name, 'pse');
+%                 obj.chess_project.delete_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
+%                 obj.chess_project.delete_project_field('pse_list', obj.pse_name, obj.alt_name, 'pse');
 %             else
-%                 obj.ss_project.delete_project_field('alternative_list', obj.pse_name, obj.alt_name, 'alt');
+%                 obj.chess_project.delete_project_field('alternative_list', obj.pse_name, obj.alt_name, 'alt');
 %             end
         end
 
@@ -274,17 +274,17 @@ classdef PSECreationUI < handle
                 obj.PSETable.Data(is_berm, :) = [];
             end
             % Create Geometry
-            obj.ss_project.set_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
-            obj.pse_geometry = obj.ss_project.create_geometry(obj.pse_name, obj.alt_name, obj.pse_type);
+            obj.chess_project.set_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
+            obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, obj.pse_type);
             % Plot Geometry
-            obj.ss_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
+            obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
         end
 
         function EditFieldValueChanged(obj, event)
             % Get PSE Listing For Project
             if isempty(obj.pse_to_copy) % New PSE Being Added
                 % Check For Unique PSE
-                pse_listing = obj.ss_project.get_project_field('pse_list', obj.pse_name, obj.alt_name, 'proj'); % Selected Projects PSE's
+                pse_listing = obj.chess_project.get_project_field('pse_list', obj.pse_name, obj.alt_name, 'proj'); % Selected Projects PSE's
                 pse_name_pass = ~ismember(obj.PSENameEditField.Value, pse_listing);
                 %
                 if ~pse_name_pass % PSE Name Is Not Unique
@@ -298,14 +298,14 @@ classdef PSECreationUI < handle
                     end
                 elseif ~isempty(obj.PSENameEditField.Value)
                     % Update Names
-                    obj.ss_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
+                    obj.chess_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
                     obj.pse_name = obj.PSENameEditField.Value;
                 end
                 % Alternative Check Runs For A Unique Or Internal (Already Assigned) PSE Name
                 if pse_name_pass || strcmp(obj.PSENameEditField.Value, obj.pse_name)
                     % PSE Name Is Valid
                     % Get Alternative Listing
-                    alt_listing = obj.ss_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse'); % Selected Projects Alternatives
+                    alt_listing = obj.chess_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse'); % Selected Projects Alternatives
                     % 
                     if ~isempty(alt_listing)
                         alt_name_pass = ~ismember(obj.AlternativeNameEditField.Value, alt_listing);
@@ -322,14 +322,14 @@ classdef PSECreationUI < handle
                              end
                          elseif ~isempty(obj.AlternativeNameEditField.Value)
                              % Update Names
-                             obj.ss_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
+                             obj.chess_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
                              obj.alt_name = obj.AlternativeNameEditField.Value;
                          end
                     end
                 end
             else % New Alternative Being Added
                 % Get Alternative Listing
-                alt_listing = obj.ss_project.get_project_field('alternative_list', obj.pse_to_copy, obj.alt_name, 'pse'); % Selected Projects Alternatives
+                alt_listing = obj.chess_project.get_project_field('alternative_list', obj.pse_to_copy, obj.alt_name, 'pse'); % Selected Projects Alternatives
                 %
                 if ~isempty(alt_listing)
                     alt_name_pass = ~any(ismember(obj.AlternativeNameEditField.Value, alt_listing));
@@ -346,7 +346,7 @@ classdef PSECreationUI < handle
                         end
                     elseif ~isempty(obj.AlternativeNameEditField.Value)
                         % Update Names
-                        obj.ss_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
+                        obj.chess_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
                         obj.alt_name = obj.AlternativeNameEditField.Value;
                     end
                 end
@@ -364,18 +364,18 @@ classdef PSECreationUI < handle
             indices = event.Indices;
             newData = event.NewData;
             % Create Geometry
-            obj.ss_project.set_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
-            obj.pse_geometry = obj.ss_project.create_geometry(obj.pse_name, obj.alt_name, obj.pse_type);
+            obj.chess_project.set_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
+            obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, obj.pse_type);
             % Plot Geometry
-            obj.ss_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
+            obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
         end
 
         function CreatePSEButtonPushed(obj, event)
             % Store Project Component Mapping
             obj.pse_created = 1;
             %
-%             obj.ss_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
-%             obj.ss_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
+%             obj.chess_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
+%             obj.chess_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
             % Store UI Data
             obj.pse_table = obj.PSETable.Data;
             delete(obj.uifig); % Delete New Project UI Window

@@ -4,12 +4,12 @@ classdef aux_methods
     % Call them directly: aux_methods.initiate_axes(...)
     %
     % These are called by pros_methods (and future lcs_methods, etc.)
-    % NOT by StormsimPlots directly.
+    % NOT by CHESSPlots directly.
 
     methods (Static)
 
         function data_out = pull_data(query_names, ds)
-            % ds: Can be StormSim variable: Resp, storm, project_forcing
+            % ds: Can be CHESS variable: Resp, storm, project_forcing
             % query_names: structure containing the following fields
             %   - storm_type: 'XC', 'TC' or 'CC'
             %   - data_type: 'Peaks' or 'Timeseries'
@@ -39,7 +39,7 @@ classdef aux_methods
         end
 
         function ax = initiate_axes(parent, x_label, y_label, title_str, base_fnt, varargin)
-            % initiate_axes Initializes and formats a uiaxes object for StormSim plots.
+            % initiate_axes Initializes and formats a uiaxes object for CHESS plots.
             %
             % Inputs:
             %   parent    - Parent container (uifigure or uigridlayout) or an existing uiaxes handle.
@@ -62,7 +62,7 @@ classdef aux_methods
             % Initialize Parent Container If Needed 
             if isempty(parent) || ~isvalid(parent)
                 % Default TO GridLayout
-                fig = uifigure('Name', 'StormSim Figure', 'Position', [100 100 1000 600]);
+                fig = uifigure('Name', 'CHESS Figure', 'Position', [100 100 1000 600]);
                 % Create the nested-style 1x2 grid we've been using
                 parent = uigridlayout(fig, [1 1]);
                 parent.ColumnWidth = {'1x'}; % Dedicated Colorbar Column
@@ -117,7 +117,7 @@ classdef aux_methods
             % Define Y Label
             ylabel(ax, aux_methods.latex_escape(y_label), 'FontSize', ax_label_fnt, 'FontWeight', 'bold', 'Interpreter', 'latex');
             
-            ax.Tag = 'stormsim_fig';
+            ax.Tag = 'chess_fig';
         end
 
         function out = latex_escape(str)

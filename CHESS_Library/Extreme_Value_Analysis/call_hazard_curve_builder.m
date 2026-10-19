@@ -1,10 +1,10 @@
 function  [Output]= call_hazard_curve_builder(config, TC_Prob, Resp, storm_type, use_aep, outPath)
 % CALL_STRUCTURE_CURVE_BUILDER Computes hazard curve for provided forcing
-% and structure responses using StormSim's SST & JPM. Supports hazard curve
+% and structure responses using CHESS's SST & JPM. Supports hazard curve
 % calculations for: SWL, Hm0, Tp, R2p, R2p+SWL, q, Dn50, Dn50_LCBW, p1.
 % Additionally, computes structure secondary responses from resulting
 % hazard curves. This is meant to be used in a response base context and
-% not as a caller function for StormSim SST/JPM.
+% not as a caller function for CHESS SST/JPM.
 %
 % Example usage:
 %
@@ -107,7 +107,7 @@ for ii = 1:length(vars_to_process)
         eva_options.integration_method = 2; % Let JPM Manage Replicates
     end
     % Define Figure Title
-    title_str = {['StormSim: ' wstr ' | '  case_name ' | ' struc_id],...
+    title_str = {['CHESS: ' wstr ' | '  case_name ' | ' struc_id],...
         ['' storm_type ' | ' var_name ' [' unit_label ']']};
 
     %% CALL PST/JPM TO BUILD HAZARD CURVES
@@ -117,7 +117,7 @@ for ii = 1:length(vars_to_process)
             disp(['               Performing Stochastic Simulation Technique (SST) for station (',num2str(ii),'/',num2str(length(vars_to_process)),'): ', resp_var]);
             % Call SST
             try
-                [dummy] = StormSim_PST(response_data, eva_options, plot_options);
+                [dummy] = CHESS_PST(response_data, eva_options, plot_options);
             catch
                 disp(['               Stochastic Simulation Technique (SST) returned error, skipping: ', resp_var]);
                 ctr = ctr+1;
@@ -135,7 +135,7 @@ for ii = 1:length(vars_to_process)
             response_data.data = [response_data.data, tc_dsw(:)];
             % Call JPM
             try
-                [dummy] = StormSim_JPM(response_data, eva_options, plot_options);
+                [dummy] = CHESS_JPM(response_data, eva_options, plot_options);
             catch
                 disp(['               Joint Probability Method (JPM) returned error, skipping: ', resp_var]);
                 ctr = ctr+1;

@@ -2,7 +2,7 @@
 function [Kt]= eurotop_wave_transmission(Hm0,Tp,Rc,B,tana,grav)
 %{
 LICENSING:
-    This code is part of StormSim software suite developed by the U.S. Army
+    This code is part of CHESS software suite developed by the U.S. Army
     Engineer Research and Development Center Coastal and Hydraulics
     Laboratory (hereinafter “ERDC-CHL”). This material is distributed in
     accordance with DoD Instruction 5230.24. Recipient agrees to abide by
@@ -11,24 +11,24 @@ LICENSING:
     (hereinafter, "ERDC"). This material shall be handled and maintained in
     accordance with For Official Use Only, Export Control, and AR 380-19
     requirements. ERDC-CHL retains all right, title and interest in
-    StormSim and any portion thereof and in all copies, modifications and
-    derivative works of StormSim and any portions thereof including,
+    CHESS and any portion thereof and in all copies, modifications and
+    derivative works of CHESS and any portions thereof including,
     without limitation, all rights to patent, copyright, trade secret,
     trademark and other proprietary or intellectual property rights.
     Recipient has no rights, by license or otherwise, to use, disclose or
-    disseminate StormSim, in whole or in part.
+    disseminate CHESS, in whole or in part.
 
 DISCLAIMER:
-    STORMSIM IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT
+    CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT
     HOLDERS. ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS
-    OR IMPLIED WITH RESPECT TO STORMSIM OR ANYTHING PROVIDED BY ERDC-CHL,
+    OR IMPLIED WITH RESPECT TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL,
     AND EXPRESSLY DISCLAIMS ALL WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
     IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF MERCHANTABILITY,
     NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
     CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE
     AND RESULTS OF THE USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE
     UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL WARRANTIES AND LIABILITIES
-    REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN STORMSIM, AND DISTRIBUTES
+    REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND DISTRIBUTES
     IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST
     ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND
     SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD HARMLESS ERDC-CHL, THE

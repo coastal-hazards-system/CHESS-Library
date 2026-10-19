@@ -45,11 +45,11 @@ function [storm, CHS_Data, prob_mass, config] = call_chs_data_formater(config)
             sp_lat, sp_lon: Savepoint coordinates (call_input_parser.m; NaN when
                         not found): study grid lookup (storm_db_bias_uncertainty.m).
             out_files.chs_data, out_files.storm_and_prob_mass: Storm
-                        database files (stormsim_paths.m). | char
+                        database files (chess_paths.m). | char
 
     %% OUTPUTS
         Additional to data outputs 2 files are exported from this function
-        (<event_db_dir> = <outfolder>\<project>\Event_Database, stormsim_paths.m).
+        (<event_db_dir> = <outfolder>\<project>\Event_Database, chess_paths.m).
         <event_db_dir>\<db>_raw_files.mat: MAT-file containing every converted
                              CHS file of the input with no screening applied to them.
         <event_db_dir>\<db>.mat: MAT-file containing formated and screened
@@ -151,14 +151,14 @@ can_coldstart       = ~storm_input && (chs_data_mat_exists || strcmp(fext, '.zip
 % Load Files If Present
 db_info = [];
 if storm_mat_exists
-    disp_toggle(disp_on, 'StormSim generated storm .mat detected. Loading data...');
+    disp_toggle(disp_on, 'CHESS generated storm .mat detected. Loading data...');
     load(config.out_files.storm_and_prob_mass, 'storm', 'prob_mass');
     if any(strcmp(who('-file', config.out_files.storm_and_prob_mass), 'db_info'))
         load(config.out_files.storm_and_prob_mass, 'db_info');
     end
 end
 if chs_data_mat_exists
-    disp_toggle(disp_on, 'StormSim generated CHS_Data .mat detected. Loading data...');
+    disp_toggle(disp_on, 'CHESS generated CHS_Data .mat detected. Loading data...');
     load(config.out_files.chs_data, 'CHS_Data');
 else
     CHS_Data = []; % Ensures output arg is always assigned
@@ -184,7 +184,7 @@ if storm_mat_exists && compatible
 elseif can_coldstart
     if storm_mat_exists
         if ~has_info
-            disp_toggle(disp_on, 'Processed CHS data (storm) has no db_info (older StormSim version). Rebuilding the storm database....');
+            disp_toggle(disp_on, 'Processed CHS data (storm) has no db_info (older CHESS version). Rebuilding the storm database....');
         else
             disp_toggle(disp_on, 'Processed CHS data (storm) does not have necessary dependencies. Restarting import process....');
         end
@@ -193,9 +193,9 @@ else
     storm_simulation_error_msg(storm_mat_exists, has_info, stm_type_chk, data_type_chk, alt_chk, request, storm_input);
 end
 
-%% STORMSIM COLDSTART - STORM SUITE QA/QC AND FORMATTING (.ZIP)
+%% CHESS COLDSTART - STORM SUITE QA/QC AND FORMATTING (.ZIP)
 % Execute Pre-Processing If Needed
-if ~(storm_mat_exists && compatible) && can_coldstart % StormSim needs to create and process storm datasets.
+if ~(storm_mat_exists && compatible) && can_coldstart % CHESS needs to create and process storm datasets.
     % STORM DATABASE CONTENT: EVERY CHS PEAKS/TIMESERIES FILE OF THE INPUT
     if chs_data_mat_exists
         [~, chs_files_2_convert, h5_ext] = cellfun(@fileparts, {CHS_Data.Filename}', 'un', false);
@@ -274,7 +274,7 @@ if ~(storm_mat_exists && compatible) && can_coldstart % StormSim needs to create
         % Remove Temp Dir
         remove_temp_folder(temp_path);
     else  % CHS_Data .mat exists — Loaded Above
-        disp_toggle(disp_on,'Building storm database from StormSim generated CHS_Data .mat....');
+        disp_toggle(disp_on,'Building storm database from CHESS generated CHS_Data .mat....');
     end
 
     % FORMAT AND INSPECT CHS STORMS (TC First: Probability Masses), Data Types Per Storm Type
@@ -374,7 +374,7 @@ end
         elseif ~alt_chk
             error_msg = error_msg + newline + sprintf("Missing peaks data, make sure you have the requested datasets (Default, WLP = %d, WHP = %d).", request.create_wlp, request.create_whp);
         elseif ~has_info
-            error_msg = error_msg + newline + "The storm database has no db_info (older StormSim version) and no raw file to rebuild it from: rebuild the storm database from its original input.";
+            error_msg = error_msg + newline + "The storm database has no db_info (older CHESS version) and no raw file to rebuild it from: rebuild the storm database from its original input.";
         end
         % Display error Message
         error(error_msg);

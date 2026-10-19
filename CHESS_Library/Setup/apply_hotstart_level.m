@@ -5,7 +5,7 @@ function config = apply_hotstart_level(config, config_old, level, is_lcs)
 Acts on the hotstart level of a rerun of the same case. Shared by
 resolve_hotstart_state.m (library) and the GUI (Run dialog "Hotstart").
 Never removes folders (neither does resolve_hotstart_state.m: another
-sp_ID/region is another storm DB, so other run files; stormsim_paths.m).
+sp_ID/region is another storm DB, so other run files; chess_paths.m).
     'full'           u_engine/f_adjust carried from the cached run, so
                      the cached (adjusted/perturbed) project forcing is
                      reused as is. LCS: the cached run's tide start hours
@@ -40,7 +40,7 @@ switch level
         config.f_adjust = config_old.f_adjust;
         config.u_engine = config_old.u_engine;
         % LCS: The Reused Forcing Holds These Tides, Keep Them In The Saved Config (Later
-        % 'reuse_sampling' Reruns And Reference Cases Read Them). stormsim_lcs Drops Them If It Resamples.
+        % 'reuse_sampling' Reruns And Reference Cases Read Them). chess_lcs Drops Them If It Resamples.
         if is_lcs
             for fld = {'tide_indx_tc', 'tide_indx_xc', 'tide_indx_cc'}
                 if isfield(config_old, fld{1})
@@ -71,7 +71,7 @@ config.hotstart_level = level;
 end
 
 %% AUX FUNCTION: KEEP THE CACHED RUN'S TIDE START HOURS FOR THE REUSED LCS LIFE CYCLES
-% Same Rule As load_reference_tide_indices.m (Random Tides On In Both Runs, Same Tide File). stormsim_lcs
+% Same Rule As load_reference_tide_indices.m (Random Tides On In Both Runs, Same Tide File). chess_lcs
 % Clears Them Again For Any Storm Type Whose Life Cycles Are Not Rebuilt From This Case's Own Sampling.
 % tide_indx_cc Is Not Carried: draw_tide_indices.m Derives It From The TC/XC Start Hours.
 function config = carry_tide_indices(config, config_old)

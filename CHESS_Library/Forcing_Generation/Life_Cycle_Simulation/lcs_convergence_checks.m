@@ -2,10 +2,10 @@ function checks = lcs_convergence_checks(config, prob_mass, stm_types, quiet)
 %{
     %% DESCRIPTION
         Runs lcs_convergence_check for each storm type to be sampled with full
-        Poisson LCS sampling, using the run configuration. Shared by stormsim_lcs
+        Poisson LCS sampling, using the run configuration. Shared by chess_lcs
         (before sampling) and the GUI (convergence dialog before an LCS run).
         Storm rates: XC -> config.Nstm_XC/config.Nyrs_XC, TC -> prob_mass.TC_SRR(end).
-        Storm types with a rate <= 0 are skipped (stormsim_lcs stops on them).
+        Storm types with a rate <= 0 are skipped (chess_lcs stops on them).
 
     %% INPUTS
         config: Run configuration (mcs_nYears, mcs_nLC, lcs_convergence_tol,

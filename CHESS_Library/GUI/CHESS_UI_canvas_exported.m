@@ -333,7 +333,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function extract_project_zip(app, zip_file)
-            % [NEW] Import An Exported Project Archive: Exactly One Top-Level Folder <top>/ Holding <top>/StormSim_project_<top>.mat
+            % [NEW] Import An Exported Project Archive: Exactly One Top-Level Folder <top>/ Holding <top>/CHESS_project_<top>.mat
             % (Export Project Layout), No Top-Level Files. Unzipped Into A Chosen Folder, Never Over An Existing <dest>\<top>,
             % Then Imported From There (import_project_mat). The Extracted Folder Is Kept If The Import Fails Afterwards
             try
@@ -348,8 +348,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if all(has_sep) && isscalar(tops)
                 top = tops{1};
             end
-            if isempty(top) || ~any(strcmp(entries, [top '/StormSim_project_' top '.mat']))
-                app.auxLib.error_dlgbox('Not a StormSim project archive: it must hold one project folder <name> with <name>/StormSim_project_<name>.mat.');
+            if isempty(top) || ~any(strcmp(entries, [top '/CHESS_project_' top '.mat']))
+                app.auxLib.error_dlgbox('Not a CHESS project archive: it must hold one project folder <name> with <name>/CHESS_project_<name>.mat.');
                 return
             end
             if ~isempty(app.chess_projects) && any(strcmp(top, {app.chess_projects.name}))
@@ -370,7 +370,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 app.auxLib.error_dlgbox(['Could not extract the archive: ' ME.message]);
                 return
             end
-            app.import_project_mat(fullfile(dest, top, ['StormSim_project_' top '.mat']));
+            app.import_project_mat(fullfile(dest, top, ['CHESS_project_' top '.mat']));
 
             function names = zip_entries(file)
                 % Entry Names Without Extracting ('\' Normalised To '/'); Directory Entries Are Skipped
@@ -410,10 +410,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function [out_path, out_dir, wflow_folder, wflow_name, out_files] = get_config_path(app)
-            % Run Folder & File Names From The Library's stormsim_paths (Same Layout As The Library):
+            % Run Folder & File Names From The Library's chess_paths (Same Layout As The Library):
             % <project>\PSE\<pse>\<alt>\<workflow folder>\<db>_<workflow>_*, Per Storm DB So Runs With Different DBs Do Not Overwrite Each Other
             [pse_name, alt_name] = app.get_active_names();
-            paths = stormsim_paths(app.wProj.path, app.wProj.name, pse_name, alt_name,...
+            paths = chess_paths(app.wProj.path, app.wProj.name, pse_name, alt_name,...
                 app.WorkflowDropDown.Value, app.StormDBDropDown_run.Value);
             out_dir = paths.wf_dir;
             wflow_folder = paths.wf_folder;
@@ -506,15 +506,15 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function import_project_mat(app, mat_file)
-            % [NEW] Import A Project From Its Project File <root>\<name>\StormSim_project_<name>.mat. Project Folder Not Where It
+            % [NEW] Import A Project From Its Project File <root>\<name>\CHESS_project_<name>.mat. Project Folder Not Where It
             % Was Saved (Moved, Copied, Extracted Archive): Stored Paths Relocated To <root>\<name> (Before append_project:
             % refresh_active_view Reads The Storm DB Paths), Then Saved There
             S = load(mat_file);
-            if ~isfield(S, 'ss_project') || ~isa(S.ss_project, 'stormsimProject')
-                app.auxLib.error_dlgbox('Please select a valid "stormsimProject" class object.');
+            if ~isfield(S, 'chess_project') || ~isa(S.chess_project, 'chessProject')
+                app.auxLib.error_dlgbox('Please select a valid "chessProject" class object.');
                 return
             end
-            wProj = S.ss_project;
+            wProj = S.chess_project;
             if ~isempty(app.chess_projects) && any(strcmp(wProj.name, {app.chess_projects.name}))
                 app.auxLib.error_dlgbox(['Project "' wProj.name '" is already loaded.']);
                 return
@@ -524,7 +524,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 app.auxLib.error_dlgbox(['The project file must be inside its project folder "' wProj.name '" (found in "' folder_name '").']);
                 return
             end
-            if ~stormsimProject.same_path(new_root, wProj.path)
+            if ~chessProject.same_path(new_root, wProj.path)
                 wProj.relocate(new_root);
             end
             app.append_project(wProj);
@@ -532,7 +532,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function proceed = lcs_convergence_confirm(app, pseObj, dbObj, prob_mass)
-            % [NEW] LCS Convergence Dialog, Replacing The Library's Command-Window Prompt. Same Rule As stormsim_lcs
+            % [NEW] LCS Convergence Dialog, Replacing The Library's Command-Window Prompt. Same Rule As chess_lcs
             % (lcs_reference_reuse): Effective Mode 0, Storm Types Not Reused From The Reference Case. Called Only When
             % Life Cycles Are Sampled (Coldstart; After The Run Dialog: A Hotstart Reuses The Cached Forcing Or Sampling).
             % Not Converged: "Set mcs_nLC To <nLC_req> And Run" | "Run Anyway" | "Cancel". Returns false On Cancel (Or Dialog Closed).
@@ -623,9 +623,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function config = localize_saved_config(app, config)
-            % [NEW] Saved Run config Of A Moved Project (stormsimProject.relocate): A tide_file Under The Run's Project Folder
+            % [NEW] Saved Run config Of A Moved Project (chessProject.relocate): A tide_file Under The Run's Project Folder
             % (<outfolder>\<project_name>) Points Into The Active Project Folder. 'None' And Paths Elsewhere Unchanged
-            config.tide_file = stormsimProject.relocate_path(config.tide_file,...
+            config.tide_file = chessProject.relocate_path(config.tide_file,...
                 fullfile(config.outfolder, config.project_name), fullfile(app.wProj.path, app.wProj.name));
         end
 
@@ -641,7 +641,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             if isempty(app.resultsPopout) || ~isvalid(app.resultsPopout)
-                app.resultsPopout = figure('Name', 'StormSim Results');
+                app.resultsPopout = figure('Name', 'CHESS Results');
             else
                 clf(app.resultsPopout);
                 figure(app.resultsPopout);
@@ -674,7 +674,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function plot_project_responses(app, target, base_fnt)
-            % [NEW] Results Viewer: Draw The Selected Plot Type With Its StormSim-Library Method.
+            % [NEW] Results Viewer: Draw The Selected Plot Type With Its CHESS-Library Method.
             %   plot_project_responses(app)                   -> Results Tab Axes + Results Table (Multi-Panel Plots: Drawn
             %                                                    In The Tab Mirror Panel If The Cell Is Big Enough, Else A Note)
             %   plot_project_responses(app, target, base_fnt) -> Pop-Out (Classic Figure Or Axes)
@@ -740,11 +740,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if add_events || strcmp(row.key, 'scheme') % Events Overlay / Sampling Scheme Need Project Forcing + TC Probability Masses
                 [project_forcing, dsw] = app.results_forcing_and_dsw();
             end
-            ssPlot = StormsimPlots(config, state.Resp, storm, project_forcing, dsw, state.structure, base_fnt, app.wProj.unitsys);
+            chessPlot = CHESSPlots(config, state.Resp, storm, project_forcing, dsw, state.structure, base_fnt, app.wProj.unitsys);
             try
                 switch row.key
                     case 'hc' % PROS Hazard Curve (+ Table)
-                        ssPlot.hc_plot(ax, ds_query, field, add_events);
+                        chessPlot.hc_plot(ax, ds_query, field, add_events);
                         if tab_mode
                             data = aux_methods.pull_data(ds_query, state.Resp);
                             data = data(strcmp({data.var}, field));
@@ -764,7 +764,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         if isempty(c_field) || ~any(strcmp(fields, c_field))
                             c_field = fields{max([1, find(strcmp(fields, 'Hm0_DL'), 1)])};
                         end
-                        ssPlot.response_vs_forcing_plot(ax, ds_query, aux, field, c_field);
+                        chessPlot.response_vs_forcing_plot(ax, ds_query, aux, field, c_field);
                         if tab_mode % Table: The Plotted Values (Per Storm; Timeseries -> Storm Maxima)
                             mx = aux_methods.pull_data(ds_query, state.Resp).Max;
                             app.PSETable_3.ColumnName = {'Storm ID', aux, field, c_field};
@@ -778,10 +778,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         if isnan(storm_id)
                             storm_id = [];
                         end
-                        app.resultsTablePopout = ssPlot.response_table(ds_query, storm_id);
+                        app.resultsTablePopout = chessPlot.response_table(ds_query, storm_id);
                         app.resultsTablePopout.Position(1:2) = app.UIFigure.Position(1:2) + (app.UIFigure.Position(3:4) - app.resultsTablePopout.Position(3:4))/2;
                     case 'det_compare' % Deterministic: Peaks Value vs Timeseries Peak (Same Storms, 1:1 Line)
-                        ssPlot.peaks_vs_timeseries_plot(ax, ds_query, field);
+                        chessPlot.peaks_vs_timeseries_plot(ax, ds_query, field);
                         if tab_mode
                             pk = aux_methods.pull_data(ds_query, state.Resp).Max;
                             q_ts = ds_query;
@@ -796,10 +796,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         if strcmp(ds_query.data_type, 'Timeseries')
                             event_id = str2double(aux);
                         end
-                        ssPlot.storm_event_viewer(target, ds_query, event_id, field, 0);
+                        chessPlot.storm_event_viewer(target, ds_query, event_id, field, 0);
                     case 'annual' % LCS Annual Response Distribution (+ Table Of Binned Values Per Sim Year)
-                        [edges, labels] = app.results_bin_edges(ssPlot, ds_query, field, opts.bin_edges);
-                        [~, bin_data] = ssPlot.annual_response_distribution(ax, ds_query, field, edges, string(aux),...
+                        [edges, labels] = app.results_bin_edges(chessPlot, ds_query, field, opts.bin_edges);
+                        [~, bin_data] = chessPlot.annual_response_distribution(ax, ds_query, field, edges, string(aux),...
                             opts.cb_lim, opts.grid_on, opts.cb_log);
                         if tab_mode && isempty(bin_data) % No Finite Values: Library "No Data" Axes, Empty Table
                             app.PSETable_3.ColumnName = {'Sim Year'};
@@ -810,20 +810,20 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         end
                     case 'armor' % Slope Armor Damage (S_* Fields: All Or One Life Cycle)
                         hold(ax, 'on');
-                        ssPlot.slope_armor_damage_plot(ax, ds_query, field, lc_index);
+                        chessPlot.slope_armor_damage_plot(ax, ds_query, field, lc_index);
                     case 'sampling' % Event Sampling Distribution (All Or One Life Cycle)
-                        ssPlot.event_sampling_distribution(ax, ds_query, lc_index);
+                        chessPlot.event_sampling_distribution(ax, ds_query, lc_index);
                     case 'damaging'
-                        ssPlot.plot_mound_damaging_instances_distribution(ax, ds_query, field);
+                        chessPlot.plot_mound_damaging_instances_distribution(ax, ds_query, field);
                     case 'submergence' % Field To Plot -> Normalize, Storm ID -> X Scale
-                        ssPlot.plot_pse_submergance_distribution(ax, ds_query, strcmp(aux, 'Log'), strcmp(field, 'count'),...
+                        chessPlot.plot_pse_submergance_distribution(ax, ds_query, strcmp(aux, 'Log'), strcmp(field, 'count'),...
                             opts.cb_log, opts.cb_lim);
                     case 'final'
-                        ssPlot.plot_mound_final_damage_state(ax, ds_query, field);
+                        chessPlot.plot_mound_final_damage_state(ax, ds_query, field);
                     case 'dashboard' % Mound Damage Dashboard (Pop-Out)
-                        ssPlot.mound_damage_dashboard(target, ds_query, field, opts.bin_edges, opts.cb_lim);
+                        chessPlot.mound_damage_dashboard(target, ds_query, field, opts.bin_edges, opts.cb_lim);
                     case 'scheme' % LCS Storm Sampling Diagnostics (Pop-Out)
-                        ssPlot.sampling_scheme_dashboard(target, ds_query);
+                        chessPlot.sampling_scheme_dashboard(target, ds_query);
                 end
             catch me
                 if tab_mode
@@ -839,7 +839,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function plot_storm_db(app, ax, base_fnt)
-            % [NEW] Plot Storm DB Viewer Selection With StormSim-Library Plot Classes.
+            % [NEW] Plot Storm DB Viewer Selection With CHESS-Library Plot Classes.
             %   plot_storm_db(app)               -> Storm DB Tab Axes + Storm DB Table
             %   plot_storm_db(app, ax, base_fnt) -> Given Axes Only (e.g. Pop-Out Figure)
             tab_mode = nargin < 2;
@@ -847,7 +847,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 ax = app.StormDBAxes;
                 base_fnt = app.plotFontSize;
             end
-            % Pull Storm DB (Cached). Storm DB Of An Older StormSim Version (No db_info): Alert, No Plot
+            % Pull Storm DB (Cached). Storm DB Of An Older CHESS Version (No db_info): Alert, No Plot
             dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db');
             if ~app.storm_db_info_ok(dbObj)
                 cla(ax);
@@ -871,7 +871,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             config.tc_bias_corrected = db_info.tc_bias_corrected;
             config.chs_swl_b_a = db_info.chs_swl_b_a;
             config.chs_swl_b_r = db_info.chs_swl_b_r;
-            ssPlot = StormsimPlotsBase(config, [], storm, [], [], [], base_fnt, app.wProj.unitsys);
+            chessPlot = CHESSPlotsBase(config, [], storm, [], [], [], base_fnt, app.wProj.unitsys);
             % Plot (And Tab Table) According To Data Type
             cla(ax);
             legend(ax, 'off');
@@ -883,7 +883,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             switch app.DataTypeDropDown.Value
                 case 'Peaks' % Storm Data Space: Y Field Vs X Field
                     x_field = app.StormIDDropDown.Value;
-                    ssPlot.storm_data_space_plot(ax, ds_query, y_field, x_field);
+                    chessPlot.storm_data_space_plot(ax, ds_query, y_field, x_field);
                     if tab_mode
                         x_lbl = app.StormIDDropDown.Items{strcmp(field_names, x_field)};
                         peak_of = @(col) cellfun(@(x) max(x(:, col), [], 'omitnan'), stm_data(:, 2));
@@ -892,7 +892,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     end
                 case 'Timeseries' % Event Hydrograph: storm (Interpolated) + CHS_Data (Raw)
                     event_id = str2double(app.StormIDDropDown.Value);
-                    ssPlot.event_hydrograph_plot(ax, ds_query, event_id, y_field, app.load_chs_data(dbObj));
+                    chessPlot.event_hydrograph_plot(ax, ds_query, event_id, y_field, app.load_chs_data(dbObj));
                     if tab_mode
                         hydrograph = stm_data{stm_list == event_id, 2};
                         app.StormDBTable.ColumnName = {'Event Duration [hrs]', y_lbl};
@@ -1204,7 +1204,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function project_field_ini(app)
-            % This function ensures all ss_project fields dimensions stay
+            % This function ensures all chess_project fields dimensions stay
             % in sync. Needs to be called once a PSE/Alternative is created
             if ~isempty(app.wProj)
                 app.wProj.sync_alt_fields();
@@ -1213,7 +1213,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         function [offshore_elevation, elevation_source] = pse_popout_offshore_elevation(app)
             % [NEW] Offshore Elevation For The PSE Pop-Out Text Box: Study Grid Value Of The Storm DB Selected On The Run Tab
-            % (Defaults To The Alternative's Last-Run DB), Else The PSE Geometry Value. None -> [] (stormsimProject.plot_geometry
+            % (Defaults To The Alternative's Last-Run DB), Else The PSE Geometry Value. None -> [] (chessProject.plot_geometry
             % Keeps The PSE Value, Else The Library Shows 'n/a').
             offshore_elevation = [];
             elevation_source = '';
@@ -1274,7 +1274,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
                 app.populate_stormDB_panel(dbList(db_indx), {dbList.db_name});
             end
-            % StormSim Run & Results Viewer
+            % CHESS Run & Results Viewer
             app.populateSimulationTab();
             app.populate_pse_table();
             app.populateResultsTab();
@@ -1319,7 +1319,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     app.StormTypeDropDown.Items = {};
                     app.StormDBTable.Data = cell(0, 2);
                 case 'sim'
-                    %%% StormSim Run Tab
+                    %%% CHESS Run Tab
                     app.ApplyDepthLimitationCheckBox.Value = false; % Reset Depth Limitation
                     app.SeaLevelChangeEditField.Value = 0; % Reset Sea Level Change
                     app.StormDBDropDown_run.Items = {}; % Reset Items On Dropdowns
@@ -1331,7 +1331,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     app.WorkflowInputsTable.Data = cell(0, 3);
                     app.RunSimulationButton.Enable = false; % Disable Run Button
                 case 'results'
-                    %%% StormSim Results Viewer Tab
+                    %%% CHESS Results Viewer Tab
                     app.reset_results_axes(); % Clear Axis (Plots, Colorbar, Legend, Rulers)
                     app.reset_empty_axes(app.PSEAxes_3); % Empty State:
                     app.PSETable_3.Data = cell(0, 3); % Clear Data Table
@@ -1427,7 +1427,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
-        function [edges, labels] = results_bin_edges(app, ssPlot, ds_query, field, edges)
+        function [edges, labels] = results_bin_edges(app, chessPlot, ds_query, field, edges)
             % [NEW] Annual Distribution Bin Edges (Plot Option Or Library Estimate) & Results Table Column Labels.
             % No Finite Response Values: No Edges, No Labels (The Library Plot Shows "No finite response values to plot")
             if isempty(edges)
@@ -1442,7 +1442,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     return
                 end
                 [~, ~, ~, ~, ~, ~, x_log] = response_library_headers(app.resultsState.config, field);
-                edges = ssPlot.generate_bin_guess(resp_vector, 5, x_log);
+                edges = chessPlot.generate_bin_guess(resp_vector, 5, x_log);
             end
             edges = edges(:)';
             % Library Binning Uses [-Inf, edges, edges(end)+1, Inf]
@@ -1561,7 +1561,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function cat = results_plot_catalog(app)
-            % [NEW] Results Plot Types -> StormSim-Library Plot Methods (One Row Per Plot), Filtered For The Loaded Run.
+            % [NEW] Results Plot Types -> CHESS-Library Plot Methods (One Row Per Plot), Filtered For The Loaded Run.
             %   key | label | workflows | data types | needs S (armor damage) | rubble mound only | multi-panel (pop-out only) | plot options
             rows = {
                 'hc',          'Hazard Curve',                    [1 4],   {'Peaks','Timeseries'}, false, false, false, {}
@@ -1708,7 +1708,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         function fields = results_response_list(app, list_name)
             % [NEW] Response Names Accepted By Library Plot Methods (Mirror Of Their Argument Validation)
-            %   'annual': lcs_methods.annual_response_distribution | 'event': StormsimPlotsBase.storm_event_viewer (Per Structure Type)
+            %   'annual': lcs_methods.annual_response_distribution | 'event': CHESSPlotsBase.storm_event_viewer (Per Structure Type)
             switch list_name
                 case 'annual'
                     fields = {'Hm0t', 'R2p', 'R2p_SWL', 'Dn50', 'Dn50_LCBW', 'Dn50_Lee', 'p1', 'q', 'q_overflow', 'q_wave_ot',...
@@ -1832,8 +1832,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if isempty(app.proj_indx)
                 return
             end
-            ss_project = app.chess_projects(app.proj_indx); %#ok<ADPROP,*ADPROPLC>
-            save(fullfile(ss_project.path, ss_project.name, ['StormSim_project_' ss_project.name '.mat']), 'ss_project'); %#ok<ADPROP>
+            chess_project = app.chess_projects(app.proj_indx); %#ok<ADPROP,*ADPROPLC>
+            save(fullfile(chess_project.path, chess_project.name, ['CHESS_project_' chess_project.name '.mat']), 'chess_project'); %#ok<ADPROP>
         end
 
         function [tf, label, run_date] = saved_sim(app)
@@ -2048,7 +2048,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             ax.YTick = [];
             note = {'Multi-panel plot', 'Shown in the pop-out window'};
             if all(isfinite(app.results_mirror_min_size(row.key)))
-                note{end + 1} = 'Enlarge the StormSim window to show it here';
+                note{end + 1} = 'Enlarge the CHESS window to show it here';
             end
             text(ax, 0.5, 0.5, note, 'Units', 'normalized', 'HorizontalAlignment', 'center',...
                 'FontSize', app.plotFontSize, 'Color', [0.45 0.45 0.45], 'ContextMenu', app.resultsMenu);
@@ -2112,13 +2112,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function ok = storm_db_info_ok(app, dbObj)
-            % [NEW] Storm DB Has Its db_info (Library storm_db_info 'valid'); Imported With An Older StormSim Version: Alert (Must
+            % [NEW] Storm DB Has Its db_info (Library storm_db_info 'valid'); Imported With An Older CHESS Version: Alert (Must
             % Be Re-Imported) Once Per Storm DB Per Session, Callers Still Block Silently Afterwards. The Run Path Keeps Its Own
             % Error (dbObj.get_db_info In create_resp_config, Run-Failed Dialog)
             ok = storm_db_info('valid', dbObj.db_info);
             if ~ok && ~any(strcmp(app.oldDbWarned, dbObj.output_paths.storm_db))
                 app.oldDbWarned{end+1} = dbObj.output_paths.storm_db;
-                uialert(app.UIFigure, 'This storm database was built with an older StormSim version and must be re-imported.',...
+                uialert(app.UIFigure, 'This storm database was built with an older CHESS version and must be re-imported.',...
                     ['Storm DB: ' dbObj.db_name], 'Icon', 'warning');
             end
         end
@@ -2127,7 +2127,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % [NEW] After A Switch Of Alternative / Workflow / Run Tab Storm DB (Key Changed), A Saved Simulation Of The New Key Is
             % Loaded Silently When The Current Inputs Match It, Or Without ask (Internal Refresh). Otherwise ask:
             % "Load" | "Keep current inputs" (Or Closed: Inputs Kept, Results Tab Cleared). No Saved Simulation: Inputs Kept.
-            % Run Tab Storm DB Of An Older StormSim Version (No db_info, Inputs Cannot Be Compared): Alert, Then Ask As Changed Inputs.
+            % Run Tab Storm DB Of An Older CHESS Version (No db_info, Inputs Cannot Be Compared): Alert, Then Ask As Changed Inputs.
             % The Callers' populateResultsTab Loads Nothing While The Key Differs, So Results Appear Only Once Resolved Here.
             % A Declined Load Is Remembered (declinedSimKey) Until The Key Changes: Switching Back Asks Again
             key = app.sim_key();
@@ -2256,6 +2256,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.set_dropdown_items(app.StormIDDropDown_results, a_items);
             app.StormIDDropDown_results.Enable = a_on;
         end
+
     end
 
 
@@ -2264,13 +2265,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Code that executes after component creation
         function startupFcn(app)
-            % Initialize Aux Library Class
+          % Initialize Aux Library Class
             app.auxLib = auxUIFunctions();
-            % StormSim_Library Path: The App Lives In StormSim_Library\GUI, So The Library Is Its Parent Folder
+            % CHESS_Library Path: The App Lives In CHESS_Library\GUI, So The Library Is Its Parent Folder
             app_dir = fileparts(mfilename('fullpath'));
             lib_dir = fileparts(app_dir);
             if ~isfile(fullfile(lib_dir, 'Setup', 'create_structure_geometry.m'))
-                app.auxLib.error_dlgbox(['StormSim_Library not found. The app must be located in StormSim_Library' filesep 'GUI.']);
+                app.auxLib.error_dlgbox(['CHESS_Library not found. The app must be located in CHESS_Library' filesep 'GUI.']);
             else
                 addpath(genpath(lib_dir));
             end
@@ -2295,7 +2296,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.ResultsViewerTab.SizeChangedFcn = @(~, ~) app.results_tab_resized();
             % Empty State
             app.refresh_active_view();
-
         end
 
         % Menu selected function: CreateNewProjectMenu
@@ -2306,7 +2306,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             uiwait(obj.uifig);
             % If User Submited Project, Go Ahead And Populate UI
             if obj.project_created
-                app.append_project(obj.ss_project);
+                app.append_project(obj.chess_project);
                 % Save Project State
                 app.save_project();
                 % Long Project Folder Path (Windows 260-Character Limit): Warn, Project Kept
@@ -2318,8 +2318,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: ImportProjectMenu
         function LoadProjectMenuSelected(app, event)
-            % [NEW] Prompt User: Project File (StormSim_project_<name>.mat In Its Project Folder) Or Exported Project Archive (.zip)
-            [file, location] = uigetfile({'*.mat;*.zip', 'StormSim Project (*.mat, *.zip)'}, 'Import StormSim Project', '');
+            % [NEW] Prompt User: Project File (CHESS_project_<name>.mat In Its Project Folder) Or Exported Project Archive (.zip)
+            [file, location] = uigetfile({'*.mat;*.zip', 'CHESS Project (*.mat, *.zip)'}, 'Import CHESS Project', '');
             if isequal(file, 0)
                 return
             end
@@ -2333,11 +2333,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: ExportProjectMenu
         function ExportProjectMenuSelected(app, event)
-            if isempty(app.wProj)
+          if isempty(app.wProj)
                 return
             end
             % Wait For User To Define Export Location And Name
-            [file, fPath] = uiputfile({'.zip'}, 'Export StormSim Project', ['StormSim_project_'  app.wProj.name '_archive.zip']);
+            [file, fPath] = uiputfile({'.zip'}, 'Export CHESS Project', ['CHESS_project_'  app.wProj.name '_archive.zip']);
             % Export Project
             if ~all(file == 0)
                 % Save out Project state
@@ -2506,7 +2506,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         % Button pushed function: Button_6, ExtrudeFigureButton, 
         % ...and 1 other component
         function ExtrudeFigureButtonPushed(app, event)
-            % Pop-Out: Redraw The Tab's Plot With Its StormSim-Library Plot Method In A Classic Figure
+           % Pop-Out: Redraw The Tab's Plot With Its CHESS-Library Plot Method In A Classic Figure
             base_fnt = app.plotFontSize; % Same Base Font As The Tab Plots
             tab = ancestor(event.Source, 'matlab.ui.container.Tab'); % Button Sits In A Nested Grid, Not On The Tab
             % Nothing To Plot -> Inform User (No Empty Figure)
@@ -2545,11 +2545,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: ImportCHSStudyHDF5Menu
         function CHSDatabaseMenu(app, event)
-            if isempty(app.wProj)
+          if isempty(app.wProj)
                 return
             end
             % Initialize CHS Library
-            paths = stormsim_paths(app.wProj.path, app.wProj.name);
+            paths = chess_paths(app.wProj.path, app.wProj.name);
             dbObj = CHSStormDBImportUI('', paths.event_db_dir,...
                 app.pull_input_table_value(app.ConstantsTable.Data, 'Gravity Constant'), app.wProj.vdatum, app.wProj.unitsys);
             % Call import Wizard
@@ -2630,7 +2630,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         function RunSimulationButtonPushed(app, event)
             % Get Window Position
             app.auxLib.set_window_position(app.UIFigure.Position);
-            prog = []; % App-Scoped Progress Dialog: Locks The StormSim Window Only (Other MATLAB Windows Stay Usable)
+            prog = []; % App-Scoped Progress Dialog: Locks The CHESS Window Only (Other MATLAB Windows Stay Usable)
             % Slot Files This Run Backed Up (backup_sim_files): Restored If The Run Fails, Dropped Once The Results Are Saved
             backed = [];
             try
@@ -2669,7 +2669,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 backed = app.backup_sim_files(bk, plan.level);
                 [config, pseObj] = create_resp_config(app, pseObj, dbObj, true, plan); % Includes Hotstart Actions
 
-                %%%% ------ 2. Project Forcing (Library: stormsim_pros_formater / stormsim_lcs)
+                %%%% ------ 2. Project Forcing (Library: chess_pros_formater / chess_lcs)
                 step_str = 'Creating Replicates';
                 unc_str = 'Applying Uncertainty';
                 if config.workflow == 3
@@ -2678,7 +2678,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     step_str = 'Formatting Storms';
                     unc_str = 'No Uncertainty (Deterministic)';
                 end
-                prog = uiprogressdlg(app.UIFigure, 'Title', 'StormSim Simulation Progress', 'Message', step_str, 'Value', 1/5);
+                prog = uiprogressdlg(app.UIFigure, 'Title', 'CHESS Simulation Progress', 'Message', step_str, 'Value', 1/5);
                 [project_forcing, config] = call_project_forcing_formater(config, S.storm, S.prob_mass);
 
                 %%%% ------ 3. Add Uncertainty (Library: apply_uncertainty)
@@ -2689,7 +2689,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 set(prog, 'Value', 3/5, 'Message', 'Adjust Project Forcing');
                 [project_forcing, config] = call_project_forcing_adjuster(config, project_forcing, pseObj);
 
-                %%%% ---- 5. Run StormSim Simulation
+                %%%% ---- 5. Run CHESS Simulation
                 set(prog, 'Value', 4/5, 'Message', 'Computing Project Responses');
                 call_project_response(config, project_forcing, pseObj, 0);
                 % Results Saved (Written Once, At The End Of call_project_response): Previous Run's Files No Longer Needed
@@ -2714,7 +2714,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 % Failed Before The Results Were Saved: Slot Back To The Previous Run (Config, Forcing, LCS Seed Matching The Results On
                 % Disk). Best Effort: A Restore Failure Is Reported With, Not Instead Of, The Run Error
                 failed = app.restore_sim_files(backed);
-                msg = ['StormSim run failed: ' ME.message];
+                msg = ['CHESS run failed: ' ME.message];
                 if ~isempty(failed)
                     msg = [msg newline newline 'Previous run files not restored: ' strjoin(failed, '; ')];
                 end

@@ -1,4 +1,4 @@
-function StormSim_PST_plot(SST_output, pst_options, plot_options)
+function CHESS_PST_plot(SST_output, pst_options, plot_options)
 % Colors for percentiles plots
 cs={'r-.','b--','b--','r-.'};
 prc=round(pst_options.prc);
@@ -21,7 +21,7 @@ if ~strcmp(SST_output.MRL_output.Selection.Criterion{:},'None')
         % Intialize Figure
         fig=figure('units','inches','Position',[1 1 6 6],'Color',[1 1 1],'visible','off');
         % Title
-        title({'StormSim-SST - Mean Residual Life';['Station: ',SST_output.staID]},'FontSize',12);
+        title({'CHESS-SST - Mean Residual Life';['Station: ',SST_output.staID]},'FontSize',12);
         % Set Base Axes Properties
         axes('XGrid','on','XMinorTick','on','YGrid','on','YMinorTick','on','FontSize',12);
         % Plot Each Axis
@@ -99,7 +99,7 @@ ax = axes('xscale','log','XGrid','on','XMinorTick','on',...
 % Hold Properties
 hold(ax, 'on');
 % Title
-title({'StormSim-SST '; ['Station: ',SST_output.staID]}, 'FontSize',12);
+title({'CHESS-SST '; ['Station: ',SST_output.staID]}, 'FontSize',12);
 % Format X Axis
 if pst_options.use_AEP == 1
     xlim(ax, [1e-4 1]);

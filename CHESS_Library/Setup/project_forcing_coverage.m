@@ -9,11 +9,11 @@ coverage per config.storm_sampling). A cache having MORE than requested
 flagged as missing.
 
 For LCS (config.workflow == 3), use_peaks/has_peaks is deliberately
-EXCLUDED from the comparison -- stormsim_lcs.m unconditionally builds a
+EXCLUDED from the comparison -- chess_lcs.m unconditionally builds a
 dummy Peaks dataset from Timeseries max() for sampling purposes even
 when use_peaks == 0, so has_peaks is true for every LCS cache regardless
 of what was requested; checking it there produces false "covered"
-results. PROS (stormsim_pros_formater.m) has no such proxy, so
+results. PROS (chess_pros_formater.m) has no such proxy, so
 use_peaks/has_peaks stays in the check for PROS exactly as it always has.
 
 %% INPUTS

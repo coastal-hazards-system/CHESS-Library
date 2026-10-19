@@ -1,9 +1,9 @@
-function [sections, rows] = read_stormsim_input(file)
+function [sections, rows] = read_chess_input(file)
 %{
     %% DESCRIPTION
-        Reads a StormSim input file or PSE template (.xlsx or .csv), shared
+        Reads a CHESS input file or PSE template (.xlsx or .csv), shared
         by the library (call_input_parser.m) and the GUI
-        (stormsimProject.get_library_template). Layout independent: every
+        (chessProject.get_library_template). Layout independent: every
         'Model Variable Symbol' header cell (any row, any column; sections
         may sit side by side in several column blocks, in any order) starts
         a section whose title is the cell above the header. Section rows
@@ -17,7 +17,7 @@ function [sections, rows] = read_stormsim_input(file)
         removed reads the same. Missing cells become ''.
 
     %% INPUTS
-        file: StormSim input file / PSE template (.xlsx or .csv).      | char
+        file: CHESS input file / PSE template (.xlsx or .csv).      | char
 
     %% OUTPUTS
         sections: One field per known section (general, forcing,        | struct

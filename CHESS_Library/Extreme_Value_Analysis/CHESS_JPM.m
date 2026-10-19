@@ -1,4 +1,4 @@
-%% StormSim_JPM_Tool.m
+%% CHESS_JPM_Tool.m
 %{
 SST Input Data Structures:
 
@@ -83,12 +83,12 @@ plot_options.(XX), where XX represents
 %}
 
 %}
-function [JPM_output] = StormSim_JPM(response_data, jpm_options, plot_options)
+function [JPM_output] = CHESS_JPM(response_data, jpm_options, plot_options)
 %% General settings
 if jpm_options.stat_print == 1
     clc;
     disp(['***********************************************************' newline...
-        '***         StormSim-JPM Tool Alpha Version 0.3         ***' newline...
+        '***         CHESS-JPM Tool Alpha Version 0.3         ***' newline...
         '***                Release 1 - 20210831                 ***' newline...
         '***                 FOR  TESTING  ONLY                  ***' newline...
         '***********************************************************']);
@@ -137,24 +137,24 @@ if jpm_options.stat_print == 1
     disp('*** Step 3: Performing integration')
 end
 %
-JPM_output = StormSim_JPM_integration(response_data, jpm_options, plot_options);
+JPM_output = CHESS_JPM_integration(response_data, jpm_options, plot_options);
 % Plot hazard curves
 if plot_options.create_plots == 1
     if jpm_options.stat_print == 1
         disp('*** Step 3: Plotting hazard curves');
     end
-    StormSim_JPM_plot(JPM_output, jpm_options, plot_options);
+    CHESS_JPM_plot(JPM_output, jpm_options, plot_options);
     % Store output
     if jpm_options.stat_print == 1
         disp(['*** Step 4: Saving results here: ',path_out]);
     end
-    save([plot_options.('path_out'), 'StormSim_JPM_' plot_options.staID 'output.mat'],'JPM_output','-v7.3');
+    save([plot_options.('path_out'), 'CHESS_JPM_' plot_options.staID 'output.mat'],'JPM_output','-v7.3');
 end
 
 
 if jpm_options.stat_print == 1
     disp('*** Evaluation finished.');
-    disp('*** StormSim-JPM Tool terminated.');
+    disp('*** CHESS-JPM Tool terminated.');
 end
 
 %% AUXIALIARY FUNCTIONS (ERROR HANDELING)

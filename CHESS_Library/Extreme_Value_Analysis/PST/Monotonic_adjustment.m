@@ -2,7 +2,7 @@
 %{
 By: E. Ramos-Santiago
 Description: Script to adjust the trend of hazard curves with jumps. The
-  StormSim-SST tool can produce non-monotonic curves when the GPD threshold
+  CHESS-SST tool can produce non-monotonic curves when the GPD threshold
   parameter returned by the MRL selection method is too low. This causes
   incomplete random samples and the potential to have jumps in the mean
   curve and CLs.

@@ -1,4 +1,4 @@
-classdef stormsimProject < handle
+classdef chessProject < handle
     %% PROPERTIES
     properties (Access=public)
         name char
@@ -25,7 +25,7 @@ classdef stormsimProject < handle
 
     %% CONSTRUCTOR
     methods (Access=public)
-        function obj = stormsimProject(name, path, vdatum, CLs, unitsys)
+        function obj = chessProject(name, path, vdatum, CLs, unitsys)
             arguments
                 name (1, :) {mustBeText}
                 path (1, :) {mustBeText}
@@ -90,8 +90,8 @@ classdef stormsimProject < handle
                 structure.offshore_elevation_source = elevation_source;
             end
             % Library Transect Plot (Base Class: No Workflow Needed)
-            ssPlot = StormsimPlotsBase(config, [], [], [], [], structure, base_fnt, obj.unitsys);
-            ax = ssPlot.pse_transect_plot(ax, []);
+            chessPlot = CHESSPlotsBase(config, [], [], [], [], structure, base_fnt, obj.unitsys);
+            ax = chessPlot.pse_transect_plot(ax, []);
             % Remove Library Annotation Text Box (Offshore Slope/Elevation) Unless Requested
             if ~keep_text_box
                 delete(findobj(ax.Children, 'flat', 'Type', 'text'));
@@ -350,7 +350,7 @@ classdef stormsimProject < handle
             % source_paths (CHS Sources Outside The Project) And outpath_dirlist (Rebuilt On Use) Are Left As Is
             old_dir = fullfile(obj.path, obj.name);
             new_dir = fullfile(new_root, obj.name);
-            remap = @(p) stormsimProject.relocate_path(p, old_dir, new_dir);
+            remap = @(p) chessProject.relocate_path(p, old_dir, new_dir);
             obj.tide_files_list = cellfun(remap, obj.tide_files_list, 'un', false);
             for pp = 1:numel(obj.project_response_files)
                 if ~iscell(obj.project_response_files{pp})
@@ -379,7 +379,7 @@ classdef stormsimProject < handle
 
     %%
     methods (Access = public)
-        function ss_structure = create_geometry(obj, pse_name, alt_name, pse_type)
+        function chess_structure = create_geometry(obj, pse_name, alt_name, pse_type)
             % Structure Step: Build Structure-Only Config From PSE Table
             pse_table = obj.get_project_field('pse_tables', pse_name, alt_name, 'alt');
             config = cell2struct(pse_table(:, 4), pse_table(:, 1), 1);
@@ -388,16 +388,16 @@ classdef stormsimProject < handle
             % Library Structure Rules (Berms, Floodwall Toe)
             config = finalize_structure_config(config);
             % Library Geometry (Suppress Status Print)
-            [~, ss_structure] = evalc('create_structure_geometry(config)');
+            [~, chess_structure] = evalc('create_structure_geometry(config)');
             % GUI Fields. offshore_elevation: Fallback Offshore Elevation (PSE Table Row, Template Geometry Section), Used By
             % Runs When The Storm DB Has No Study Grid Value (create_resp_config); PSEs Created Before The Row Have None
-            ss_structure.add_toe_berm = config.add_toe_berm;
+            chess_structure.add_toe_berm = config.add_toe_berm;
             if isfield(config, 'offshore_elevation')
-                ss_structure.offshore_elevation = config.offshore_elevation;
+                chess_structure.offshore_elevation = config.offshore_elevation;
             end
-            ss_structure.pse_type = pse_type;
+            chess_structure.pse_type = pse_type;
             % Set Geometry
-            obj.set_project_field('pse_geometry', ss_structure, pse_name, alt_name, 'alt');
+            obj.set_project_field('pse_geometry', chess_structure, pse_name, alt_name, 'alt');
         end
     end
 
@@ -421,7 +421,7 @@ classdef stormsimProject < handle
         end
 
         function tpl = get_library_template(pse_type)
-            % Reads StormSim-Library Input Template For PSE Type.
+            % Reads CHESS-Library Input Template For PSE Type.
             % Output: struct with one field per template section (general,
             % forcing, geometry, properties, responses, mcs, csr, pros),
             % each an N x 4 cell {symbol, description, units, value}.
@@ -431,11 +431,11 @@ classdef stormsimProject < handle
             end
             % Internal Template Per Library Structure Type: <name>.csv (Primary, No Excel Needed), Else <name>.xlsx
             fnames = {'levee_pse', 'floodwall_pse', 'rubble_mound_pse', 'low_crested_breakwater_pse'};
-            fname = fnames{stormsimProject.get_struc_type(pse_type)};
-            % Templates Live In StormSim_Library\PSE_Templates (Setup's Sibling Folder)
+            fname = fnames{chessProject.get_struc_type(pse_type)};
+            % Templates Live In CHESS_Library\PSE_Templates (Setup's Sibling Folder)
             setup_dir = fileparts(which('create_structure_geometry'));
             if isempty(setup_dir)
-                error('StormSim-Library is not on the MATLAB path.');
+                error('CHESS-Library is not on the MATLAB path.');
             end
             fpath = fullfile(fileparts(setup_dir), 'PSE_Templates', [fname '.csv']);
             if ~isfile(fpath)
@@ -453,8 +453,8 @@ classdef stormsimProject < handle
                     return
                 end
             end
-            % Parse Template (Library read_stormsim_input, Same Reader As call_input_parser)
-            tpl = read_stormsim_input(fpath);
+            % Parse Template (Library read_chess_input, Same Reader As call_input_parser)
+            tpl = read_chess_input(fpath);
             cache(fpath) = struct('datenum', finfo.datenum, 'tpl', tpl);
         end
 
@@ -537,8 +537,8 @@ classdef stormsimProject < handle
             if ~ischar(p) || isempty(p)
                 return
             end
-            p_n = stormsimProject.norm_path(p);
-            old_n = stormsimProject.norm_path(old_dir);
+            p_n = chessProject.norm_path(p);
+            old_n = chessProject.norm_path(old_dir);
             n = numel(old_n);
             if strncmp(p_n, old_n, n) && (numel(p_n) == n || p_n(n+1) == '/')
                 p = fullfile(new_dir, p(n+1:end));
@@ -547,7 +547,7 @@ classdef stormsimProject < handle
 
         function tf = same_path(a, b)
             % [NEW] Same Folder/File ('\' Or '/', Trailing Separators Ignored, Case-Insensitive On Windows)
-            tf = strcmp(stormsimProject.norm_path(a), stormsimProject.norm_path(b));
+            tf = strcmp(chessProject.norm_path(a), chessProject.norm_path(b));
         end
     end
 

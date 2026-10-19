@@ -1,7 +1,7 @@
 function seed_file = lcs_sampling_seed_file(pf_file)
 %{
     %% DESCRIPTION
-        LCS sampling seed file written by stormsim_lcs next to the project forcing
+        LCS sampling seed file written by chess_lcs next to the project forcing
         file (<prefix>_sampling_seed.mat): effective sampling mode
         (lcs_restrict_sampling_rate), sampled life cycles per storm type
         (sampled_ids.XC/.TC: identity columns [storm_ID, intensity_bin, Sim_Year,

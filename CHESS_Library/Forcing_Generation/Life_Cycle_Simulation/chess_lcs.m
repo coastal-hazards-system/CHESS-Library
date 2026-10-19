@@ -1,4 +1,4 @@
-function [project_forcing, config] = stormsim_lcs(config, storm, prob_mass)
+function [project_forcing, config] = chess_lcs(config, storm, prob_mass)
 %{
 INPUTS:
      config.StormSamplingDropDown.Value; -> 'Extratropical Only' , 'Tropical Only' , 'Combined Sampling'
@@ -88,7 +88,7 @@ switch storm_sampling
 end
 
 % Command Prompts
-disp('   Running StormSim: Monte Carlo Simulation (Storm Sampling)....');
+disp('   Running CHESS: Monte Carlo Simulation (Storm Sampling)....');
 
 %% REFERENCE CASE SAMPLING SEED (load_project_forcing = 1) OR OWN CACHED SAMPLING (hotstart_level 'reuse_sampling')
 % Storm Types Reused, Effective Sampling Mode And Convergence-Check Storm Types (Shared With The GUI)
@@ -102,11 +102,11 @@ reused = reuse.reused;
 if config.load_project_forcing == 1
     if reuse.found && ~reuse.seed_found
         % warning('off','all') Is Active Here: Enable This One So It Is Shown
-        warning('on', 'stormsim_lcs:referenceSeedNotFound');
-        warning('stormsim_lcs:referenceSeedNotFound', ['Reference case ''%s'' has no sampling seed file; its sampling cannot be ',...
+        warning('on', 'chess_lcs:referenceSeedNotFound');
+        warning('chess_lcs:referenceSeedNotFound', ['Reference case ''%s'' has no sampling seed file; its sampling cannot be ',...
             'reused. Life cycles will be sampled fresh (as if load_project_forcing = 0).\n   %s'],...
             config.ref_case_name, lcs_sampling_seed_file(mcs_ref_pth));
-        warning('off', 'stormsim_lcs:referenceSeedNotFound');
+        warning('off', 'chess_lcs:referenceSeedNotFound');
     elseif reuse.found
         for kk = find(~reused)
             disp(['     Warning: ref_case_name ('  config.ref_case_name ') does not have ' smpl_list{kk} ' sampling information...']);
@@ -118,10 +118,10 @@ if config.load_project_forcing == 1
             fallback = 'Storms are sampled fresh instead.';
         end
         % warning('off','all') Is Active Here: Enable This One So It Is Shown
-        warning('on', 'stormsim_lcs:referenceNotFound');
-        warning('stormsim_lcs:referenceNotFound', ['load_project_forcing = 1, but the project forcing of ref_case_name (%s) ',...
+        warning('on', 'chess_lcs:referenceNotFound');
+        warning('chess_lcs:referenceNotFound', ['load_project_forcing = 1, but the project forcing of ref_case_name (%s) ',...
             'was not found at:\n   %s\n%s'], config.ref_case_name, mcs_ref_pth, fallback);
-        warning('off', 'stormsim_lcs:referenceNotFound');
+        warning('off', 'chess_lcs:referenceNotFound');
     end
 end
 if reuse.own
@@ -397,9 +397,9 @@ warning('on','all');
 % Full Poisson (mode 0): Life Cycles Without Storms Are Valid Outcomes, No Further Restriction.
     function check_storms_per_life_cycle(stm_type, stm_rate, n_years, mode)
         if ~(stm_rate > 0)
-            error('stormsim_lcs:rateTooLow', 'stormsim_lcs: the %s storm rate is %g storms/yr; no %s storms can be sampled.', stm_type, stm_rate, stm_type);
+            error('chess_lcs:rateTooLow', 'chess_lcs: the %s storm rate is %g storms/yr; no %s storms can be sampled.', stm_type, stm_rate, stm_type);
         elseif mode == 1 && ~(stm_rate*n_years > 1)
-            error('stormsim_lcs:rateTooLow', ['stormsim_lcs: expected %s storms per life cycle = %.2f (%.3f storms/yr x %d yr). ',...
+            error('chess_lcs:rateTooLow', ['chess_lcs: expected %s storms per life cycle = %.2f (%.3f storms/yr x %d yr). ',...
                 'Rate-matched life-cycle sampling needs more than 1; increase mcs_nYears to at least %d.'],...
                 stm_type, stm_rate*n_years, stm_rate, n_years, floor(1/stm_rate) + 1);
         end
@@ -464,9 +464,9 @@ warning('on','all');
         msg = sprintf('%s: mcs_nLC = %d is below the %d life cycles required for convergence.', stm_type, conv.nLC, conv.nLC_req);
         if prompt ~= 1
             % warning('off','all') Is Active Here: Enable This One So It Is Shown
-            warning('on', 'stormsim_lcs:notConverged');
-            warning('stormsim_lcs:notConverged', '%s Continuing (lcs_convergence_prompt = 0).', msg);
-            warning('off', 'stormsim_lcs:notConverged');
+            warning('on', 'chess_lcs:notConverged');
+            warning('chess_lcs:notConverged', '%s Continuing (lcs_convergence_prompt = 0).', msg);
+            warning('off', 'chess_lcs:notConverged');
             return
         end
         while true
@@ -475,7 +475,7 @@ warning('on','all');
                 return
             elseif any(strcmp(reply, {'c', 'cancel'}))
                 warning('on','all');
-                error('stormsim_lcs:notConverged', ['stormsim_lcs: LCS cancelled. %s Set mcs_nLC >= %d in the input file ',...
+                error('chess_lcs:notConverged', ['chess_lcs: LCS cancelled. %s Set mcs_nLC >= %d in the input file ',...
                     '(or relax lcs_convergence_tol / lcs_convergence_confidence).'], msg, conv.nLC_req);
             end
         end

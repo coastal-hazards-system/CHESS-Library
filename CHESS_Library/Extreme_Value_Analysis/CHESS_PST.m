@@ -36,12 +36,12 @@ plot_options.(XX), where XX represents
     - y_log: Hazard curve y axis scale switch (1-log, 0-linear)
     - path_out: Output path
 %}
-function [SST_output] = StormSim_PST(response_data, pst_options, plot_options)
+function [SST_output] = CHESS_PST(response_data, pst_options, plot_options)
 %% Other settings
 if pst_options.stat_print == 1
     clc;
     disp(['***********************************************************' newline...
-        '***         StormSim-SST Tool Alpha Version 0.5         ***' newline...
+        '***         CHESS-SST Tool Alpha Version 0.5         ***' newline...
         '***                Release 1 - 20210809                 ***' newline...
         '***                 FOR  TESTING  ONLY                  ***' newline...
         '***********************************************************']);
@@ -131,8 +131,8 @@ try
     % Defien POT Dataset
     switch response_data.DataType
         case 'Timeseries' %Timeseries
-            % Execute StormSim-POT
-            [POT_samp,~] = StormSim_POT(procData(:,1), procData(:,2), pst_options.tLag, response_data.lambda, response_data.Nyrs); % [ timestamp, event_peak, lower_bound, upper_bound ]
+            % Execute CHESS-POT
+            [POT_samp,~] = CHESS_POT(procData(:,1), procData(:,2), pst_options.tLag, response_data.lambda, response_data.Nyrs); % [ timestamp, event_peak, lower_bound, upper_bound ]
         case 'POT'
             POT_samp = procData; % [ timestamp, event_peak, event_peak_with_tide ]
     end
@@ -141,11 +141,11 @@ try
     duplicate_indices=setdiff(1:numel(POT_samp(:,2)), w);
     POT_samp(duplicate_indices, 2) = POT_samp(duplicate_indices, 2) + 1e-6;
     %%%
-    % Execute StormSim-SST-Fit
-    [SST_output] = StormSim_PST_Fit(POT_samp(:, 2), POT_samp(:, 3), response_data.SLC, response_data.Nyrs, response_data.gprMdl, pst_options, plot_options);
+    % Execute CHESS-SST-Fit
+    [SST_output] = CHESS_PST_Fit(POT_samp(:, 2), POT_samp(:, 3), response_data.SLC, response_data.Nyrs, response_data.gprMdl, pst_options, plot_options);
     % Plot results
     if plot_options.create_plots == 1
-        StormSim_PST_plot(SST_output, pst_options, plot_options);
+        CHESS_PST_plot(SST_output, pst_options, plot_options);
     end
 catch ME
     SST_output.staID = plot_options.staID;
@@ -158,12 +158,12 @@ if pst_options.stat_print == 1
 end
 % Save Output
 if plot_options.create_plots == 1
-    save(fullfile(plot_options.('path_out'), ['StormSim_' SST_output.staID '_SST_output.mat']), 'SST_output', '-v7.3');
+    save(fullfile(plot_options.('path_out'), ['CHESS_' SST_output.staID '_SST_output.mat']), 'SST_output', '-v7.3');
 end
 if pst_options.stat_print == 1
     disp('*** Evaluation finished.' )
     disp(['****** Remember to check outputs Check_datasets and Removed_datasets.' newline])
-    disp('*** StormSim-SST Tool terminated.')
+    disp('*** CHESS-SST Tool terminated.')
 end
 
 %% ERROR HANDELING FUNCTION

@@ -23,7 +23,7 @@ function config = load_reference_tide_indices(config, project_forcing)
 % Inputs:
 %       config: Run configuration (workflow 3). Uses load_project_forcing, ref_case_name,
 %               apply_random_tides, tide_file, outfolder, project_name, struc_id,
-%               case_name, storm_db or region/sp_ID (stormsim_paths.m)
+%               case_name, storm_db or region/sp_ID (chess_paths.m)
 %               (plus the fields lcs_reference_reuse.m reads).
 %       project_forcing: LCS project forcing of this run (before adjustment).
 %
@@ -35,9 +35,9 @@ if ~isfield(config, 'workflow') || config.workflow ~= 3 ||...
         ~isfield(config, 'apply_random_tides') || config.apply_random_tides ~= 1
     return
 end
-% Reference Case Config: Same Project/PSE, Alternative ref_case_name, LCS, Same Storm DB (stormsim_paths.m)
-paths = stormsim_paths(config);
-ref_paths = stormsim_paths(config.outfolder, config.project_name, config.struc_id, config.ref_case_name, 3, paths.db);
+% Reference Case Config: Same Project/PSE, Alternative ref_case_name, LCS, Same Storm DB (chess_paths.m)
+paths = chess_paths(config);
+ref_paths = chess_paths(config.outfolder, config.project_name, config.struc_id, config.ref_case_name, 3, paths.db);
 ref_cfg = ref_paths.out_files.config;
 if ~isfile(ref_cfg)
     return
@@ -49,7 +49,7 @@ if ~isfield(ref, 'tide_file') || ~strcmp(char(ref.tide_file), char(config.tide_f
     disp(['     Tides: reference case ' config.ref_case_name ' used a different tide file; drawing new tide start hours.']);
     return
 end
-% Storm Types Whose Life Cycles Were Reused From The Reference (Same Rule As stormsim_lcs.m)
+% Storm Types Whose Life Cycles Were Reused From The Reference (Same Rule As chess_lcs.m)
 reuse = lcs_reference_reuse(config);
 for st = {'TC', 'XC'}
     fld = ['tide_indx_' lower(st{1})];
@@ -74,7 +74,7 @@ for st = {'TC', 'XC'}
 end
 end
 
-%% AUX FUNCTION: STORMS PER LIFE CYCLE (PEAKS ROWS; stormsim_lcs ALWAYS BUILDS Peaks.Default)
+%% AUX FUNCTION: STORMS PER LIFE CYCLE (PEAKS ROWS; chess_lcs ALWAYS BUILDS Peaks.Default)
 function counts = lc_storm_counts(project_forcing, st_type)
 counts = [];
 if isfield(project_forcing, 'Peaks') && isfield(project_forcing.Peaks, 'Default') && isfield(project_forcing.Peaks.Default, st_type)

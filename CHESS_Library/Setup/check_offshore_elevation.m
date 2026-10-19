@@ -49,7 +49,7 @@ sp_str = '';
 if isnumeric(config.sp_ID) && isscalar(config.sp_ID)
     sp_str = sprintf(' for SP%d', config.sp_ID);
 end
-% Storm Database Name: storm_db, Else The Database File Name (stormsim_paths.m Default <region>_SP<sp_ID>)
+% Storm Database Name: storm_db, Else The Database File Name (chess_paths.m Default <region>_SP<sp_ID>)
 db_name = '';
 if isfield(config, 'storm_db')
     db_name = char(string(config.storm_db));
@@ -58,6 +58,6 @@ if isempty(db_name) && isfield(config, 'out_files') && isfield(config.out_files,
     [~, db_name] = fileparts(config.out_files.storm_and_prob_mass);
 end
 error('check_offshore_elevation:missing',...
-    ['StormSim needs offshore_elevation (offshore end of the PSE transect; elevation, positive up, study datum): the storm database %s has no study grid value%s (%s) and the PSE geometry gives none.\n'...
+    ['CHESS needs offshore_elevation (offshore end of the PSE transect; elevation, positive up, study datum): the storm database %s has no study grid value%s (%s) and the PSE geometry gives none.\n'...
     'Enter offshore_elevation in the PSE geometry (GUI: PSE creation; input file: row offshore_elevation).'], db_name, sp_str, reason);
 end

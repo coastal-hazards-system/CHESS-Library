@@ -1,7 +1,7 @@
-function paths = stormsim_paths(varargin)
+function paths = chess_paths(varargin)
 %{
     %% DESCRIPTION
-        Single source of StormSim output folders and file names, shared by
+        Single source of CHESS output folders and file names, shared by
         the library and the GUI:
             <outfolder>\<project>\
                 Event_Database\<db>.mat, <db>_raw_files.mat
@@ -17,10 +17,10 @@ function paths = stormsim_paths(varargin)
 
     %% INPUTS
         Call forms:
-            paths = stormsim_paths(config)
-            paths = stormsim_paths(outfolder, project_name, pse, alt, workflow, db)
-            paths = stormsim_paths(outfolder, project_name)   (project level only)
-        config: StormSim configuration. Uses outfolder, project_name,
+            paths = chess_paths(config)
+            paths = chess_paths(outfolder, project_name, pse, alt, workflow, db)
+            paths = chess_paths(outfolder, project_name)   (project level only)
+        config: CHESS configuration. Uses outfolder, project_name,
             struc_id (PSE), case_name (alternative), workflow, and
             storm_db when non-empty; otherwise <db> = <region>_SP<sp_ID>. | struc
         outfolder: Root output folder. | char
@@ -56,7 +56,7 @@ if nargin == 1
     else
         db = [char(config.region) '_SP' num2str(config.sp_ID)];
     end
-    paths = stormsim_paths(config.outfolder, config.project_name, config.struc_id,...
+    paths = chess_paths(config.outfolder, config.project_name, config.struc_id,...
         config.case_name, config.workflow, db);
     return
 end
