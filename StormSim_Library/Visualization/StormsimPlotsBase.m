@@ -465,7 +465,7 @@ classdef StormsimPlotsBase
                 if ~any(response_to_view == ["Q_vol", "Q_vol_overflow", "Q_vol_wave_ot"])
                     resp_signal = resp_signal(cell2mat(stm_data(:,1)) == event_id);
                     resp_time = time_signal;
-                    resp_style = 'o';
+                    resp_style = '-'; % Hydrograph Of One Storm: Line (Peaks Keep 'o', One Point Per Storm)
                 else
                     resp_time = 1:length(resp_signal);
                     resp_style = '-';
