@@ -98,7 +98,7 @@ classdef det_methods < StormsimPlotsBase
             uilabel(top, 'Text', ['<b>Response Table</b> | ' lbl], 'Interpreter', 'html');
             axp = uipanel(gl, 'BorderType', 'none');
             ax = uiaxes(axp, 'Units', 'normalized', 'OuterPosition', [0 0 1 1]);
-            ut = uitable(gl, 'RowName', {}, 'FontSize', 11, 'SelectionType', 'column', 'Multiselect', 'on');
+            ut = uitable(gl, 'RowName', {}, 'FontSize', self.base_fnt - 1, 'SelectionType', 'column', 'Multiselect', 'on');
             st.order = {}; st.T = table(); st.id = [];
             if is_ts
                 uilabel(top, 'Text', 'Storm ID:', 'HorizontalAlignment', 'right');
@@ -123,6 +123,7 @@ classdef det_methods < StormsimPlotsBase
                 end
                 ut.Data = Tf;
                 ut.ColumnName = cellfun(@(v) self.column_name(v), vn, 'un', false);
+                if isnumeric(T.Time), ut.ColumnName{strcmp(vn, 'Time')} = 'Time [hrs]'; end % Timeseries: Storm Hours
                 ut.Selection = [];
                 redraw();
             end
@@ -179,26 +180,26 @@ classdef det_methods < StormsimPlotsBase
                         return
                     end
                     cla(ax, 'reset'); hold(ax, 'on'); grid(ax, 'on'); box(ax, 'on');
+                    set(ax, 'FontSize', self.base_fnt - 2, 'FontWeight', 'bold');
                     cols = lines(numel(sel)); side = {'left', 'right'};
-                    t_hrs = (0:height(st.T) - 1)'; % Storm Duration [hrs]
                     for g = 1:numel(grp)
                         yyaxis(ax, side{g});
                         members = find(gi' == g); labs = cell(1, numel(members)); any_log = false;
                         for m = 1:numel(members)
                             k = members(m);
                             [labs{m}, ~, lg] = self.field_info(sel{k}); any_log = any_log || lg == 1;
-                            plot(ax, t_hrs, st.T.(sel{k}), '-', 'Color', cols(k, :), 'LineWidth', 1.4, 'DisplayName', labs{m});
+                            plot(ax, st.T.Time, st.T.(sel{k}), '-', 'Color', cols(k, :), 'LineWidth', 1.4, 'DisplayName', labs{m});
                         end
-                        ylabel(ax, aux_methods.latex_escape(strjoin(labs, ', ')), 'Interpreter', 'latex', 'FontSize', self.base_fnt);
+                        ylabel(ax, aux_methods.latex_escape(strjoin(labs, ', ')), 'Interpreter', 'latex', 'FontSize', self.base_fnt, 'FontWeight', 'bold');
                         ax.YColor = [.15 .15 .15];
                         ax.YScale = aux_methods.tern(any_log, 'log', 'linear');
                         vals = cellfun(@(v) st.T.(v), sel(members), 'un', false);
                         aux_methods.pad_limits(ax, 'Y', vertcat(vals{:}));
                     end
                     legend(ax, 'Interpreter', 'latex', 'Location', 'northoutside', 'Orientation', 'horizontal', 'FontSize', self.base_fnt - 1);
-                    xlabel(ax, 'Storm Duration [hrs]');
-                    title(ax, sprintf('Storm %g', st.id));
-                    ax.XLim = [0 max(t_hrs(end), 1)];
+                    xlabel(ax, 'Storm Duration [hrs]', 'Interpreter', 'latex', 'FontSize', self.base_fnt, 'FontWeight', 'bold');
+                    title(ax, sprintf('Storm %g', st.id), 'Interpreter', 'latex', 'FontSize', self.base_fnt + 2, 'FontWeight', 'bold');
+                    ax.XLim = [0 max(st.T.Time(end), 1)];
                 end
             end
         end
@@ -233,11 +234,11 @@ classdef det_methods < StormsimPlotsBase
         end
 
         function T = storm_table(self, ds_query, id)
-            % One Row Per Time Step Of One Storm
+            % One Row Per Time Step Of One Storm; Time = Elapsed Storm Hours (Hourly Records)
             d = self.det_data(ds_query);
             k = find(d.storm_id == id, 1);
-            T = table(datetime(d.time{k}(:), 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm'), 'VariableNames', {'Time'});
-            n = height(T);
+            n = numel(d.time{k});
+            T = table((0:n - 1)', 'VariableNames', {'Time'});
             for f = self.available_fields(ds_query)
                 v = d.(f{1});
                 if iscell(v) && numel(v{k}) == n

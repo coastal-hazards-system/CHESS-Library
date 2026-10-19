@@ -148,10 +148,10 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         simKey % [NEW] Saved Simulation Key (Config File Of Alternative + Workflow + Run Tab Storm DB) Last Resolved By sync_saved_sim
         declinedSimKey = '' % Saved Simulation Key Whose Load Was Declined ("Keep current inputs"): Results Tab Kept Cleared While sim_key() Equals It
         oldDbWarned = {} % Storm DB Files (output_paths.storm_db) Already Alerted As Older StormSim Version (Once Per Session)
+        plotFontSize = 12 % Base Font Of Every GUI Plot, Tab And Pop-Out (Library Rule: Title +2, Labels Base, Ticks -2)
+        resultsMirror % Panel Over PSEAxes_3 (Same Grid Cell) Showing A Multi-Panel Results Plot When The Cell Is Big Enough (Created In startupFcn)
+        resultsMirrorFits = [] % Fit State Of The Shown Multi-Panel Results Plot ([] If None): The Tab Resize Redraws Only When It Flips
     end
-
-
-
 
 
     methods (Access = private)
@@ -498,6 +498,13 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             tf = ~isempty(app.wProj) && ~isempty(app.pse_indx) && ~isempty(app.alt_indx);
         end
 
+        function hide_results_mirror(app)
+            % [NEW] Results Tab Back To Its Axes: Clear And Hide The Multi-Panel Mirror Panel
+            delete(app.resultsMirror.Children);
+            app.resultsMirror.Visible = 'off';
+            app.PSEAxes_3.Visible = 'on';
+        end
+
         function import_project_mat(app, mat_file)
             % [NEW] Import A Project From Its Project File <root>\<name>\StormSim_project_<name>.mat. Project Folder Not Where It
             % Was Saved (Moved, Copied, Extracted Archive): Stored Paths Relocated To <root>\<name> (Before append_project:
@@ -595,7 +602,6 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             app.populateResultsTab();
         end
 
-
         function storm = load_storm(app, dbObj)
             % [NEW] Cached Load Of Storm DB "storm" Variable
             key = dbObj.output_paths.storm_db;
@@ -631,7 +637,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             if ~isempty(row) && strcmp(row.key, 'det_table')
-                app.plot_project_responses([], 14);
+                app.plot_project_responses([], app.plotFontSize);
                 return
             end
             if isempty(app.resultsPopout) || ~isvalid(app.resultsPopout)
@@ -640,7 +646,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 clf(app.resultsPopout);
                 figure(app.resultsPopout);
             end
-            app.plot_project_responses(app.resultsPopout, 14);
+            app.plot_project_responses(app.resultsPopout, app.plotFontSize);
         end
 
         function vals = parse_numeric_list(app, txt)
@@ -669,12 +675,13 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
 
         function plot_project_responses(app, target, base_fnt)
             % [NEW] Results Viewer: Draw The Selected Plot Type With Its StormSim-Library Method.
-            %   plot_project_responses(app)                   -> Results Tab Axes + Results Table (Multi-Panel Plots: Note Only)
+            %   plot_project_responses(app)                   -> Results Tab Axes + Results Table (Multi-Panel Plots: Drawn
+            %                                                    In The Tab Mirror Panel If The Cell Is Big Enough, Else A Note)
             %   plot_project_responses(app, target, base_fnt) -> Pop-Out (Classic Figure Or Axes)
             tab_mode = nargin < 2;
             if tab_mode
                 target = app.PSEAxes_3;
-                base_fnt = 10;
+                base_fnt = app.plotFontSize;
             end
             state = app.resultsState;
             row = app.results_plot_row();
@@ -684,15 +691,22 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             no_storm_type = strcmp(app.StormTypeDropDown_results.Value, '-');
             if tab_mode
                 app.reset_results_axes();
+                app.resultsMirrorFits = [];
                 app.PSETable_3.Data = {};
                 app.PSETable_3.ColumnName = {};
                 if no_storm_type
                     title(app.PSEAxes_3, 'No storm type with data for this plot');
                     return
                 end
-                if row.multi_panel % Pop-Out Only: Grey Out The Tab Axes
-                    app.show_popout_note();
-                    return
+                if row.multi_panel % Also In The Pop-Out: Mirror In The Tab If It Fits, Else Grey Out The Tab Axes
+                    app.resultsMirrorFits = app.results_mirror_fits(row);
+                    if ~app.resultsMirrorFits
+                        app.show_popout_note(row);
+                        return
+                    end
+                    app.PSEAxes_3.Visible = 'off';
+                    app.resultsMirror.Visible = 'on';
+                    target = uigridlayout(app.resultsMirror, [1 1]);
                 end
             elseif no_storm_type
                 return
@@ -818,9 +832,9 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 end
                 uialert(app.UIFigure, me.message, ['Results Plot: ' row.label], 'Icon', 'warning');
             end
-            % Right-Click Plot Options On The Tab Plot
+            % Right-Click Plot Options On The Tab Plot (And The Mirrored Multi-Panel Axes)
             if tab_mode
-                set(findobj(app.PSEAxes_3, '-property', 'ContextMenu'), 'ContextMenu', app.resultsMenu);
+                set(findobj([app.PSEAxes_3; app.resultsMirror.Children], '-property', 'ContextMenu'), 'ContextMenu', app.resultsMenu);
             end
         end
 
@@ -831,7 +845,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             tab_mode = nargin < 2;
             if tab_mode
                 ax = app.StormDBAxes;
-                base_fnt = 10;
+                base_fnt = app.plotFontSize;
             end
             % Pull Storm DB (Cached). Storm DB Of An Older StormSim Version (No db_info): Alert, No Plot
             dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db');
@@ -1238,7 +1252,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             % PSE Viewer
             if app.has_active_alt()
                 [pse_name, alt_name] = app.get_active_names();
-                app.wProj.plot_geometry(pse_name, alt_name, app.PSEAxes);
+                app.wProj.plot_geometry(pse_name, alt_name, app.PSEAxes, app.plotFontSize);
             else
                 app.reset_tab('pse');
             end
@@ -1281,6 +1295,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         function reset_results_axes(app)
             % [NEW] Clean Results Axes Between Plot Types (Plots, Colorbar, Legend, Rulers, Scales) & Keep Its Right-Click Menu
             ax = app.PSEAxes_3;
+            app.hide_results_mirror();
             colorbar(ax, 'off');
             legend(ax, 'off');
             cla(ax, 'reset');
@@ -1519,6 +1534,32 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             dsw = app.resultsState.prob_mass;
         end
 
+        function fits = results_mirror_fits(app, row)
+            % [NEW] Does The Results Plot Cell (StormDBViewerGrid_2 Row 1) Reach The Plot's Minimum Mirror Size?
+            % The Cell Is Derived From The Results Tab Size: After A Resize The Grid's Own Positions Are Still The Old Ones
+            % In The Tab's SizeChangedFcn, The Tab Size Is Already The New One
+            gl = app.StormDBViewerGrid_2;
+            tab = app.ResultsViewerTab.Position;
+            rows = gl.RowHeight;
+            is_fixed = cellfun(@isnumeric, rows);
+            weights = cellfun(@(r) str2double(erase(r, 'x')), rows(~is_fixed));
+            free_h = tab(4) - gl.Padding(2) - gl.Padding(4) - gl.RowSpacing*(numel(rows) - 1) - sum([rows{is_fixed}]);
+            cell_size = [tab(3) - gl.Padding(1) - gl.Padding(3), free_h*weights(1)/sum(weights)]; % Row 1 Is Weighted
+            fits = all(cell_size >= app.results_mirror_min_size(row.key));
+        end
+
+        function sz = results_mirror_min_size(app, key)
+            % [NEW] Minimum Results Plot Cell [Width Height] (px) To Also Draw A Multi-Panel Plot In The Tab (Inf: Pop-Out Only)
+            switch key
+                case 'event'
+                    sz = [560 420];
+                case {'dashboard', 'scheme'}
+                    sz = [1000 600];
+                otherwise % det_table: Its Own Table Window
+                    sz = [Inf Inf];
+            end
+        end
+
         function cat = results_plot_catalog(app)
             % [NEW] Results Plot Types -> StormSim-Library Plot Methods (One Row Per Plot), Filtered For The Loaded Run.
             %   key | label | workflows | data types | needs S (armor damage) | rubble mound only | multi-panel (pop-out only) | plot options
@@ -1718,6 +1759,18 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
+        function results_tab_resized(app)
+            % [NEW] Results Tab SizeChangedFcn (Set In startupFcn): Redraw A Shown Multi-Panel Plot Only When It Starts Or
+            % Stops Fitting The Tab (A Fitting Mirror Rescales With Its Grid), So Dragging The Window Does Not Redraw It
+            row = app.results_plot_row();
+            if isempty(app.resultsMirrorFits) || isempty(row) || ~row.multi_panel
+                return
+            end
+            if app.results_mirror_fits(row) ~= app.resultsMirrorFits
+                app.plot_project_responses();
+            end
+        end
+
         function plan = run_hotstart_plan(app, config, old)
             % [NEW] Run With A Saved Simulation: Library Hotstart Level (hotstart_plan) Of The Current Inputs (config, Not For Run)
             % Against The Saved Run (old). GUI Inputs The Library Lists Do Not Cover (DB Uncertainties, Region)
@@ -1794,8 +1847,6 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 run_date = char(datetime(dir(out_files.resp_data).datenum, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm'));
             end
         end
-
-        % ---------------- [NEW] HELPER FUNCTIONS ----------------
 
         function set_active_selection(app, proj_name, pse_name, alt_name)
             % [NEW] Single Place That Resolves The Active Project/PSE/Alternative.
@@ -1988,14 +2039,19 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             app.simStatusBar.Value = msg;
         end
 
-        function show_popout_note(app)
-            % [NEW] Multi-Panel Results Plots Are Pop-Out Only: Grey Out The Tab Axes With A Note
+        function show_popout_note(app, row)
+            % [NEW] Multi-Panel Results Plot Not Drawn In The Tab: Grey Out The Tab Axes With A Note (+ Resize Hint If The
+            % Plot Can Be Mirrored In A Bigger Window)
             ax = app.PSEAxes_3;
             ax.Color = [0.92 0.92 0.92];
             ax.XTick = [];
             ax.YTick = [];
-            text(ax, 0.5, 0.5, {'Multi-panel plot', 'Shown in the pop-out window'}, 'Units', 'normalized',...
-                'HorizontalAlignment', 'center', 'FontSize', 12, 'Color', [0.45 0.45 0.45], 'ContextMenu', app.resultsMenu);
+            note = {'Multi-panel plot', 'Shown in the pop-out window'};
+            if all(isfinite(app.results_mirror_min_size(row.key)))
+                note{end + 1} = 'Enlarge the StormSim window to show it here';
+            end
+            text(ax, 0.5, 0.5, note, 'Units', 'normalized', 'HorizontalAlignment', 'center',...
+                'FontSize', app.plotFontSize, 'Color', [0.45 0.45 0.45], 'ContextMenu', app.resultsMenu);
         end
 
         function [elev, source] = shown_offshore_elevation(app, dbObj)
@@ -2200,7 +2256,6 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             app.set_dropdown_items(app.StormIDDropDown_results, a_items);
             app.StormIDDropDown_results.Enable = a_on;
         end
-
     end
 
 
@@ -2231,6 +2286,13 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             uimenu(app.resultsMenu, 'Text', 'Plot Options...', 'MenuSelectedFcn', @(~, ~) app.results_plot_options_dialog());
             app.PSEAxes_3.ContextMenu = app.resultsMenu;
             app.resultsPlotOptions = struct();
+            % Multi-Panel Results Plots Mirrored In The Tab (Same Grid Cell As PSEAxes_3) When It Is Big Enough; Fit Re-Checked
+            % When The Results Tab Is Resized (SizeChangedFcn Needs AutoResizeChildren Off; The Tab's Only Child Is A Grid)
+            app.resultsMirror = uipanel(app.StormDBViewerGrid_2, 'BorderType', 'none', 'Visible', 'off');
+            app.resultsMirror.Layout.Row = 1;
+            app.resultsMirror.Layout.Column = 1;
+            app.ResultsViewerTab.AutoResizeChildren = 'off';
+            app.ResultsViewerTab.SizeChangedFcn = @(~, ~) app.results_tab_resized();
             % Empty State
             app.refresh_active_view();
 
@@ -2420,7 +2482,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         % Button pushed function: Button_5, ExtrudeTableButton, 
         % ...and 1 other component
         function ExtrudeTableButtonPushed(app, event)
-             % The Tab's Table (One Per Tab; The Button Sits In A Nested Grid, Not On The Tab)
+            % The Tab's Table (One Per Tab; The Button Sits In A Nested Grid, Not On The Tab)
             tab = ancestor(event.Source, 'matlab.ui.container.Tab');
             tbl = findobj(tab, '-isa', 'matlab.ui.control.Table');
             % Create new uifigure
@@ -2445,7 +2507,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         % ...and 1 other component
         function ExtrudeFigureButtonPushed(app, event)
             % Pop-Out: Redraw The Tab's Plot With Its StormSim-Library Plot Method In A Classic Figure
-            base_fnt = 14; % Larger Font For Stand-Alone Figure
+            base_fnt = app.plotFontSize; % Same Base Font As The Tab Plots
             tab = ancestor(event.Source, 'matlab.ui.container.Tab'); % Button Sits In A Nested Grid, Not On The Tab
             % Nothing To Plot -> Inform User (No Empty Figure)
             if isequal(tab, app.PSEViewerTab)
@@ -2478,6 +2540,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                     app.plot_project_responses(figure(), base_fnt);
                 end
             end
+
         end
 
         % Menu selected function: ImportCHSStudyHDF5Menu
@@ -2567,7 +2630,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
         function RunSimulationButtonPushed(app, event)
             % Get Window Position
             app.auxLib.set_window_position(app.UIFigure.Position);
-            waitbar_obj = [];
+            prog = []; % App-Scoped Progress Dialog: Locks The StormSim Window Only (Other MATLAB Windows Stay Usable)
             % Slot Files This Run Backed Up (backup_sim_files): Restored If The Run Fails, Dropped Once The Results Are Saved
             backed = [];
             try
@@ -2615,19 +2678,19 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                     step_str = 'Formatting Storms';
                     unc_str = 'No Uncertainty (Deterministic)';
                 end
-                waitbar_obj = app.auxLib.progress_window(1/5, step_str, 'StormSim Simulation Progress', waitbar_obj, false);
+                prog = uiprogressdlg(app.UIFigure, 'Title', 'StormSim Simulation Progress', 'Message', step_str, 'Value', 1/5);
                 [project_forcing, config] = call_project_forcing_formater(config, S.storm, S.prob_mass);
 
                 %%%% ------ 3. Add Uncertainty (Library: apply_uncertainty)
-                waitbar_obj = app.auxLib.progress_window(2/5, unc_str, 'StormSim Simulation Progress', waitbar_obj, false);
+                set(prog, 'Value', 2/5, 'Message', unc_str);
                 [project_forcing, config] = call_uncertainty_engine(config, project_forcing);
 
                 %%%% ----- 4. Add Forcing Adjustments (Library: adjust_project_forcing)
-                waitbar_obj = app.auxLib.progress_window(3/5, 'Adjust Project Forcing', 'StormSim Simulation Progress', waitbar_obj, false);
+                set(prog, 'Value', 3/5, 'Message', 'Adjust Project Forcing');
                 [project_forcing, config] = call_project_forcing_adjuster(config, project_forcing, pseObj);
 
                 %%%% ---- 5. Run StormSim Simulation
-                waitbar_obj = app.auxLib.progress_window(4/5, 'Computing Project Responses', 'StormSim Simulation Progress', waitbar_obj, false);
+                set(prog, 'Value', 4/5, 'Message', 'Computing Project Responses');
                 call_project_response(config, project_forcing, pseObj, 0);
                 % Results Saved (Written Once, At The End Of call_project_response): Previous Run's Files No Longer Needed
                 for kk = 1:numel(backed)
@@ -2638,14 +2701,15 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 backed = [];
 
                 %%%% ---- 6. Store Outputs On Project
-                waitbar_obj = app.auxLib.progress_window(4.99/5, 'Saving Outputs', 'StormSim Simulation Progress', waitbar_obj, false);
+                set(prog, 'Value', 4.99/5, 'Message', 'Saving Outputs');
                 app.wProj.set_project_field('stormDB_assignment', db_indx, pse_name, alt_name, 'alt');
                 app.wProj.set_project_field('project_response_files', config.out_files.resp_data, pse_name, alt_name, 'alt');
                 app.save_project();
-                app.auxLib.progress_window(5/5, 'Done', 'StormSim Simulation Progress', waitbar_obj, false);
+                set(prog, 'Value', 1, 'Message', 'Done');
+                close(prog);
             catch ME
-                if ~isempty(waitbar_obj) && isvalid(waitbar_obj)
-                    delete(waitbar_obj);
+                if ~isempty(prog) && isvalid(prog)
+                    close(prog);
                 end
                 % Failed Before The Results Were Saved: Slot Back To The Previous Run (Config, Forcing, LCS Seed Matching The Results On
                 % Disk). Best Effort: A Restore Failure Is Reported With, Not Instead Of, The Run Error
@@ -2810,7 +2874,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
                 uialert(app.UIFigure, ['Could not rebuild the PSE geometry: ' ME.message], 'PSE Viewer: Invalid Value');
                 return
             end
-            app.wProj.plot_geometry(pse_name, alt_name, app.PSEAxes);
+            app.wProj.plot_geometry(pse_name, alt_name, app.PSEAxes, app.plotFontSize);
             app.save_project();
             % Run Tab: Constants Row 3 (Resolved Offshore Elevation) And Status Bar (PSE Geometry Vs Loaded Results). Same Key: No sync_saved_sim
             dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
@@ -2821,6 +2885,7 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
             if ~isempty(app.resultsState)
                 app.set_sim_status(app.results_status());
             end
+
         end
     end
 
@@ -3185,8 +3250,9 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
 
             % Create StormDBViewerSplitGrid
             app.StormDBViewerSplitGrid = uigridlayout(app.StormDBViewerGrid);
-            app.StormDBViewerSplitGrid.ColumnWidth = {214, '1x'};
+            app.StormDBViewerSplitGrid.ColumnWidth = {'0.9x', '1x'};
             app.StormDBViewerSplitGrid.RowHeight = {'1x'};
+            app.StormDBViewerSplitGrid.ColumnSpacing = 3;
             app.StormDBViewerSplitGrid.Padding = [0 0 0 0];
             app.StormDBViewerSplitGrid.Layout.Row = 3;
             app.StormDBViewerSplitGrid.Layout.Column = 1;
@@ -3581,8 +3647,9 @@ classdef StormSim_UI_canvas_exported < matlab.apps.AppBase
 
             % Create StormDBViewerSplitGrid_2
             app.StormDBViewerSplitGrid_2 = uigridlayout(app.StormDBViewerGrid_2);
-            app.StormDBViewerSplitGrid_2.ColumnWidth = {214, '1x'};
+            app.StormDBViewerSplitGrid_2.ColumnWidth = {'0.9x', '1x'};
             app.StormDBViewerSplitGrid_2.RowHeight = {'1x'};
+            app.StormDBViewerSplitGrid_2.ColumnSpacing = 3;
             app.StormDBViewerSplitGrid_2.Padding = [0 0 0 0];
             app.StormDBViewerSplitGrid_2.Layout.Row = 3;
             app.StormDBViewerSplitGrid_2.Layout.Column = 1;

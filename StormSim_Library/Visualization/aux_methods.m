@@ -109,7 +109,7 @@ classdef aux_methods
             box(ax, 'on');
 
             % Define Figure Title
-            title(ax, aux_methods.latex_escape(title_str), 'FontSize', base_fnt, 'FontWeight', 'bold', 'Interpreter', 'latex');
+            title(ax, aux_methods.latex_escape(title_str), 'FontSize', base_fnt + 2, 'FontWeight', 'bold', 'Interpreter', 'latex');
 
             % Define X Label
             xlabel(ax, aux_methods.latex_escape(x_label), 'FontSize', ax_label_fnt, 'FontWeight', 'bold', 'Interpreter', 'latex');

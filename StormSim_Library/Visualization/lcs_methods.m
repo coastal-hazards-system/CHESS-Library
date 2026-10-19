@@ -148,7 +148,7 @@ classdef lcs_methods < StormsimPlotsBase
                     y_data(gg),...
                     [num2str(y_data(gg) ,'%0.2f') ' %'],...
                     'HorizontalAlignment','center',...
-                    'VerticalAlignment','bottom','FontWeight','bold','FontSize',14);
+                    'VerticalAlignment','bottom','FontWeight','bold','FontSize',self.base_fnt);
             end
             % Legend
             lg = legend(ax, 'Location', 'northwest', 'FontSize', ax.FontSize);
@@ -274,7 +274,7 @@ classdef lcs_methods < StormsimPlotsBase
             axs(1).YLim = [0 y_top];
             title(axs(1), aux_methods.latex_escape({sprintf('Storms Per Life Cycle (%s, %s Sampling)', ds_query.storm_type, mode_txt),...
                 sprintf('$\\lambda$ = %.3f storms/yr, N = %d yr, %d life cycles', lambda, n_years, n_lc)}));
-            xlabel(axs(1), 'Storms per life cycle'); ylabel(axs(1), 'Share of life cycles');
+            xlabel(axs(1), 'Storms per life cycle', 'FontSize', self.base_fnt); ylabel(axs(1), 'Share of life cycles', 'FontSize', self.base_fnt);
             legend(axs(1), 'Interpreter', 'latex', 'Location', 'northeast');
 
             %% (2) Storms Per Simulation Year
@@ -283,7 +283,7 @@ classdef lcs_methods < StormsimPlotsBase
             bar(axs(2), k2, share2, 0.8, 'FaceColor', c_bar, 'EdgeColor', 'none', 'DisplayName', 'Sampled years');
             plot(axs(2), k2, poisspdf(k2, lambda), 'o-', 'Color', c_ref, 'LineWidth', 1.2, 'MarkerFaceColor', c_ref, 'DisplayName', 'Poisson($\lambda$)');
             title(axs(2), 'Storms Per Simulation Year (All Life Cycles)');
-            xlabel(axs(2), 'Storms in a year'); ylabel(axs(2), 'Share of years');
+            xlabel(axs(2), 'Storms in a year', 'FontSize', self.base_fnt); ylabel(axs(2), 'Share of years', 'FontSize', self.base_fnt);
             legend(axs(2), 'Interpreter', 'latex', 'Location', 'northeast');
 
             %% (3) Event Type Mix
@@ -294,7 +294,7 @@ classdef lcs_methods < StormsimPlotsBase
             yline(axs(4), lambda, '--', 'Color', c_ref, 'LineWidth', 1.2, 'DisplayName', '$\lambda$');
             axs(4).XLim = [0.5, n_years + 0.5];
             title(axs(4), 'Mean Storms By Simulation Year');
-            xlabel(axs(4), 'Simulation year'); ylabel(axs(4), 'Storms per year');
+            xlabel(axs(4), 'Simulation year', 'FontSize', self.base_fnt); ylabel(axs(4), 'Storms per year', 'FontSize', self.base_fnt);
             legend(axs(4), 'Interpreter', 'latex', 'Location', 'best');
 
             %% (5) Storm Selection: Sampled Vs Expected Share Per Storm
@@ -336,7 +336,7 @@ classdef lcs_methods < StormsimPlotsBase
                 legend(axs(5), 'Interpreter', 'latex', 'Location', 'northwest');
             end
             title(axs(5), {'Storm Selection', sprintf('%d sampled events, %d distinct storms', numel(ids), numel(u_ids))});
-            xlabel(axs(5), 'Expected share'); ylabel(axs(5), 'Sampled share');
+            xlabel(axs(5), 'Expected share', 'FontSize', self.base_fnt); ylabel(axs(5), 'Sampled share', 'FontSize', self.base_fnt);
 
             %% (6) Convergence Of Storms Per Life Cycle (Same Targets As lcs_convergence_check)
             % Rate Matched: Running Statistics Only (Rate-Matched Counts Do Not Follow The Poisson Targets By Design)
@@ -414,7 +414,7 @@ classdef lcs_methods < StormsimPlotsBase
             axs(6).XScale = 'log';
             axs(6).XLim = [1, x_max];
             title(axs(6), aux_methods.latex_escape({'Convergence Of Storms Per Life Cycle', verdict}));
-            xlabel(axs(6), 'Number of life cycles'); ylabel(axs(6), 'Storms per life cycle');
+            xlabel(axs(6), 'Number of life cycles', 'FontSize', self.base_fnt); ylabel(axs(6), 'Storms per life cycle', 'FontSize', self.base_fnt);
             legend(axs(6), 'Interpreter', 'latex', 'Location', 'best', 'FontSize', max(axs(6).FontSize - 2, 6));
         end
     end
@@ -929,7 +929,7 @@ classdef lcs_methods < StormsimPlotsBase
             colormap(ax, customColormap);
             %
             hb = colorbar(ax);
-            ylabel(hb, y_label_cb);
+            ylabel(hb, y_label_cb, 'FontSize', self.base_fnt);
             %
             if cb_log
                 set(ax, 'ColorScale', 'log');

@@ -49,12 +49,12 @@ classdef stormsimProject < handle
     methods (Access=public)
         function ax = plot_geometry(obj, pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source)
             % Library Transect Plot Of A PSE/Alternative Into ax.
-            %   base_fnt: Base Font Size (Default 10)
+            %   base_fnt: Base Font Size (Default 12, The GUI Plot Font)
             %   keep_text_box: Keep Library Offshore Slope/Elevation Text Box (Default false)
             %   offshore_elevation: Offshore Elevation For The Text Box ([] -> PSE Geometry Value, Else 'n/a')
             %   elevation_source: Label Shown Next To The Elevation (e.g. 'Storm DB: SP123')
             if nargin < 5 || isempty(base_fnt)
-                base_fnt = 10;
+                base_fnt = 12;
             end
             if nargin < 6 || isempty(keep_text_box)
                 keep_text_box = false;
