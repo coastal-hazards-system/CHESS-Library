@@ -263,10 +263,10 @@ if no_resp~=0
         [Kt] = cellfun(@(a,b,c) eurotop_wave_transmission(a,b,c,crest_width,seward_slope_tana,g),Hm0,Tp,Rc,'un',false);
         % Compute Transmitted Wave
         switch workflow
-            case {1,4} % PROS
-                Resp.Hm0t = cellfun(@(x, y) x.*y, project_forcing.('Hm0_no_rep'), Kt, 'un', false); 
-            case {2, 3} % DET, LCS
-                Resp.Hm0t = cellfun(@(x, y) x.*y, Hm0, Kt, 'un', false); % This is only correct for LCS, Deterministic Calc
+            case 1 % PROS-RB: Best-Estimate Incident Hm0 x Kt Replicates (Same As Forcing HCs)
+                Resp.Hm0t = cellfun(@(x, y) x.*y, project_forcing.('Hm0_no_rep'), Kt, 'un', false);
+            case {2, 3, 4} % DET, LCS, PROS-FB (Hm0 Is The Per-Sample MC Forcing)
+                Resp.Hm0t = cellfun(@(x, y) x.*y, Hm0, Kt, 'un', false);
         end
     end
     % Damaging Depth Response: Offshore Elevation From The Structure (Copied At Run Time By call_project_response.m;
