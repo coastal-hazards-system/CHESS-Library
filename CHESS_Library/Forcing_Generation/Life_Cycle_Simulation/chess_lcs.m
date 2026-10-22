@@ -231,7 +231,7 @@ end
             % Populate Storm Data
             for lc=1:number_of_life_cyles
                 % Create LCs
-                project_forcing.Peaks.Default.('XC'){lc, 1} = reference_lc_peaks(sampled_xc{lc}, storm_data, config.storm_duration/24); % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SSL, Hm0, Tp, wDir, storm_duration ]
+                project_forcing.Peaks.Default.('XC'){lc, 1} = reference_lc_peaks(sampled_xc{lc}, storm_data, config.storm_duration/24); % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
                 fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cyles)));
             end
             % XC Peaks Are Copula Samples: Use The Reference's Sampled Values (Sampling Seed File) Instead Of Database Peaks
@@ -286,7 +286,7 @@ end
             % Populate Storm Data
             for lc=1:number_of_life_cyles
                 % Create LCs
-                project_forcing.Peaks.Default.('TC'){lc, 1} = reference_lc_peaks(sampled_tc{lc}, storm_data, config.storm_duration/24); % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SSL, Hm0, Tp, wDir, storm_duration ]
+                project_forcing.Peaks.Default.('TC'){lc, 1} = reference_lc_peaks(sampled_tc{lc}, storm_data, config.storm_duration/24); % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
                 fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cyles)));
             end
         end
@@ -449,7 +449,7 @@ warning('on','all');
     end
 %% AUX FUNCTION: REFERENCE CASE LIFE CYCLE PEAKS FROM THE STORM DATABASE
     function lc_peaks = reference_lc_peaks(sampled, storm_data, duration_days)
-        % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SSL, Hm0, Tp, wDir, storm_duration ]
+        % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
         % Find Sampled Event On Storm Suite
         stm_indx = arrayfun(@(x) find(cell2mat(storm_data(:, 1)) == x), sampled(:, 1), 'un', true);
         % Pull Storm Data (Explicit Size: A Life Cycle Without Storms Must Still Have 9 Columns)

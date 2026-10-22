@@ -12,7 +12,6 @@ swl_u_r = config.chs_swl_u_r; % SWL Proportional
 hm0_u_a = config.chs_hm0_u_a; % Hm0 Absolute
 hm0_u_r = config.chs_hm0_u_r; % Hm0 Proportional
 datum = config.project_datum;
-use_tides = config.apply_random_tides;
 
 %% Determine Response Fields
 % Set Y Scale
@@ -26,13 +25,8 @@ switch staID
         uncert_treatment_jpm = 'combined';% JPM Uncertainty Treatment
         % Define Var Properties
         unit_label = 'm';
-        if use_tides == 1
-            y_label = ['SWL [' unit_label ', ' datum ']'];
-            var_name = 'SWL';
-        else
-            y_label = ['SSL [' unit_label ', ' datum ']'];
-            var_name = 'SSL';
-        end
+        y_label = ['SWL [' unit_label ', ' datum ']'];
+        var_name = 'SWL';
     case 'Hm0'
         U_a = hm0_u_a;
         U_r = hm0_u_r;
@@ -207,42 +201,42 @@ switch staID
         uncert_treatment_jpm = 'none';
         unit_label = '';
         var_name = '$\bar{\bar{S}}_{max}$ (leeside)';
-        y_label     = 'Yearly Mean Maximum Cummulative Damage ($\bar{\bar{S}}_{max}$)';
+        y_label     = 'Yearly Mean Maximum Cumulative Damage ($\bar{\bar{S}}_{max}$)';
     case 'Smax'
         U_a = 0;U_r = 0;
         y_scale_log = 0;
         uncert_treatment_jpm = 'none';
         unit_label = '';
         var_name =  '$\bar{\bar{S}}_{max}$ (seaside)';
-        y_label     = 'Yearly Mean Maximum Cummulative Damage ($\bar{\bar{S}}_{max}$)';
+        y_label     = 'Yearly Mean Maximum Cumulative Damage ($\bar{\bar{S}}_{max}$)';
     case 'S_seaside_with_repairs'
         U_a = 0;U_r = 0;
         y_scale_log = 0;
         uncert_treatment_jpm = 'none';
         unit_label = '';
         var_name = '$\bar{S}_{with\ repairs}$ (seaside)';
-        y_label     = 'Mean Cummulative Damage $\bar{S}$';
+        y_label     = 'Mean Cumulative Damage $\bar{S}$';
     case 'S_seaside_no_repairs'
         U_a = 0;U_r = 0;
         y_scale_log = 0;
         uncert_treatment_jpm = 'none';
         unit_label = '';
         var_name = '$\bar{S}_{no\ repairs}$ (seaside)';
-        y_label     = 'Mean Cummulative Damage $\bar{S}$';
+        y_label     = 'Mean Cumulative Damage $\bar{S}$';
     case 'S_leeside_no_repairs'
         U_a = 0;U_r = 0;
         y_scale_log = 0;
         uncert_treatment_jpm = 'none';
         unit_label = '';
         var_name = '$\bar{S}_{no\ repairs}$ (leeside)';
-        y_label     = 'Mean Cummulative Damage $\bar{S}$';
+        y_label     = 'Mean Cumulative Damage $\bar{S}$';
     case 'S_leeside_with_repairs'
         U_a = 0;U_r = 0;
         y_scale_log = 0;
         uncert_treatment_jpm = 'none';
         unit_label = '';
         var_name = '$\bar{S}_{with\ repairs}$ (leeside)';
-        y_label     = 'Mean Cummulative Damage $\bar{S}$';
+        y_label     = 'Mean Cumulative Damage $\bar{S}$';
     otherwise
         U_a = 0;U_r = 0;
         y_scale_log = 0;

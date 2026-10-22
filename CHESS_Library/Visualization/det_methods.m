@@ -119,7 +119,13 @@ classdef det_methods < CHESSPlotsBase
                 vn = T.Properties.VariableNames;
                 Tf = T;
                 for k = 1:numel(vn)
-                    if isfloat(Tf.(vn{k})), Tf.(vn{k}) = round(Tf.(vn{k}), 4); end
+                    if ~isfloat(Tf.(vn{k})), continue, end
+                    [~, ~, is_log] = self.field_info(vn{k});
+                    if is_log == 1 % Log-Scaled Fields (e.g. q): Scientific Notation So Small Values Do Not Show As 0
+                        Tf.(vn{k}) = arrayfun(@(x) sprintf('%.2e', x), Tf.(vn{k}), 'un', false);
+                    else
+                        Tf.(vn{k}) = round(Tf.(vn{k}), 4);
+                    end
                 end
                 ut.Data = Tf;
                 ut.ColumnName = cellfun(@(v) self.column_name(v), vn, 'un', false);
@@ -196,6 +202,8 @@ classdef det_methods < CHESSPlotsBase
                         vals = cellfun(@(v) st.T.(v), sel(members), 'un', false);
                         aux_methods.pad_limits(ax, 'Y', vertcat(vals{:}));
                     end
+                    % Single Unit Group: Hide The Empty Right Axis
+                    ax.YAxis(2).Visible = aux_methods.tern(numel(grp) == 1, 'off', 'on');
                     legend(ax, 'Interpreter', 'latex', 'Location', 'northoutside', 'Orientation', 'horizontal', 'FontSize', self.base_fnt - 1);
                     xlabel(ax, 'Storm Duration [hrs]', 'Interpreter', 'latex', 'FontSize', self.base_fnt, 'FontWeight', 'bold');
                     title(ax, sprintf('Storm %g', st.id), 'Interpreter', 'latex', 'FontSize', self.base_fnt + 2, 'FontWeight', 'bold');

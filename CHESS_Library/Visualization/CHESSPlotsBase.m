@@ -197,9 +197,6 @@ classdef CHESSPlotsBase
             [~, ~, ~,...
                 ~,...
                 ~, y_label_right, ~] = response_library_headers(self.config, char(var_right));
-
-            y_label_left = strrep(y_label_left, 'SSL','SWL');
-            y_label_right = strrep(y_label_right, 'SSL','SWL');
             % Define Title (PSE Line Only When A PSE Is Provided, e.g. Not For Storm Database Viewing)
             title_label = {['CHS Region: ' self.config.region ' | Savepoint: ' num2str(self.config.sp_ID) ' ']};
             if isfield(self.config, 'struc_id') && ~isempty(self.config.struc_id)
@@ -242,7 +239,6 @@ classdef CHESSPlotsBase
             [~, ~, ~,...
                 ~,...
                 ~, y_label, ~] = response_library_headers(self.config, char(field_to_plot));
-            y_label = strrep(y_label, 'SSL','SWL');
             % Define Title
             title_label = [{['Storm ID: ' num2str(event_id) ' | Storm Type: ' ds_query.storm_type]};...
                 {['CHS Region: ' self.config.region ' | Savepoint: ' num2str(self.config.sp_ID) ' ']}];
@@ -405,17 +401,27 @@ classdef CHESSPlotsBase
                 ~,...
                 ~, y_label, y_scale_log] = response_library_headers(self.config, char(response_to_view));
             %
-            config_mod  = self.config; % This is just to ensure I get the correct label
-            config_mod.apply_random_tides = 0; % This will be overwritten in later lines
             [~, ~, ~,...
                 ~,...
-                ~, y_label2, ~] = response_library_headers(config_mod, 'SWL');
-            y_label2 = strrep(y_label2, 'SSL','Elevation');
+                ~, y_label2, ~] = response_library_headers(self.config, 'SWL');
+            y_label2 = strrep(y_label2, 'SWL','Elevation');
+            % Datum Offset Is Subtracted From SWL And Crest Below: Reflect It In The Label
+            if datum_offset ~= 0
+                offset_sign = '-';
+                if datum_offset < 0
+                    offset_sign = '+';
+                end
+                y_label2 = strrep(y_label2, [self.config.project_datum ']'],...
+                    sprintf('%s %s %g]', self.config.project_datum, offset_sign, abs(datum_offset)));
+            end
             % Define Title
             title_label = [{['PSE ID: ' self.config.struc_id ' | Alternative ID: ' self.config.case_name]};...
                 {['CHS Region: ' self.config.region ' | Savepoint: ' num2str(self.config.sp_ID) ' | Event: ' event_str]}];
             title_label = strrep(title_label, '_', ' ');
-            % Initialize Figure
+            % Initialize Figure (Empty Or Deleted Target: New Figure Sized Like initiate_axes; A Caller's Figure Keeps Its Size)
+            if isempty(parent) || ~isvalid(parent)
+                parent = uifigure('Name', 'CHESS Figure', 'Position', [100 100 1000 600]);
+            end
             [gl, subplot_flag] = subplot_manager(self, parent, 2, 1);
             % Define Axes Objects
             if subplot_flag
@@ -516,10 +522,7 @@ classdef CHESSPlotsBase
             else
                 linkaxes([ax,ax2],'x');
             end
-            
-            if isa(ax.Parent.Parent, 'matlab.ui.Figure') % Not A Panel/Tab Holding The Grid (e.g. GUI Results Tab Mirror)
-                ax.Parent.Parent.Position = [100 100 992 699];
-            end
+
             function config_out = config_editor(config_out, var_to_look, value)
                 % Turn Off Responses For RB Section
                 for ii = 1:length(var_to_look)

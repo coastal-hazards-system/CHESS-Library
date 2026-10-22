@@ -70,9 +70,6 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
             field = char(field_str);
 
             [SWL, pass_swl] = get_hc_data(hc_data, 'SWL', field);
-            if ~pass_swl
-                [SWL, pass_swl] = get_hc_data(hc_data, 'SSL', field);
-            end
             [Hm0, pass_hm0] = get_hc_data(hc_data, 'Hm0', field);
             [Tp,  pass_tp]  = get_hc_data(hc_data, 'Tp', field);
             

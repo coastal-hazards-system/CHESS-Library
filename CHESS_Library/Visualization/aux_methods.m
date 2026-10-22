@@ -122,8 +122,8 @@ classdef aux_methods
 
         function out = latex_escape(str)
             % LATEX_ESCAPE Display String Valid For The LaTeX Interpreter (Titles / Axis Labels Only; Never Field Names).
-            %   Outside $...$ math segments: # % & _ escaped, ^ -> \^{}, a lone \ -> \textbackslash{}; an unpaired $ is
-            %   escaped. Math segments, \-commands and already escaped characters (\%, \_) are kept, so mixed labels
+            %   Outside $...$ math segments: # % & _ escaped, ^ -> \^{}, a lone \ -> \textbackslash{}, | -> $|$
+            %   (text-mode | renders as an em dash in LaTeX's OT1 font); an unpaired $ is escaped. Math segments, \-commands and already escaped characters (\%, \_) are kept, so mixed labels
             %   (e.g. response_library_headers.m: '$R_{2\%}$ [m]') pass unchanged and escaping twice changes nothing.
             %   Accepts char, string or cell arrays of them (same shape out); other types are returned as given.
             if iscell(str)
@@ -165,6 +165,8 @@ classdef aux_methods
                     out = [out '\' c]; %#ok<AGROW>
                 elseif c == '^'
                     out = [out '\^{}']; %#ok<AGROW>
+                elseif c == '|'
+                    out = [out '$|$']; %#ok<AGROW>
                 else
                     out = [out c]; %#ok<AGROW>
                 end
