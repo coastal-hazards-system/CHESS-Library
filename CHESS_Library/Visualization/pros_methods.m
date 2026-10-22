@@ -97,7 +97,7 @@ classdef pros_methods < CHESSPlotsBase
                     data_in.dt = pf.dt;
                     % Compute Replicates
                     switch field_to_plot
-                        case {'SSL','SWL'}
+                        case 'SWL'
                             pot = cell2mat(data_in.('SWL'));
                         case {'Hm0','Tp'}
                             pot = cell2mat(data_in.(field_to_plot));
@@ -554,7 +554,7 @@ classdef pros_methods < CHESSPlotsBase
                 y_mx = max(data, [], 'all', 'omitnan');
 
                 switch field_name
-                    case {'SSL','SWL','R2p_SWL'}
+                    case {'SWL','R2p_SWL'}
                         bounds = ax_geom.YLim;
                     case {'q_wave_ot','q'}
                         bounds = [10^floor(log10(y_mn)), 10^ceil(log10(y_mx))];
@@ -687,7 +687,7 @@ classdef pros_methods < CHESSPlotsBase
             % Remove Non-Active Storm Types
             resp_data = rmfield(resp_data, resp_names(~strcmp(ds_names.storm_type, resp_names)));
             % Only Keep Forcing HC
-            v_indx = ~any(cell2mat(cellfun(@(x) strcmp({resp_data.(ds_names.storm_type).var}', x), {'SWL','SSL','Hm0','Tp'}, 'un', false)),2);
+            v_indx = ~any(cell2mat(cellfun(@(x) strcmp({resp_data.(ds_names.storm_type).var}', x), {'SWL','Hm0','Tp'}, 'un', false)),2);
             resp_data.(ds_names.storm_type)(v_indx) = [];
             % Run CHESS PROS-FB
             fb_data = chess_pros_frequency_base(self.config, self.structure, resp_data, outPath, 4);

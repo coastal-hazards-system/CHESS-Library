@@ -9,7 +9,7 @@ classdef lcs_methods < CHESSPlotsBase
     end
 
     methods (Access=public)
-        % Method: Cummulative Armor Damage Plot (S)
+        % Method: Cumulative Armor Damage Plot (S)
         function ax = slope_armor_damage_plot(self, ax, ds_query, field_to_plot, lc_index)
             % lc_index: Life Cycle(s) To Plot For S_* Fields ([] -> All). Smax/LSmax Are Means Across LCs (All Only).
             arguments
@@ -48,9 +48,25 @@ classdef lcs_methods < CHESSPlotsBase
                     end
                     S = S(lc_index);
                 end
+                % Get Variable Labels
+                [~, ~, ~,...
+                    ~,...
+                    vname, y_label, ~] = response_library_headers(self.config, char(field_to_plot));
+                % Define Axes Fields
+                if ismember(field_to_plot, ["LSmax", "Smax"])
+                    x_label = 'Simulation Year'; % Yearly Mean Curves
+                else
+                    x_label = 'Cumulative Storm Hours'; % S_* Series: 1 Value Per Storm Time Step (Calm Time Excluded)
+                end
+                if isempty(lc_index)
+                    title_label = ['CHESS: LCS Slope Armor Damage | ' vname];
+                else
+                    title_label = {['CHESS: LCS Slope Armor Damage | ' vname],...
+                        ['Life Cycle ' strjoin(arrayfun(@num2str, lc_index, 'un', false), ', ')]};
+                end
+                % Initialize Axes
+                ax = aux_methods.initiate_axes(ax, x_label, y_label, title_label, self.base_fnt);
                 grid(ax,'minor');
-                ax.XLabel.Interpreter = 'Latex';
-                ax.YLabel.Interpreter = 'Latex';
                 % Plot Damage Field
                 switch field_to_plot
                     case 'LSmax'
@@ -121,7 +137,8 @@ classdef lcs_methods < CHESSPlotsBase
             srr_array = round([srr_xc, srr_low, srr_mid, srr_high], 4);
             % Create Plot Variables
             y_data = 100.*[total_xc, total_low, total_mid, total_high]./total_events;
-            x_data = categorical({'XC', 'TC Low','TC Mid','TC High'});
+            x_names = {'XC', 'TC Low','TC Mid','TC High'};
+            x_data = categorical(x_names, x_names); % Category Order = Legend Order (Default Is Alphabetical)
 
             % Define Axes Fields
             y_label     = 'Event Type Distribution [\%]'; % LaTeX Labels (initiate_axes): % Must Be Escaped
@@ -150,8 +167,10 @@ classdef lcs_methods < CHESSPlotsBase
                     'HorizontalAlignment','center',...
                     'VerticalAlignment','bottom','FontWeight','bold','FontSize',self.base_fnt);
             end
+            % Headroom For The Bar Labels (A 100 % Bar Label Would Otherwise Overlap The Title)
+            ax.YLim = [0, 1.15*max([y_data, 1])];
             % Legend
-            lg = legend(ax, 'Location', 'northwest', 'FontSize', ax.FontSize);
+            lg = legend(ax, 'Location', 'northeast', 'FontSize', ax.FontSize); % XC Bar Is First (Left), Keep Legend Clear Of It
             title(lg, 'Mean SRR [event/yr]', 'FontSize', ax.FontSize, 'FontWeight', 'bold');
         end
         % Method: Damage Dashboard
@@ -188,17 +207,24 @@ classdef lcs_methods < CHESSPlotsBase
             end
             % Plot Damaging Instances Distirbutions
             ax1 = plot_mound_damaging_instances_distribution(self, ax1, ds_query, field_to_plot);
-            % Plot Yearly Mean Maximum Submergance Percentage Distribution
+            % Plot Yearly Mean Maximum Submergence Percentage Distribution
             ax2 = plot_pse_submergance_distribution(self, ax2, ds_query, false, false, false, []);
-            % Yearly Mean Maximum Cummulative Mean Damage (S)
+            % Yearly Mean Maximum Cumulative Mean Damage (S)
             switch field_to_plot
                 case {'S_leeside_with_repairs', 'S_leeside_no_repairs'}
                     ax3 = slope_armor_damage_plot(self, ax3, ds_query, 'LSmax');
                     ax4 = plot_mound_final_damage_state(self, ax4, ds_query, 'S_leeside_no_repairs');
+                    side = 'Leeside';
                 case {'S_seaside_with_repairs', 'S_seaside_no_repairs'}
                     ax3 = slope_armor_damage_plot(self, ax3, ds_query, 'Smax');
                     ax4 = plot_mound_final_damage_state(self, ax4, ds_query, 'S_seaside_no_repairs');
+                    side = 'Seaside';
             end
+            % Short Y Labels (The Standalone Labels Get Clipped In The Dashboard Tiles): The Titles Name The Quantity
+            ylabel(ax3, 'Damage $\bar{\bar{S}}_{max}$', 'FontSize', self.base_fnt, 'FontWeight', 'bold', 'Interpreter', 'latex');
+            title(ax3, ['Yearly Mean Maximum Cumulative Damage (' side ')'], 'FontSize', self.base_fnt + 2, 'FontWeight', 'bold', 'Interpreter', 'latex');
+            ylabel(ax4, 'Final Damage $\bar{S}$', 'FontSize', self.base_fnt, 'FontWeight', 'bold', 'Interpreter', 'latex');
+            title(ax4, ['Final Damage Per Life Cycle (' side ')'], 'FontSize', self.base_fnt + 2, 'FontWeight', 'bold', 'Interpreter', 'latex');
 
             [ax5, ~] = annual_response_distribution(self, ax5, ds_query, field_to_plot, s_bin_edges, 'percent', s_cb_lim, false, false);
         end
@@ -211,14 +237,14 @@ classdef lcs_methods < CHESSPlotsBase
             %   (3) Event Type Mix And Mean Recurrence Rates (event_sampling_distribution)
             %   (4) Mean Storms By Simulation Year (Timing Within The Life Cycle)
             %   (5) Storm Selection: Sampled Vs Expected Share Per Storm
-            %       (XC: Uniform Over Nstm_XC Storms | TC: Intensity Bin Rates x TC_Freq Within Bin; Needs storm & dsw)
+            %       (XC: Uniform Over The Screened XC Storms Of storm, Else Nstm_XC | TC: Intensity Bin Rates x TC_Freq Within Bin; Needs storm & dsw)
             %   (6) Convergence Over mcs_nLC (Targets Of lcs_convergence_check): Running Mean Vs lambda*N*(1 +/- tol),
             %       Running Percentiles (project_CLs) Vs Exact Poisson Percentiles +/- max(1, tol*x_p);
             %       Full Poisson Sampling: nLC_req And Verdict (config.lcs_convergence_results From chess_lcs When Present,
             %       Else Computed) | Rate Matched: Running Mean And Percentiles Only, No Targets Or Convergence Check
             % Inputs: ax -> Figure, Grid Layout Or Axes (subplot_manager) | ds_query -> storm_type, data_type, match_type
             % Uses: self.project_forcing (LCS), self.config (mcs_nYears, Nstm_XC, Nyrs_XC, project_CLs, lcs_* Sampling Settings),
-            %       self.dsw (TC), self.storm (TC panel 5)
+            %       self.dsw (TC), self.storm (Panel 5)
 
             %% Sampled Life Cycles (Timeseries Rows Repeat Per Timestep: Keep Event Start Rows, Column 10 == 0)
             data = aux_methods.pull_data(ds_query, self.project_forcing);
@@ -303,8 +329,17 @@ classdef lcs_methods < CHESSPlotsBase
             sampled = accumarray(ic, 1)/numel(ids);
             expected = nan(size(u_ids));
             switch ds_query.storm_type
-                case 'XC' % Storm IDs Are Drawn Uniformly
-                    expected(:) = 1/self.config.Nstm_XC;
+                case 'XC' % Storm IDs Are Drawn Uniformly From The Screened Pool (Nstm_XC Counts Storms Before Bad-Storm Removal)
+                    n_pool = self.config.Nstm_XC;
+                    if isstruct(self.storm) && isfield(self.storm, 'XC')
+                        if isfield(self.storm.XC, 'Peaks')
+                            pool_ids = cell2mat(self.storm.XC.Peaks.Default(:, 1));
+                        else
+                            pool_ids = cell2mat(self.storm.XC.Timeseries.Default(:, 1));
+                        end
+                        n_pool = numel(unique(pool_ids));
+                    end
+                    expected(:) = 1/n_pool;
                 otherwise % Intensity Bin (Rate Share, Empty Bins Re-Drawn) x Storm Frequency Within The Bin
                     if isstruct(self.dsw) && isfield(self.dsw, 'smpl1') && isstruct(self.storm) && isfield(self.storm, 'TC')
                         if isfield(self.storm.TC, 'Peaks')
@@ -333,6 +368,10 @@ classdef lcs_methods < CHESSPlotsBase
                 plot(axs(5), lim, lim, '--k', 'LineWidth', 1, 'DisplayName', '1:1');
                 scatter(axs(5), expected, sampled, 18, c_bar, 'filled', 'MarkerFaceAlpha', 0.6, 'DisplayName', 'Storm');
                 axs(5).XLim = lim; axs(5).YLim = lim;
+                % No x10^n Exponent Label (The Y One Collides With The 2-Line Title); Decimals Follow The Share Magnitude
+                fmt = sprintf('%%.%df', max(1, ceil(-log10(lim(2))) + 1));
+                axs(5).XAxis.Exponent = 0; axs(5).XAxis.TickLabelFormat = fmt;
+                axs(5).YAxis.Exponent = 0; axs(5).YAxis.TickLabelFormat = fmt;
                 legend(axs(5), 'Interpreter', 'latex', 'Location', 'northwest');
             end
             title(axs(5), {'Storm Selection', sprintf('%d sampled events, %d distinct storms', numel(ids), numel(u_ids))});
@@ -535,7 +574,7 @@ classdef lcs_methods < CHESSPlotsBase
                 otherwise
                     % No Repairs == Will grow to infinity, hence we can do
                     % a unique on the full damage vector
-                    % Find Damaging And Submergance Instances
+                    % Find Damaging And Submergence Instances
                     [C,damage_indx,ic] = cellfun(@(x) unique(x,'stable'), s_vector, 'un', false);
                     % C -> Unique Damage Vector | ia-> damaging timesteps | ic-> Non-damaging timesteps
                     % Remove Timestep Where S==0 From Unique Array
@@ -562,7 +601,7 @@ classdef lcs_methods < CHESSPlotsBase
             [C, damage_indx] = get_damaging_instances(self, ds_query, field_to_plot);
             % Compute Freeboard For Damaging Timesteps To Determine State
             Rc = cellfun(@(x,y) self.structure.crest_elevation-x(y,5), stm_data, damage_indx, 'un', false);
-            % Define Structure Submergance State
+            % Define Structure Submergence State
             sumergance_state = cellfun(@(x) x<0, Rc, 'un', false);
             % Compute LC percentages
             data_sub = cellfun(@(x, y, z) 100.*length(x(y))./length(z), damage_indx, sumergance_state,s_vector);
@@ -595,7 +634,7 @@ classdef lcs_methods < CHESSPlotsBase
             xlim(ax, [min(X), max(X)]);
             legend(ax);
         end
-        % Method: Plot Submergance State 2D Distribution (Year vs Var)
+        % Method: Plot Submergence State 2D Distribution (Year vs Var)
         function ax = plot_pse_submergance_distribution(self, ax, ds_query, use_log_x, is_count, cb_log, cb_lim)
             arguments
                 self
@@ -611,8 +650,14 @@ classdef lcs_methods < CHESSPlotsBase
 
             % Compute Freeboard For Damaging Timesteps To Determine State
             Rc = cellfun(@(x) self.structure.crest_elevation-x(:,5), stm_data, 'un', false);
-            % Define Structure Submergance State
+            % Define Structure Submergence State
             sumergance_state = cellfun(@(x) x<0, Rc, 'un', false);
+            % SWL Never Above The Crest: Nothing To Bin
+            if ~any(cellfun(@any, sumergance_state))
+                ax = aux_methods.initiate_axes(ax, 'Submergence Time [hrs] Bins', 'Simulation Year', '', self.base_fnt);
+                aux_methods.display_no_data(ax, self.base_fnt, 'No submergence in simulation');
+                return
+            end
             % Split Rc entries Per Event Across All LCs
             sumergance_state_per_event = split_into_events(self, ds_query, sumergance_state);
             % Do The Same For The dt Column
@@ -620,7 +665,7 @@ classdef lcs_methods < CHESSPlotsBase
             % Define Helper Function To Deal With Nested Cells ( First
             % Cell-> LC Second Cell -> Event Chunks In LC
             f_x = @(a, b) cellfun(@(x, y) sum(x(y)).*24, a, b, 'un',true);
-            % Find And Sum Total Submergance Time For Each Event Across All LC
+            % Find And Sum Total Submergence Time For Each Event Across All LC
             submerged_time_per_event = cellfun(@(x,y) f_x(x, y), submerged_time_per_event, sumergance_state_per_event,'un',false);
             % Create Dummy LC Sampling Var To Perform Yearly Binnin
             dummy_stm_data = cellfun(@(x, y) x(y, 1:9),...
@@ -635,8 +680,8 @@ classdef lcs_methods < CHESSPlotsBase
 
             % Define Axes Fields
             ax.YLabel.String      =  'Simulation Year';
-            ax.XLabel.String = 'Submergance Time [hrs] Bins';
-            title(ax, '');%Submergance Time Distribution By Sim Year';
+            ax.XLabel.String = 'Submergence Time [hrs] Bins';
+            title(ax, '');%Submergence Time Distribution By Sim Year';
 
 
         end
@@ -668,17 +713,17 @@ classdef lcs_methods < CHESSPlotsBase
                 ~,...
                 vname, y_label, ~] = response_library_headers(self.config, field_to_plot);
             % Define Axes Fields
-            y_label     = ['Maximum Cummulative Mean Damage (' vname ' )'];
+            y_label     = ['Final Cumulative Damage ' vname];
             x_label     = 'Life Cycle';
             title_label = '';
             % Initialize Axes
             ax = aux_methods.initiate_axes(ax, x_label, y_label, title_label, self.base_fnt);
             % Plot
-            plot(ax, 1:length(s_max), s_max, '-r', 'LineWidth', 1.5, 'DisplayName', 'S_{max} per LC');
-            plot(ax, [1, length(s_max)], [mean(s_max), mean(s_max)], '--k', 'LineWidth', 2, 'DisplayName', ['S_{mean}=' num2str(round(mean(s_max), 3))]);
+            plot(ax, 1:length(s_max), s_max, '-r', 'LineWidth', 1.5, 'DisplayName', '$\bar{S}_{final}$ per LC');
+            plot(ax, [1, length(s_max)], [mean(s_max), mean(s_max)], '--k', 'LineWidth', 2, 'DisplayName', ['Mean $\bar{S}_{final}$ = ' num2str(round(mean(s_max), 3))]);
             xlim(ax, [1 length(s_max)]);
             % Legend
-            legend(ax);
+            legend(ax, 'Interpreter', 'latex');
         end
     end
     %% ANNUAL BINNING METHOD

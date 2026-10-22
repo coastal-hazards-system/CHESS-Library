@@ -159,7 +159,7 @@ if restrict_rate == 1
 end
 % No Storms Sampled In This Life Cycle: Empty Outputs
 if sum(TC_MCS) == 0
-    lcs_data = zeros(0, 9);      % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SSL, Hm0, Tp, wDir, storm_duration ]
+    lcs_data = zeros(0, 9);      % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
     sample_storms = zeros(0, 4); % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
     return
 end

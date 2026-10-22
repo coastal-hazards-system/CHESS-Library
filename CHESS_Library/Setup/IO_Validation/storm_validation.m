@@ -78,7 +78,7 @@ for kk = 1:length(st_types)
             % Verify Shape Of Storm Suite Data
             [stm_row, stm_col] = size(storm.(st_types{kk}).(data_types{ii}).(match_types{jj}){1, 2});% Storm Data Cell -> { M x 6 } -> [ SWL Hm0 Tp wDir datenum storm_duration ] (storm duration in days)
             % Ensure Storm Suite Data Complies With Expected Number Of Columns
-            if stm_col ~= 6 % [ SSL Hm0 Tp wDir date event_duration ]
+            if stm_col ~= 6 % [ SWL Hm0 Tp wDir date event_duration ]
                 error('Error: Storm suite modeling data must comply with expected data shape ( M x 6 ). ');
             end
             % Ensure Storm Suite Data Complies With Expected Number Of Rows (Peaks Only)

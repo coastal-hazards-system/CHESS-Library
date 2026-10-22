@@ -498,10 +498,10 @@ end
 CSR_Timeseries_DPA.Reliability_Seaside = Reliability_Seaside;
 % Overall Structure Seaside Reliability
 CSR_Timeseries_DPA.Reliability_Leeside = Reliability_Leeside;
-% Yearly Mean Maximum Cummulative Damages
+% Yearly Mean Maximum Cumulative Damages
 CSR_Timeseries_DPA.Smax = Smax;
 CSR_Timeseries_DPA.LSmax = LSmax;
-% Yearly Mean Maximum Cummulative Damages Percentiles
+% Yearly Mean Maximum Cumulative Damages Percentiles
 CSR_Timeseries_DPA.LSPcurves = LSPcurves;
 CSR_Timeseries_DPA.SPcurves = SPcurves;
 % Diagnostics Data Structure 

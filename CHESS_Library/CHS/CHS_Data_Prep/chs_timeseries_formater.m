@@ -93,7 +93,7 @@ for stm = 1:num_storms
         waves_interp(:, cc) = preserve_raw_peak(waves_interp(:, cc), date_final, waves(:, cc), wv_dtime);
     end
     
-    % Build Storm Data Matrix [ SSL, Hm0, Tp, wDir, date, dt ]
+    % Build Storm Data Matrix [ SWL, Hm0, Tp, wDir, date, dt ]
     storm_mat = [WL_interp, waves_interp, datenum(date_final), repmat(dt_final_datenum, len_final, 1)];
     
     %% REMOVE BAD ENTRIES
