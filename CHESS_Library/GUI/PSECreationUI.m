@@ -14,6 +14,7 @@ classdef PSECreationUI < handle
         PSEAxes matlab.ui.control.UIAxes
         PSENameEditField               matlab.ui.control.EditField
         AlternativeNameEditField       matlab.ui.control.EditField
+        NameMessageLabel               matlab.ui.control.Label % One-Line Name Problem (Red); Empty When Both Names Are Valid
         pse_to_copy
         berm_rows % Template Berm Rows (Added When Berm Is Checked)
         GridLayout                     matlab.ui.container.GridLayout
@@ -33,15 +34,18 @@ classdef PSECreationUI < handle
 
     %% DEFINE CLASS INSTANTIATION METHOD (CONSTRUCTOR)
     methods (Access = public)
-        function obj = PSECreationUI(pse_type, chess_project, alt_pse_name)
-            %
+        function obj = PSECreationUI(pse_type, chess_project, alt_pse_name, parent_fig)
+            % parent_fig: Optional Window This Wizard Opens Centered On ([]: Screen)
+            if nargin < 4
+                parent_fig = [];
+            end
             obj.chess_project = chess_project;
             obj.auxLib = auxUIFunctions();
             % Create UIFigure and components
-            create_ui(obj, pse_type);
-            % Add Dummy PSE & ALternative Names
-            obj.pse_name = 'dummy';
-            obj.alt_name = 'dummy';
+            create_ui(obj, pse_type, parent_fig);
+            % Placeholder PSE & Alternative Names Until Create ('<new>': Never A Valid Name, So It Cannot Clash)
+            obj.pse_name = '<new>';
+            obj.alt_name = '<new>';
             obj.pse_type = pse_type;
             obj.pse_to_copy = alt_pse_name;
             % Populate PSE Table
@@ -64,7 +68,7 @@ classdef PSECreationUI < handle
                     % Grab Table From Existing Alternative
                     load_pse_table = obj.chess_project.get_project_field('pse_tables', obj.pse_name, alt_list{1}, 'alt');
                     % Assign Loaded Table To Alternative
-                    obj.chess_project.add_project_field('alternative_list', 'dummy', obj.pse_name, obj.alt_name, 'alt');
+                    obj.chess_project.add_project_field('alternative_list', obj.alt_name, obj.pse_name, obj.alt_name, 'alt');
                     obj.chess_project.add_project_field('pse_tables', {load_pse_table}, obj.pse_name, obj.alt_name, 'alt');
                     obj.PSETable.Data = load_pse_table;
                     % Set PSE Name And Lock It
@@ -83,6 +87,7 @@ classdef PSECreationUI < handle
             obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
             % Verify If Berm BOx SHould Be Checked
             obj.AddBermCheckBox.Value = logical(obj.pse_geometry.add_toe_berm);
+            obj.check_names(obj.PSENameEditField.Value, obj.AlternativeNameEditField.Value);
         end
     end
 
@@ -127,7 +132,7 @@ classdef PSECreationUI < handle
             end
         end
         % Create UI Component
-        function create_ui(obj, pse_type)
+        function create_ui(obj, pse_type, parent_fig)
             %% CREATE UI OBJECTS & PARENT FIGURE
             % Create UIFigure and hide until all components are created
             obj.uifig = uifigure('Visible', 'off');
@@ -137,7 +142,7 @@ classdef PSECreationUI < handle
             % Create GridLayout
             obj.GridLayout = uigridlayout(obj.uifig);
             obj.GridLayout.ColumnWidth = {'1x'};
-            obj.GridLayout.RowHeight = {'1x', 'fit', '0.75x'};
+            obj.GridLayout.RowHeight = {'1x', 'fit', 'fit', '0.75x'};
             obj.GridLayout.RowSpacing = 3;
             obj.GridLayout.Padding = [3 3 3 3];
 
@@ -218,6 +223,14 @@ classdef PSECreationUI < handle
             obj.CreatePSEButton.Layout.Row = 1;
             obj.CreatePSEButton.Layout.Column = 6;
 
+            % Create NameMessageLabel
+            obj.NameMessageLabel = uilabel(obj.GridLayout);
+            obj.NameMessageLabel.FontSize = 11;
+            obj.NameMessageLabel.FontColor = [0.75 0.1 0.1];
+            obj.NameMessageLabel.Text = '';
+            obj.NameMessageLabel.Layout.Row = 3;
+            obj.NameMessageLabel.Layout.Column = 1;
+
             % Create PSETable
             obj.PSETable = uitable(obj.GridLayout);
             obj.PSETable.ColumnWidth = {0, 'auto', 'auto', 'auto'};
@@ -225,13 +238,13 @@ classdef PSECreationUI < handle
             obj.PSETable.ColumnName = {'Model Variable','Description','Units','Value'};
             obj.PSETable.ColumnSortable = [true false false false];
             obj.PSETable.ColumnEditable = [false false false true];
-            obj.PSETable.Layout.Row = 3;
+            obj.PSETable.Layout.Row = 4;
             obj.PSETable.Layout.Column = 1;
 %             obj.PSETable.Position = [6 6 564 152];
 
             % Show the figure after all components are created
-            obj.uifig.Units = 'normalize';
-            obj.uifig.Position(1:2) = 0.4;
+            obj.auxLib.center_on_parent(obj.uifig, parent_fig);
+            obj.auxLib.set_parent(obj.uifig); % Wizard Dialogs Center On The Wizard
             obj.uifig.Visible = 'on';
             obj.pse_created = 0;
             % Assign Callbacks
@@ -239,6 +252,8 @@ classdef PSECreationUI < handle
             obj.uifig.CloseRequestFcn = @(src, event) UIWindowCloseRequest(obj, event);
             obj.AlternativeNameEditField.ValueChangedFcn = @(src, event) EditFieldValueChanged(obj, []);
             obj.PSENameEditField.ValueChangedFcn = @(src, event) EditFieldValueChanged(obj, []);
+            obj.AlternativeNameEditField.ValueChangingFcn = @(src, event) check_names(obj, obj.PSENameEditField.Value, event.Value);
+            obj.PSENameEditField.ValueChangingFcn = @(src, event) check_names(obj, event.Value, obj.AlternativeNameEditField.Value);
             obj.CreatePSEButton.ButtonPushedFcn = @(src, event) CreatePSEButtonPushed(obj, event);
             obj.PSETable.CellEditCallback = @(src, event) PSETableCellEdit(obj, event);
         end
@@ -281,83 +296,35 @@ classdef PSECreationUI < handle
         end
 
         function EditFieldValueChanged(obj, event)
-            % Get PSE Listing For Project
+            obj.check_names(obj.PSENameEditField.Value, obj.AlternativeNameEditField.Value);
+        end
+
+        function ok = check_names(obj, pse_value, alt_value)
+            % PSE And Alternative Names (While Typing And On Change): chessProject.name_problem Against The Project's Names
+            % And The Folders On Disk (An Orphan Folder Blocks The Name). First Problem Shown Under The Fields; Create
+            % Enabled Only When Both Are Valid. The Names Are Applied To The Project At Create
+            proj_dir = fullfile(obj.chess_project.path, obj.chess_project.name);
+            msg = '';
             if isempty(obj.pse_to_copy) % New PSE Being Added
-                % Check For Unique PSE
-                pse_listing = obj.chess_project.get_project_field('pse_list', obj.pse_name, obj.alt_name, 'proj'); % Selected Projects PSE's
-                pse_name_pass = ~ismember(obj.PSENameEditField.Value, pse_listing);
-                %
-                if ~pse_name_pass % PSE Name Is Not Unique
-                    % Check If Name Is Internal Or External
-                    if strcmp(obj.PSENameEditField.Value, obj.pse_name)
-                        % Internal Name (Pass) 
-                    else % Name Is External 
-                        % Throw Error
-                        obj.auxLib.error_dlgbox(['Error: PSE "' obj.PSENameEditField.Value '" already exist. Define a unique name.']);
-                        obj.PSENameEditField.Value = obj.pse_name; % Revert To Previous Name
-                    end
-                elseif ~isempty(obj.PSENameEditField.Value)
-                    % Update Names
-                    obj.chess_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
-                    obj.pse_name = obj.PSENameEditField.Value;
+                pse_list = obj.chess_project.get_project_field('pse_list', '', '', 'proj');
+                pse_msg = chessProject.name_problem(pse_value, pse_list, '', fullfile(proj_dir, 'PSE'));
+                if ~isempty(pse_msg)
+                    msg = ['PSE name: ' pse_msg];
                 end
-                % Alternative Check Runs For A Unique Or Internal (Already Assigned) PSE Name
-                if pse_name_pass || strcmp(obj.PSENameEditField.Value, obj.pse_name)
-                    % PSE Name Is Valid
-                    % Get Alternative Listing
-                    alt_listing = obj.chess_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse'); % Selected Projects Alternatives
-                    % 
-                    if ~isempty(alt_listing)
-                        alt_name_pass = ~ismember(obj.AlternativeNameEditField.Value, alt_listing);
-                        %
-                         if ~alt_name_pass % Alternative Name Is Not Unique
-                             % Check If Name Is Internal Or External
-                             if strcmp(obj.AlternativeNameEditField.Value, obj.alt_name)
-                                 % Internal Name (Pass)
-                             else % Name Is External
-                                 % Throw Error
-                                 obj.auxLib.error_dlgbox(['Error: Alternative "' obj.AlternativeNameEditField.Value '" already exist. Define a unique name.']);
-                                 % Clear Name
-                                 obj.AlternativeNameEditField.Value = obj.alt_name;
-                             end
-                         elseif ~isempty(obj.AlternativeNameEditField.Value)
-                             % Update Names
-                             obj.chess_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
-                             obj.alt_name = obj.AlternativeNameEditField.Value;
-                         end
-                    end
-                end
+                alt_dir = ''; % New PSE: No Alternative Folder Can Exist Under It Yet
             else % New Alternative Being Added
-                % Get Alternative Listing
-                alt_listing = obj.chess_project.get_project_field('alternative_list', obj.pse_to_copy, obj.alt_name, 'pse'); % Selected Projects Alternatives
-                %
-                if ~isempty(alt_listing)
-                    alt_name_pass = ~any(ismember(obj.AlternativeNameEditField.Value, alt_listing));
-                    %
-                    if ~alt_name_pass % Alternative Name Is Not Unique
-                        % Check If Name Is Internal Or External
-                        if strcmp(obj.AlternativeNameEditField.Value, obj.alt_name)
-                            % Internal Name (Pass)
-                        else % Name Is External
-                            % Throw Error
-                            obj.auxLib.error_dlgbox(['Error: Alternative "' obj.AlternativeNameEditField.Value '" already exist. Define a unique name.']);
-                            % Clear Name
-                            obj.AlternativeNameEditField.Value = obj.alt_name;
-                        end
-                    elseif ~isempty(obj.AlternativeNameEditField.Value)
-                        % Update Names
-                        obj.chess_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
-                        obj.alt_name = obj.AlternativeNameEditField.Value;
-                    end
+                alt_dir = fullfile(proj_dir, 'PSE', obj.pse_name);
+            end
+            if isempty(msg)
+                alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, '', 'pse');
+                alt_msg = chessProject.name_problem(alt_value, alt_list, '', alt_dir);
+                if ~isempty(alt_msg)
+                    msg = ['Alternative name: ' alt_msg];
                 end
             end
-            % Check If Create Button Should Be Enabled
-            if ~isempty(obj.AlternativeNameEditField.Value) && ~isempty(obj.PSENameEditField.Value)
-                obj.CreatePSEButton.Enable = true;
-            else
-                obj.CreatePSEButton.Enable = false;
-            end
-            %
+            obj.NameMessageLabel.Text = msg;
+            ok = isempty(msg);
+            obj.CreatePSEButton.Enable = ok;
         end
 
         function PSETableCellEdit(obj, event)
@@ -371,11 +338,18 @@ classdef PSECreationUI < handle
         end
 
         function CreatePSEButtonPushed(obj, event)
+            % Names Re-Checked (The Disk May Have Changed), Then Applied Over The Placeholders
+            if ~obj.check_names(obj.PSENameEditField.Value, obj.AlternativeNameEditField.Value)
+                return
+            end
+            if isempty(obj.pse_to_copy)
+                obj.chess_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
+                obj.pse_name = obj.PSENameEditField.Value;
+            end
+            obj.chess_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name, 'alt');
+            obj.alt_name = obj.AlternativeNameEditField.Value;
             % Store Project Component Mapping
             obj.pse_created = 1;
-            %
-%             obj.chess_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name,  'alt');
-%             obj.chess_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
             % Store UI Data
             obj.pse_table = obj.PSETable.Data;
             delete(obj.uifig); % Delete New Project UI Window

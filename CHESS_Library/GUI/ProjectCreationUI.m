@@ -8,11 +8,12 @@ classdef ProjectCreationUI < handle
         ProjectPathLamp              matlab.ui.control.Lamp
         ProjectPathButton            matlab.ui.control.Button
         ProjectNameEditFieldLabel    matlab.ui.control.Label
+        ProjectNameMessageLabel      matlab.ui.control.Label % One-Line Name Status (Red: Invalid, Amber: Overwrite Asked At Create)
         ProjectCLsLabel              matlab.ui.control.Label
         UnitSystemDropDownLabel      matlab.ui.control.Label
-        project_list
+        project_names % Names Of The Loaded Projects (A Clash Is Red)
+        name_state % Project Name Status: 'red' | 'green' | 'yellow' (A CHESS Project Folder Of That Name Exists: Overwrite Asked)
         auxLib
-        force_pass
         VerticalDatumEditField       matlab.ui.control.EditField
         ProjectPathEditField         matlab.ui.control.EditField
         ProjectNameEditField         matlab.ui.control.EditField
@@ -33,35 +34,40 @@ classdef ProjectCreationUI < handle
         uifig            matlab.ui.Figure
         project_created
         chess_project
-        proj_indx
         proj_name
         path_warning % Long Project Folder Warning Text For The Caller To Show ('' When The Path Is Short Enough)
     end
 
     %% DEFINE CLASS INSTANTIATION METHOD
     methods (Access = public)
-        function obj = ProjectCreationUI()
-            % Create UIFigure and components
-            create_ui(obj);
-            obj.force_pass = false;
-            obj.path_warning = '';
+        function obj = ProjectCreationUI(parent_fig, project_names)
+            % parent_fig: Optional Window This Wizard Opens Centered On ([]: Screen)
+            % project_names: Names Of The Loaded Projects (A New Project Cannot Take One)
+            if nargin < 1
+                parent_fig = [];
+            end
+            if nargin < 2
+                project_names = {};
+            end
             obj.auxLib = auxUIFunctions();
-            %chess_project = [chess_project; chessProject('dummy', '.\', 'NAVD88', [0, 16, 84, 0], 'SI')];
-            obj.chess_project = chessProject('dummy', '.\', 'NAVD88', [0, 16, 84, 0], 'SI');%chess_project;
-            obj.proj_indx = strcmp('dummy', {obj.chess_project.name});
+            obj.project_names = project_names;
+            obj.path_warning = '';
+            % Create UIFigure and components
+            create_ui(obj, parent_fig);
+            obj.update_status(obj.ProjectNameEditField.Value);
         end
     end
 
     %% DEFINE CLASS UI COMPONENT CREATION METHOD
     methods (Access = private)
-        function create_ui(obj)
+        function create_ui(obj, parent_fig)
             %% CREATE UI OBJECTS & PARENT FIGURE
             % Get the file path for locating images
             pathToMLAPP = fileparts(mfilename('fullpath'));
 
             % Create UIWindow and hide until all components are created
             obj.uifig = uifigure('Visible', 'off');
-            obj.uifig.Position = [100 100 407 113];
+            obj.uifig.Position = [100 100 407 135];
             obj.uifig.Name = 'Project Creation Wizard';
 
             % Create ParentGL
@@ -75,7 +81,7 @@ classdef ProjectCreationUI < handle
             % Create ChildGL_1
             obj.ChildGL_1 = uigridlayout(obj.ParentGL);
             obj.ChildGL_1.ColumnWidth = {90, '1x', 20};
-            obj.ChildGL_1.RowHeight = {'fit'};
+            obj.ChildGL_1.RowHeight = {'fit', 'fit'};
             obj.ChildGL_1.Padding = [0 0 0 0];
             obj.ChildGL_1.Layout.Row = 1;
             obj.ChildGL_1.Layout.Column = 1;
@@ -97,6 +103,13 @@ classdef ProjectCreationUI < handle
             obj.ProjectNameEditField.Layout.Row = 1;
             obj.ProjectNameEditField.Layout.Column = 2;
             obj.ProjectNameEditField.Value = 'New_project';
+
+            % Create ProjectNameMessageLabel
+            obj.ProjectNameMessageLabel = uilabel(obj.ChildGL_1);
+            obj.ProjectNameMessageLabel.Layout.Row = 2;
+            obj.ProjectNameMessageLabel.Layout.Column = [2 3];
+            obj.ProjectNameMessageLabel.FontSize = 11;
+            obj.ProjectNameMessageLabel.Text = '';
 
             % Create Child_GL2
             obj.ChildGL_2 = uigridlayout(obj.ParentGL);
@@ -125,7 +138,8 @@ classdef ProjectCreationUI < handle
             obj.ProjectPathEditField.Editable = 'off';
             obj.ProjectPathEditField.Layout.Row = 1;
             obj.ProjectPathEditField.Layout.Column = 3;
-            obj.ProjectPathEditField.Value = './';
+            obj.ProjectPathEditField.Value = '';
+            obj.ProjectPathEditField.Placeholder = 'Select the folder the project folder is created in...';
 
             % Create ProjectPathLamp
             obj.ProjectPathLamp = uilamp(obj.ChildGL_2);
@@ -225,15 +239,17 @@ classdef ProjectCreationUI < handle
             obj.CreateProjectButton.Layout.Row = 1;
             obj.CreateProjectButton.Layout.Column = 6;
             obj.CreateProjectButton.Text = 'Create Project';
+            obj.CreateProjectButton.Enable = false;
 
 
             % Show the figure after all components are created
-            obj.uifig.Units = 'normalize';
-            obj.uifig.Position(1:2) = 0.4; 
+            obj.auxLib.center_on_parent(obj.uifig, parent_fig);
+            obj.auxLib.set_parent(obj.uifig); % Wizard Dialogs Center On The Wizard
             obj.uifig.Visible = 'on';
             obj.project_created = 0;
             % Assign Callbacks
             obj.ProjectNameEditField.ValueChangedFcn = @(src, event) ProjectNameChanged(obj, event);
+            obj.ProjectNameEditField.ValueChangingFcn = @(src, event) update_status(obj, event.Value);
             obj.VerticalDatumEditField.ValueChangedFcn = @(src, event) VerticalDatumChanged(obj, event);
             obj.ProjectPathButton.ButtonPushedFcn = @(src, event) ProjectPathButtonPushed(obj, event);
             obj.CreateProjectButton.ButtonPushedFcn = @(src, event) CreateProjectButtonPushed(obj, event);
@@ -250,96 +266,58 @@ classdef ProjectCreationUI < handle
 
         function ProjectPathButtonPushed(obj, event)
             selpath = uigetdir([], 'Select Output Folder For CHESS Project');
-            if all(selpath == 0)
-                % Do nothing
-            elseif exist(selpath, 'dir')
-                obj.ProjectPathLamp.Color = [0 1 0];
+            if ~isequal(selpath, 0)
                 obj.ProjectPathEditField.Value = selpath;
-            else
-                obj.ProjectPathLamp.Color = [1 0 0];
-                obj.ProjectPathEditField.Value = 'Path not found';
             end
-            % Reset Force Pass
-            obj.force_pass = false;
-            pth_update(obj);
-            if all(obj.ProjectPathLamp.Color == [0 1 0])
-                obj.chess_project(obj.proj_indx).set_project_field('path',obj.ProjectPathEditField.Value, '', '', 'proj');
-            end
+            % Name Re-Checked Against The (New) Folder
+            obj.update_status(obj.ProjectNameEditField.Value);
         end
 
         function CreateProjectButtonPushed(obj, event)
-            if all(obj.ProjectNameLamp.Color == [1 1 0]) || all(obj.ProjectPathLamp.Color == [1 1 0])
-                %
-                obj.auxLib.confirmation_dlgbox('Project already exist. Overwrite?');
-                % Execute According to Response
-                if obj.auxLib.dialog_answer
-                    % replcae Project Entry (If Needed)
-                    if any(contains(obj.ProjectNameEditField.Value, {obj.chess_project.name}))
-                        % Overwrite proj_indx
-                        obj.proj_indx = strcmp(obj.ProjectNameEditField.Value, {obj.chess_project.name});
-                        % CLs
-                        CLs = [obj.ConfidenceLimitsEditField.Value, obj.ConfidenceLimitsEditField_2.Value,...
-                            obj.ConfidenceLimitsEditField_3.Value, obj.ConfidenceLimitsEditField_4.Value];
-                        % Reset Project
-                        obj.chess_project(obj.proj_indx) = chessProject(obj.ProjectNameEditField.Value, obj.ProjectPathEditField.Value, ...
-                            obj.VerticalDatumEditField.Value, CLs, obj.UnitSystemDropDown.Value);
-                        % Remove Appended Entry
-                        obj.chess_project(end) = [];
-                    end
-                    % Delete Dir To Replace With New One
-                    if exist(fullfile(obj.ProjectPathEditField.Value, obj.ProjectNameEditField.Value), 'dir')
-                        rmdir(fullfile(obj.ProjectPathEditField.Value, obj.ProjectNameEditField.Value), 's');
-                    end
-                    obj.ProjectNameLamp.Color = [0 1 0];
-                    obj.force_pass = true;
-                else
-                    if all(obj.ProjectNameLamp.Color == [1 1 0])
-                        obj.ProjectNameEditField.Value = 'Error: Change project name';
-                    end
-                    if all(obj.ProjectPathLamp.Color == [1 1 0])
-                        obj.ProjectPathEditField.Value = 'Error: Change project folder';
-                    end
-                    obj.CreateProjectButton.Enable = false;
+            name = obj.ProjectNameEditField.Value;
+            folder = obj.ProjectPathEditField.Value;
+            % Re-Checked At Submission (The Folder May Have Changed Since)
+            obj.update_status(name);
+            if ~obj.CreateProjectButton.Enable
+                return
+            end
+            proj_dir = fullfile(folder, name);
+            % Existing CHESS Project Folder: Overwrite Confirmed, Then Deleted As A Whole (Nothing Created If That Fails)
+            if strcmp(obj.name_state, 'yellow')
+                obj.auxLib.confirmation_dlgbox(sprintf(['Project folder "%s" already exists. Overwrite it?\n',...
+                    'The folder and everything in it will be deleted.'], proj_dir), 'Overwrite');
+                if ~obj.auxLib.dialog_answer
+                    return
+                end
+                try
+                    leftover = chessProject.delete_folder(proj_dir);
+                catch ME
+                    obj.auxLib.error_dlgbox(ME.message);
+                    return
+                end
+                if ~isempty(leftover)
+                    obj.auxLib.error_dlgbox(sprintf(['The old project folder was moved to "%s" but could not be fully ',...
+                        'deleted. Delete it manually.'], leftover));
                 end
             end
-            if obj.CreateProjectButton.Enable
-                % Make Project Dir
-                if ~exist(fullfile(obj.ProjectPathEditField.Value, obj.ProjectNameEditField.Value), 'dir')
-                    mkdir(fullfile(obj.ProjectPathEditField.Value, obj.ProjectNameEditField.Value));
-                end
-                % CLs
-                CLs = [obj.ConfidenceLimitsEditField.Value, obj.ConfidenceLimitsEditField_2.Value,...
-                    obj.ConfidenceLimitsEditField_3.Value, obj.ConfidenceLimitsEditField_4.Value];
-                % Initialize Project Entry Data Structure
-                obj.chess_project(obj.proj_indx).set_project_field('name',obj.ProjectNameEditField.Value, '', '', 'proj');
-                obj.chess_project(obj.proj_indx).set_project_field('path',obj.ProjectPathEditField.Value, '', '', 'proj');
-                obj.chess_project(obj.proj_indx).set_project_field('vdatum',obj.VerticalDatumEditField.Value, '', '', 'proj');
-                obj.chess_project(obj.proj_indx).set_project_field('CLs',CLs, '', '', 'proj');
-                obj.chess_project(obj.proj_indx).set_project_field('unitsys',obj.UnitSystemDropDown.Value, '', '', 'proj');
-                obj.proj_name = obj.ProjectNameEditField.Value;
-                % Long Folder Path: Warning Text For The Caller (Creation Proceeds)
-                n_max = ProjectCreationUI.max_output_path_length(obj.ProjectPathEditField.Value, obj.ProjectNameEditField.Value);
-                if n_max > 260
-                    obj.path_warning = sprintf(['The project folder path is long (%d chars): output files may exceed the Windows ',...
-                        '260-character path limit (estimated longest output path: %d chars). Consider a shorter project folder.'],...
-                        numel(fullfile(obj.ProjectPathEditField.Value, obj.ProjectNameEditField.Value)), n_max);
-                end
-                delete(obj.uifig); % Delete New Project UI Window
-                obj.project_created = 1;
+            mkdir(proj_dir);
+            CLs = [obj.ConfidenceLimitsEditField.Value, obj.ConfidenceLimitsEditField_2.Value,...
+                obj.ConfidenceLimitsEditField_3.Value, obj.ConfidenceLimitsEditField_4.Value];
+            obj.chess_project = chessProject(name, folder, obj.VerticalDatumEditField.Value, CLs, obj.UnitSystemDropDown.Value);
+            obj.proj_name = name;
+            % Long Folder Path: Warning Text For The Caller (Creation Proceeds)
+            n_max = ProjectCreationUI.max_output_path_length(folder, name);
+            if n_max > 260
+                obj.path_warning = sprintf(['The project folder path is long (%d chars): output files may exceed the Windows ',...
+                    '260-character path limit (estimated longest output path: %d chars). Consider a shorter project folder.'],...
+                    numel(proj_dir), n_max);
             end
+            delete(obj.uifig); % Delete New Project UI Window
+            obj.project_created = 1;
         end
 
         function ProjectNameChanged(obj, event)
-            if isempty(obj.ProjectNameEditField.Value)
-                obj.ProjectPathButton.Enable = false;
-            else
-                pth_update(obj);
-            end
-            if all(obj.ProjectNameLamp.Color == [0 1 0]) || all(obj.ProjectNameLamp.Color == [1 1 0])
-                obj.ProjectPathButton.Enable = true;
-            else
-                obj.ProjectPathButton.Enable = false;
-            end
+            obj.update_status(obj.ProjectNameEditField.Value);
         end
 
         function VerticalDatumChanged(obj, event)
@@ -351,29 +329,51 @@ classdef ProjectCreationUI < handle
 
     %% AUXILIARY FUNCTION
     methods (Access=private)
-        function check_inputs(obj)
-            if any(all(obj.ProjectNameLamp.Color == [0 1 0; 1 1 0], 2)) && any(all(obj.ProjectPathLamp.Color == [0 1 0; 1 1 0], 2))
-                obj.CreateProjectButton.Enable = true;
-            else
-                obj.CreateProjectButton.Enable = false;
+        function update_status(obj, name)
+            % Name Lamp + Message (While Typing, On Change, On A New Folder), Folder Lamp, Folder Button And Create Button.
+            % Red: Invalid Or A Loaded Project's Name (chessProject.name_problem), Or A File / Non-Project Folder Of That Name
+            % In The Folder. Yellow: A CHESS Project Folder (CHESS_project_<name>.mat Inside) Of That Name, Overwrite Asked At
+            % Create. Green: OK. Create Needs An Existing Folder And A Green Or Yellow Name
+            name = char(name);
+            folder = obj.ProjectPathEditField.Value;
+            has_folder = ~isempty(folder) && isfolder(folder);
+            msg = chessProject.name_problem(name, obj.project_names, '');
+            obj.ProjectPathButton.Enable = isempty(msg);
+            state = 'red';
+            if isempty(msg)
+                state = 'green';
+                target = fullfile(folder, name);
+                if ~has_folder
+                    % Checked On Disk Once A Folder Is Selected
+                elseif isfile(target)
+                    state = 'red';
+                    msg = sprintf('A file named "%s" exists in this folder. Choose another name.', name);
+                elseif isfolder(target) && isfile(fullfile(target, ['CHESS_project_' name '.mat']))
+                    state = 'yellow';
+                    msg = sprintf('Project "%s" exists in this folder: you will be asked to overwrite it.', name);
+                elseif isfolder(target)
+                    state = 'red';
+                    msg = sprintf('A folder named "%s" that is not a CHESS project exists in this folder. Choose another name.', name);
+                end
             end
-        end
-
-        function pth_update(obj)
-            dir_list = dir(obj.ProjectPathEditField.Value);
-            % Check Project Target
-            if isempty(obj.ProjectNameEditField.Value)
-                obj.ProjectNameEditField.FontColor = [1 0 0];
-                obj.ProjectNameLamp.Color = [1 0 0];
-            elseif any(contains(obj.ProjectNameEditField.Value, {dir_list.name})) || any(contains(obj.ProjectNameEditField.Value, {obj.chess_project.name}))
-                obj.ProjectNameEditField.FontColor = [0.85, 0.85, 0.85];
-                obj.ProjectNameLamp.Color = [1 1 0];
-            else
-                obj.ProjectNameEditField.FontColor = [0.1294, 0.1294, 0.1294];
-                obj.ProjectNameLamp.Color = [0 1 0];
+            obj.name_state = state;
+            switch state
+                case 'red'
+                    obj.ProjectNameLamp.Color = [1 0 0];
+                    obj.ProjectNameMessageLabel.FontColor = [0.75 0.1 0.1];
+                case 'yellow'
+                    obj.ProjectNameLamp.Color = [1 1 0];
+                    obj.ProjectNameMessageLabel.FontColor = [0.6 0.45 0];
+                otherwise
+                    obj.ProjectNameLamp.Color = [0 1 0];
             end
-            %
-            check_inputs(obj);
+            obj.ProjectNameMessageLabel.Text = msg;
+            if has_folder
+                obj.ProjectPathLamp.Color = [0 1 0];
+            else
+                obj.ProjectPathLamp.Color = [1 0 0];
+            end
+            obj.CreateProjectButton.Enable = has_folder && ~strcmp(state, 'red');
         end
     end
 

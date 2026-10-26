@@ -31,6 +31,7 @@ classdef CHSStormDBImportUI < handle
         VerticalDatumLabel             matlab.ui.control.Label
         GridLayout2_4                  matlab.ui.container.GridLayout
         StormDBNameLamp                matlab.ui.control.Lamp
+        StormDBNameMessageLabel        matlab.ui.control.Label
         StormDBNameEditField           matlab.ui.control.EditField
         StormDBNameEditFieldLabel      matlab.ui.control.Label
         GridLayout2_3                  matlab.ui.container.GridLayout
@@ -95,22 +96,37 @@ classdef CHSStormDBImportUI < handle
         db_for_ui
         chs_data_cache % CHS_Data Loaded From A .mat (src, CHS_Data)
         storm_data_input % storm & prob_mass .mat Import (src, storm, prob_mass, create_wlp, create_whp, BnU)
+        expected_region char % Project Region (chessProject.project_region; '': None): CHS_Dependencies Must Hold It, CHS Data Must Match
+        name_state % Storm DB Name Status: 'red' (Invalid) | 'green' | 'yellow' (Exists: Overwrite Confirmed At Import)
     end
 
-
+    properties (Access=private, Transient)
+        parent_fig % Window The Wizard Opens Centered On ([]: Screen). Transient: The Storm DB Is Saved In The Project File, The App Window Must Not Be
+        existing_db_names cell = {} % Storm DB Names Of The Project (Case-Insensitive Clash: Overwrite, Confirmed At Import)
+        db_usage_fcn % @(db_name) [n_alt, n_run_files] Of A Project Storm DB, For The Overwrite Confirmation ([]: Not Shown)
+    end
 
     %% CONSTRUCTOR
     % App creation and deletion
     methods (Access = public)
         % Construct app
-        function obj = CHSStormDBImportUI(chs_dependencies_path, outpath, gravity_constant, project_datum, project_unitsys)
+        function obj = CHSStormDBImportUI(chs_dependencies_path, outpath, gravity_constant, project_datum, project_unitsys, parent_fig, expected_region, existing_db_names, db_usage_fcn)
             arguments
                 chs_dependencies_path {mustBeText(chs_dependencies_path)}
                 outpath {mustBeText(outpath)}
                 gravity_constant {mustBeFloat(gravity_constant)}
                 project_datum {mustBeText(project_datum)}
                 project_unitsys {mustBeMember(project_unitsys, {'SI','Imperial'})}
+                parent_fig = []
+                expected_region {mustBeText(expected_region)} = ''
+                existing_db_names cell = {}
+                db_usage_fcn = []
             end
+            obj.parent_fig = parent_fig;
+            obj.expected_region = expected_region;
+            obj.existing_db_names = existing_db_names;
+            obj.db_usage_fcn = db_usage_fcn;
+            obj.overwrite_flag = false;
             obj.source_paths.chs_dependencies_path = chs_dependencies_path;
             obj.outpath = outpath;
             obj.modeling_imported = false;
@@ -134,6 +150,7 @@ classdef CHSStormDBImportUI < handle
         % Create uifig and components
         function create_ui(obj)
             obj.reset_db_state();
+            obj.clear_staging(); % Left By A Session That Ended Without Closing The Wizard
             obj.figUI = uifigure('Visible', 'off');
             obj.figUI.Position = [100 100 972 444];
             obj.figUI.Name = 'CHS Storm Database Import Wizard';
@@ -366,7 +383,8 @@ classdef CHSStormDBImportUI < handle
             % Create GridLayout2_4
            obj.GridLayout2_4 = uigridlayout(obj.GridLayout);
            obj.GridLayout2_4.ColumnWidth = {'fit', '1x', 20};
-           obj.GridLayout2_4.RowHeight = {'fit'};
+           obj.GridLayout2_4.RowHeight = {'fit', 'fit'};
+           obj.GridLayout2_4.RowSpacing = 2;
            obj.GridLayout2_4.Padding = [5 0 0 0];
            obj.GridLayout2_4.Layout.Row = 6;
            obj.GridLayout2_4.Layout.Column = 1;
@@ -388,6 +406,13 @@ classdef CHSStormDBImportUI < handle
            obj.StormDBNameLamp.Layout.Row = 1;
            obj.StormDBNameLamp.Layout.Column = 3;
            obj.StormDBNameLamp.Color = [1 0 0];
+
+            % Create StormDBNameMessageLabel
+           obj.StormDBNameMessageLabel = uilabel(obj.GridLayout2_4);
+           obj.StormDBNameMessageLabel.Layout.Row = 2;
+           obj.StormDBNameMessageLabel.Layout.Column = [2 3];
+           obj.StormDBNameMessageLabel.FontSize = 11;
+           obj.StormDBNameMessageLabel.Text = '';
 
             % Create GridLayout2_5
            obj.GridLayout2_5 = uigridlayout(obj.GridLayout);
@@ -555,7 +580,11 @@ classdef CHSStormDBImportUI < handle
            obj.StormIDDropDown.Layout.Column = 4;
            obj.StormIDDropDown.Value = '-';
 
-            % Show the figure after all components are created
+            obj.init_chs_dependencies();
+
+            % Show the figure after all components are created (Centered On The Parent; Wizard Dialogs Center On The Wizard)
+            obj.auxLib.center_on_parent(obj.figUI, obj.parent_fig);
+            obj.auxLib.set_parent(obj.figUI);
             obj.figUI.Visible = 'on';
 
             % Assgin UI Component Callbacks
@@ -570,6 +599,7 @@ classdef CHSStormDBImportUI < handle
             obj.chsDependenciesFolderButton.ButtonPushedFcn = @(src, event) getChsDependenciesButtonPressed(obj, event);
             % EditFields
             obj.StormDBNameEditField.ValueChangedFcn = @(src, event) stormDBNameChanged(obj, event);
+            obj.StormDBNameEditField.ValueChangingFcn = @(src, event) update_name_status(obj, event.Value);
             obj.VerticalOffsetEditField.ValueChangedFcn = @(src, event) verticalOffsetValueChanged(obj, event);
             % Check Boxes
             obj.CreateWHPStormDBCheckBox.ValueChangedFcn = @(src, event) checkBoxValueChanged(obj, event);
@@ -580,6 +610,7 @@ classdef CHSStormDBImportUI < handle
             obj.MatchTypeDropDown.ValueChangedFcn = @(src, event) plotControlsChanged(obj, event);
             obj.FieldtoPlotDropDown.ValueChangedFcn = @(src, event) plotControlsChanged(obj, event);
             obj.StormIDDropDown.ValueChangedFcn = @(src, event) plotControlsChanged(obj, event);
+            obj.update_name_status(obj.StormDBNameEditField.Value);
         end
 
     end
@@ -596,6 +627,36 @@ classdef CHSStormDBImportUI < handle
         end
 
         function importToProjectButtonPressed(obj, event)
+            % Commit Point: An Existing Storm DB Of That Name (Project Or Event_Database Files) Is Overwritten Once Confirmed
+            % (Cancel: Back To The Wizard, Staged Files Kept). Then The Staged Files Take The Final Names (commit_staged)
+            [exists, in_project, existing_name] = obj.name_clash(obj.db_name);
+            if exists
+                if in_project
+                    msg = sprintf('Storm DB "%s" already exists. Overwrite?', existing_name);
+                    usage = [0 0];
+                    if ~isempty(obj.db_usage_fcn)
+                        usage = obj.db_usage_fcn(existing_name);
+                    end
+                    if any(usage > 0)
+                        msg = sprintf(['%s\n%d alternative(s) were last run with it. Its %d run file(s) will be deleted and ',...
+                            'those alternatives will show no results.'], msg, usage(1), usage(2));
+                    end
+                else
+                    msg = sprintf(['Storm DB "%s" already exists. Overwrite?\nIts files in Event_Database are not part of ',...
+                        'the project; they will be replaced.'], obj.db_name);
+                end
+                obj.auxLib.confirmation_dlgbox(msg, 'Overwrite');
+                if ~obj.auxLib.dialog_answer
+                    return
+                end
+            end
+            try
+                obj.commit_staged();
+            catch me
+                obj.auxLib.error_dlgbox(['Could not import storm DB "' obj.db_name '": ' me.message]);
+                return
+            end
+            obj.overwrite_flag = exists;
             % Bring project over to parent gui and close ui
             delete(obj.figUI);
             obj.db_created = true;
@@ -605,12 +666,14 @@ classdef CHSStormDBImportUI < handle
             % Process Provided CHS Modeling zip folder
             obj.import_chs_modeling(obj.CHSZipFolderEditField.Value);
             if obj.modeling_imported
+                % storm_duration 1 h: Placeholder Stamped On Peaks Column 6 And WLP/WHP. Not Used As Is: Runs Restamp It With
+                % config.storm_duration (Library call_project_forcing_formater) Or Read The Config (Dn50, CSR, FB, LCS)
                 [storm, ~] = obj.create_storm_database(obj.create_wlp, obj.create_whp, 1, obj.VerticalOffsetEditField.Value);
                 %
                 obj.PlotControlsPanel.Enable = 'on';
-                obj.ImportButton.Enable = 'on';
+                obj.update_buttons();
                 % Overwrite Variable
-                save(fullfile(obj.outpath, [obj.db_name '.mat']), '-append', 'storm');
+                save(obj.output_paths.storm_db, '-append', 'storm');
                 %
                 stm_types = fieldnames(storm);
                 data_types = {'Peaks','Timeseries'}; % There are additional fields at this level
@@ -638,7 +701,7 @@ classdef CHSStormDBImportUI < handle
         end
 
         function stormTypeDropDownValueChanged(obj, event)
-            load(fullfile(obj.outpath, [obj.db_name '.mat']), 'storm');
+            load(obj.output_paths.storm_db, 'storm');
             obj.StormIDDropDown.Items = cellfun(@num2str, storm.(obj.StormTypeDropDown.Value).(obj.DataTypeDropDown.Value).(obj.MatchTypeDropDown.Value)(:,1), 'UniformOutput', false);
             obj.StormIDDropDown.Value = obj.StormIDDropDown.Items{1};
             obj.plotControlsChanged(event);
@@ -659,7 +722,7 @@ classdef CHSStormDBImportUI < handle
 
         function plotControlsChanged(obj, event) %#ok<*INUSD>
             cla(obj.StormDBAxes);
-            load(fullfile(obj.outpath, [obj.db_name '.mat']), 'storm');
+            load(obj.output_paths.storm_db, 'storm');
             ydata = storm.(obj.StormTypeDropDown.Value).(obj.DataTypeDropDown.Value).(obj.MatchTypeDropDown.Value)(:, 2);
             stm_list = cell2mat(storm.(obj.StormTypeDropDown.Value).(obj.DataTypeDropDown.Value).(obj.MatchTypeDropDown.Value)(:, 1));
             switch obj.DataTypeDropDown.Value
@@ -709,53 +772,22 @@ classdef CHSStormDBImportUI < handle
         end
 
         function stormDBNameChanged(obj, event)
-            %
-            if ~isempty(obj.StormDBNameEditField.Value)
-                obj.CreateStormDBButton.Enable = 'on';
-                obj.StormDBNameLamp.Color = [0 1 0];
-            else
-                obj.CreateStormDBButton.Enable = 'off';
-                obj.ImportButton.Enable = 'off';
-                obj.StormDBNameLamp.Color = [1 0 0];
-            end
-            %
-            if any(strcmp([event.Value '.mat'], {obj.outpath_dirlist.name})) && ~obj.modeling_imported
-                obj.auxLib.confirmation_dlgbox('Database already exist. Overwrite?');
-                if obj.auxLib.dialog_answer % Ok Pressed
-                    obj.StormDBNameLamp.Color = [1 1 0];
-                else % Cancel Pressed
-                    obj.StormDBNameEditField.Value = '';
-                    obj.StormDBNameLamp.Color = [1 0 0];
-                    obj.ImportButton.Enable = 'off';
-                    obj.CreateStormDBButton.Enable = 'off';
-                end
-            end
-            %
-            if obj.modeling_imported && exist(fullfile(obj.outpath, [event.PreviousValue '.mat']), 'file')
-                % This is considered a renaming operation
-                movefile(fullfile(obj.outpath, [event.PreviousValue '.mat']),...
-                    fullfile(obj.outpath, [event.Value '.mat']));
-                if exist(fullfile(obj.outpath, [event.PreviousValue '_raw_files.mat']), 'file') % None For storm + prob_mass Imports
-                    movefile(fullfile(obj.outpath, [event.PreviousValue '_raw_files.mat']),...
-                        fullfile(obj.outpath, [event.Value '_raw_files.mat']));
-                end
-                obj.ImportButton.Enable = 'on';
-            end
-            obj.db_name = event.Value;
-            obj.outpath_dirlist = dir(obj.outpath);
+            % Name Only Recorded Here (The Staged Files Do Not Depend On It); Clash Decided At Import
+            obj.db_name = obj.StormDBNameEditField.Value;
+            obj.update_name_status(obj.db_name);
         end
 
         function verticalOffsetValueChanged(obj, event)
             % Update Values For Surge/SWL In Storm DB
             if obj.modeling_imported
                 % Load Storm DB
-                load(fullfile(obj.outpath, [obj.db_name '.mat']), 'storm');
+                load(obj.output_paths.storm_db, 'storm');
                 % Remove Previous Adjustment
                 storm = obj.study_datum_adjustment(storm, -1*event.PreviousValue);
                 % Adjust Water Level/Surge Response For All Events
                 storm = obj.study_datum_adjustment(storm, event.Value);
                 % Overwrite Variable
-                save(fullfile(obj.outpath, [obj.db_name '.mat']), '-append', 'storm');
+                save(obj.output_paths.storm_db, '-append', 'storm');
                 %
                 switch obj.FieldtoPlotDropDown.Value
                     case 1
@@ -777,6 +809,7 @@ classdef CHSStormDBImportUI < handle
             if any(sel_file ~= 0)
                 % Inspect provided CHS zip folder
                 obj.chs_zip_inspect(fullfile(sel_pth, sel_file));
+                obj.region_ok();
                 % WLP/WHP: Built From CHS Files | Fixed By A storm + prob_mass .mat
                 storm_file = ~isempty(obj.storm_data_input);
                 obj.CreateWLPStormDBCheckBox.Enable = matlab.lang.OnOffSwitchState(~storm_file);
@@ -801,12 +834,7 @@ classdef CHSStormDBImportUI < handle
                         {obj.study; obj.study_datum; sp_location; obj.has_peaks; obj.has_timeseries},...
                         ];
                     obj.CHSZipFolderLamp.Color = [0 1 0];
-                    obj.ImportButton.Enable = 'off';
-                    if ~isempty(obj.StormDBNameEditField.Value)
-                        obj.CreateStormDBButton.Enable = 'on';
-                    else
-                        obj.CreateStormDBButton.Enable = 'off';
-                    end
+                    obj.update_buttons();
                 else
                     obj.CreateStormDBButton.Enable = 'off';
                     obj.CHSZipFolderEditField.Value = '';
@@ -827,27 +855,17 @@ classdef CHSStormDBImportUI < handle
             obj.reset_db_state();
             % Prompt User To Select Path
             sel_path = uigetdir('', 'Select CHS_Dependencies Folder');
-            %
             if any(sel_path~=0)
-                % Scan irectory For Sub-folders
-                sub_list = dir(sel_path);
-                % Make Sure Provided Folder Has Expected Layout
-                if sum(contains({sub_list.name}', {'Bias_and_Uncertainty', 'Grid_Files', 'Probability_Masses'})) == 3
-                    obj.source_paths.chs_dependencies_path = sel_path;
-                    obj.studyDependenciesLamp.Color = [0 1 0];
-                    obj.chsZipFolderButton.Enable = 'on';
-                    obj.CHSStudyDependenciesEditField.Value = obj.auxLib.relative_path(sel_path, pwd);
-                else % Invalid Folder, Reset
-                    obj.source_paths.chs_dependencies_path = [];
-                    obj.studyDependenciesLamp.Color = [1 0 0];
-                    obj.chsZipFolderButton.Enable = 'off';
-                    obj.CHSStudyDependenciesEditField.Value = '';
-                    obj.auxLib.error_dlgbox('Selected CHS_Dependencies folder does not meet required folder structure.');
+                msg = obj.set_chs_dependencies(sel_path);
+                if ~isempty(msg)
+                    obj.auxLib.error_dlgbox(msg);
                 end
             end
         end
 
         function UIWindowCloseRequest(obj, event)
+            % Closed Without Import: Staged Files Deleted, An Existing Storm DB Untouched
+            obj.clear_staging();
             delete(obj.figUI);
             obj.db_created = false;
         end
@@ -855,6 +873,143 @@ classdef CHSStormDBImportUI < handle
 
     %% PRIVATE METHODS
     methods (Access=private)
+
+        function init_chs_dependencies(obj)
+            % Start-Up (No Error Dialog): The Stored CHS_Dependencies Folder Is Applied. A Project With A Region Keeps A Valid
+            % Folder (Browse Disabled); Missing Or Invalid, Browse Stays Enabled To Re-Point It
+            msg = 'none';
+            if ~isempty(obj.source_paths.chs_dependencies_path)
+                msg = obj.set_chs_dependencies(obj.source_paths.chs_dependencies_path);
+            end
+            if isempty(obj.expected_region)
+                return
+            end
+            if isempty(msg)
+                obj.chsDependenciesFolderButton.Enable = 'off';
+                obj.chsDependenciesFolderButton.Tooltip = 'CHS_Dependencies is fixed for this project. Create a new project to use a different source.';
+            else
+                obj.CHSStudyDependenciesEditField.Placeholder = sprintf('CHS_Dependencies not found. Select a folder containing region %s.', obj.expected_region);
+            end
+        end
+
+        function update_name_status(obj, name)
+            % Name Lamp + Message (While Typing And On Change), Then Buttons. Red: Invalid (chessProject.db_name_problem).
+            % Yellow: Exists (name_clash), Overwrite Confirmed At Import. Green: OK
+            name = char(name);
+            msg = chessProject.db_name_problem(name);
+            state = 'red';
+            if isempty(msg)
+                state = 'green';
+                [exists, in_project] = obj.name_clash(name);
+                if exists && in_project
+                    state = 'yellow';
+                    msg = sprintf('Storm DB "%s" exists: you will be asked to overwrite it at import.', name);
+                elseif exists
+                    state = 'yellow';
+                    msg = sprintf('Storm DB files "%s" exist in Event_Database: you will be asked to overwrite them at import.', name);
+                end
+            end
+            obj.name_state = state;
+            switch state
+                case 'red'
+                    obj.StormDBNameLamp.Color = [1 0 0];
+                    obj.StormDBNameMessageLabel.FontColor = [0.75 0.1 0.1];
+                case 'yellow'
+                    obj.StormDBNameLamp.Color = [1 1 0];
+                    obj.StormDBNameMessageLabel.FontColor = [0.6 0.45 0];
+                otherwise
+                    obj.StormDBNameLamp.Color = [0 1 0];
+            end
+            obj.StormDBNameMessageLabel.Text = msg;
+            obj.update_buttons();
+        end
+
+        function update_buttons(obj)
+            % Create: Valid Name And CHS Data Selected. Import: Valid Name And A Storm DB Staged (Created)
+            name_ok = ~strcmp(obj.name_state, 'red');
+            obj.CreateStormDBButton.Enable = name_ok && isequal(obj.CHSZipFolderLamp.Color, [0 1 0]);
+            obj.ImportButton.Enable = name_ok && isstruct(obj.output_paths) && isfield(obj.output_paths, 'storm_db')...
+                && isfile(obj.output_paths.storm_db);
+        end
+
+        function [exists, in_project, existing_name] = name_clash(obj, name)
+            % Case-Insensitive Clash With A Project Storm DB (existing_name: Its Stored Name) Or With <name>.mat /
+            % <name>_raw_files.mat In Event_Database (Windows File Names Are Case-Insensitive)
+            indx = find(strcmpi(name, obj.existing_db_names), 1);
+            in_project = ~isempty(indx);
+            existing_name = name;
+            if in_project
+                existing_name = obj.existing_db_names{indx};
+            end
+            exists = in_project || isfile(fullfile(obj.outpath, [name '.mat'])) || isfile(fullfile(obj.outpath, [name '_raw_files.mat']));
+        end
+
+        function stage = staging_dir(obj)
+            % Created Storm DB Files Wait Here (staged.mat, staged_raw_files.mat) Until Import (commit_staged)
+            stage = fullfile(obj.outpath, '_import_staging');
+        end
+
+        function clear_staging(obj)
+            % Staging Folder Removed (Wizard Start, Close, Commit); Best Effort
+            try
+                CHSStormDBImportUI.remove_temp_folder(obj.staging_dir());
+            catch
+            end
+        end
+
+        function commit_staged(obj)
+            % Import Commit: Existing <db>.mat / <db>_raw_files.mat Moved Aside (Staging prev*.mat), Staged Files Moved To The
+            % Final Names, Then The Old Files Deleted With The Staging Folder. A Failed Move Puts Everything Back (Error
+            % Rethrown). A storm .mat Import Stages No _raw_files.mat, So An Old One Is Dropped. A Case-Only Name Change Works
+            % Too: The Old File Is Moved Aside First
+            stage = obj.staging_dir();
+            flds = {'storm_db', 'chs_data'};
+            final = {fullfile(obj.outpath, [obj.db_name '.mat']), fullfile(obj.outpath, [obj.db_name '_raw_files.mat'])};
+            prev = {fullfile(stage, 'prev.mat'), fullfile(stage, 'prev_raw_files.mat')};
+            staged = cellfun(@(f) isfield(obj.output_paths, f) && isfile(obj.output_paths.(f)), flds);
+            [aside, placed] = deal(false(1, 2));
+            try
+                for kk = 1:2
+                    if isfile(final{kk})
+                        chessProject.move_item(final{kk}, prev{kk});
+                        aside(kk) = true;
+                    end
+                end
+                for kk = find(staged)
+                    chessProject.move_item(obj.output_paths.(flds{kk}), final{kk});
+                    placed(kk) = true;
+                end
+            catch me
+                for kk = find(placed)
+                    try
+                        chessProject.move_item(final{kk}, obj.output_paths.(flds{kk}));
+                    catch
+                    end
+                end
+                for kk = find(aside)
+                    try
+                        chessProject.move_item(prev{kk}, final{kk});
+                    catch
+                    end
+                end
+                rethrow(me);
+            end
+            for kk = find(staged)
+                obj.output_paths.(flds{kk}) = final{kk};
+            end
+            obj.clear_staging();
+        end
+
+        function ok = region_ok(obj)
+            % CHS Data Inspected (study Set): A Project With A Region Takes Only That Region (Custom_Modeling Has None). Else
+            % Error Dialog And State Reset (study Empty)
+            ok = isempty(obj.expected_region) || isempty(obj.study) || any(strcmp(obj.study, {'Custom_Modeling', obj.expected_region}));
+            if ~ok
+                obj.auxLib.error_dlgbox(sprintf('This project uses region %s; the selected CHS data is %s. Create a new project for another region.',...
+                    obj.expected_region, obj.study));
+                obj.reset_db_state();
+            end
+        end
 
         function chs_zip_inspect(obj, chs_modeling)
             % Get File Extension
@@ -1023,6 +1178,20 @@ classdef CHSStormDBImportUI < handle
             end
         end
 
+        function import_progress(obj, percent, msg)
+            % CHS Modeling Import Progress (Wizard Dialog); A Cancel (Seen Here, Between Steps) Stops The Import
+            obj.dlgObj = obj.auxLib.progress_window(percent, msg, 'CHS Modeling Import', obj.dlgObj, true);
+            if obj.auxLib.dialog_answer
+                error('CHESS:importCancelled', 'Import cancelled.');
+            end
+        end
+
+        function close_progress(obj)
+            if ~isempty(obj.dlgObj) && isvalid(obj.dlgObj)
+                close(obj.dlgObj);
+            end
+        end
+
         function [ok, chs_id] = storm_files_ok(obj, file_names)
             % Storm File Slots (Library chs_storm_file_slots): One ADCIRC + One Wave File Per Storm Type & Data Type. The
             % Request Is The Import (Every Storm Type & Data Type In The Input); WLP/WHP Are Decided At Database Creation
@@ -1049,6 +1218,24 @@ classdef CHSStormDBImportUI < handle
 
     %% PUBLIC METHODS
     methods (Access=public)
+        function msg = set_chs_dependencies(obj, chs_dir)
+            % CHS_Dependencies Folder Of The Import (Browse And Start-Up): Layout Check, Plus The Project Region's Files When
+            % expected_region Is Set (chessProject.chs_dependencies_problem). Sets The Path, Lamp, CHS File Button And Field
+            % (Full Path). msg: '' If Valid, Else The Reason (Path Cleared)
+            msg = chessProject.chs_dependencies_problem(chs_dir, obj.expected_region);
+            if isempty(msg)
+                obj.source_paths.chs_dependencies_path = chs_dir;
+                obj.studyDependenciesLamp.Color = [0 1 0];
+                obj.chsZipFolderButton.Enable = 'on';
+                obj.CHSStudyDependenciesEditField.Value = chs_dir;
+            else
+                obj.source_paths.chs_dependencies_path = [];
+                obj.studyDependenciesLamp.Color = [1 0 0];
+                obj.chsZipFolderButton.Enable = 'off';
+                obj.CHSStudyDependenciesEditField.Value = '';
+            end
+        end
+
         % Adjust Modeling Datum
         function storm = study_datum_adjustment(obj, storm, datum_offset)
             %
@@ -1077,6 +1264,7 @@ classdef CHSStormDBImportUI < handle
             if ~obj.is_storm_data_input(chs_modeling)
                 obj.reset_db_state();
                 obj.chs_zip_inspect(chs_modeling);
+                obj.region_ok();
                 if isempty(obj.study)
                     return;
                 end
@@ -1088,13 +1276,15 @@ classdef CHSStormDBImportUI < handle
             end
             % Get File Extension
             [~, ~, fext] = fileparts(chs_modeling);
+            obj.dlgObj = []; % .zip: Progress Dialog In The Wizard (Unzip, H5 Conversion, Raw Files Write); Cancel Between Files
             % Convert CHS Data
             switch fext
-                case '.zip' % Library H5 Conversion (Progress Printed To Command Window)
-                    % Unzipped Into A System Temp Folder Removed On Every Exit (Success, Converter Error)
+                case '.zip' % Library H5 Conversion (Progress Also Printed To Command Window)
+                    % Unzipped Into A System Temp Folder Removed On Every Exit (Success, Converter Error, Cancel)
                     temp_path = tempname;
                     temp_cleanup = onCleanup(@() CHSStormDBImportUI.remove_temp_folder(temp_path));
                     try
+                        obj.import_progress(NaN, 'Unzipping CHS modeling files...');
                         unzip(chs_modeling, temp_path);
                         % .h5 Extension In Any Case (dir '*.h5' Is Case-Sensitive Off Windows)
                         h5_dir = dir(fullfile(temp_path, '**', '*'));
@@ -1103,9 +1293,17 @@ classdef CHSStormDBImportUI < handle
                         if any(h5_loc == 0)
                             error('%s not found in the unzipped folder', strjoin(obj.h5_names(h5_loc == 0), ', '));
                         end
-                        CHS_Data = call_chs_h5_converter(fullfile({h5_dir(h5_loc).folder}', {h5_dir(h5_loc).name}'), true);
+                        % Bar Shows Files Done ((jj - 1)/n): jj/n Would Close The Dialog Before The Last File
+                        CHS_Data = call_chs_h5_converter(fullfile({h5_dir(h5_loc).folder}', {h5_dir(h5_loc).name}'), true,...
+                            @(jj, n, file_name) obj.import_progress((jj - 1)/n, sprintf('Converting CHS .h5 files (%d of %d): %s', jj, n, file_name)));
+                        obj.import_progress(NaN, ['Writing ' obj.db_name '_raw_files.mat...']);
                     catch me
-                        obj.auxLib.error_dlgbox(['Could not convert the CHS modeling files of ' chs_modeling ': ' me.message]);
+                        obj.close_progress();
+                        if strcmp(me.identifier, 'CHESS:importCancelled')
+                            obj.auxLib.error_dlgbox('Import cancelled.');
+                        else
+                            obj.auxLib.error_dlgbox(['Could not convert the CHS modeling files of ' chs_modeling ': ' me.message]);
+                        end
                         return;
                     end
                     clear temp_cleanup;
@@ -1118,10 +1316,12 @@ classdef CHSStormDBImportUI < handle
             fnames = strcat(fnames, fexts);
             [CHS_Data.Filename] = fnames{:};
             % Write Out File And Store Pointer
+            % Staged Until Import (commit_staged Gives It The Name <db>_raw_files.mat)
             disp(['Writing CHS_Data to ' obj.db_name, '_raw_files.mat....']);
-            obj.create_dir(obj.outpath);
-            save(fullfile(obj.outpath, [obj.db_name, '_raw_files.mat']), 'CHS_Data','-v7.3');
-            obj.output_paths.chs_data = fullfile(obj.outpath, [obj.db_name, '_raw_files.mat']);
+            obj.create_dir(obj.staging_dir());
+            obj.output_paths.chs_data = fullfile(obj.staging_dir(), 'staged_raw_files.mat');
+            save(obj.output_paths.chs_data, 'CHS_Data','-v7.3');
+            obj.close_progress();
             obj.modeling_imported = obj.set_study_dependencies();
         end
 
@@ -1213,9 +1413,7 @@ classdef CHSStormDBImportUI < handle
             end
             % Dialog Window
             fig = uifigure('Name', 'Storm Database Details', 'WindowStyle', 'modal', 'Position', [100 100 440 330]);
-            if ~isempty(obj.figUI) && isvalid(obj.figUI)
-                fig.Position(1:2) = obj.figUI.Position(1:2) + (obj.figUI.Position(3:4) - fig.Position(3:4))/2;
-            end
+            obj.auxLib.center_on_parent(fig);
             gl = uigridlayout(fig, [9 2]);
             gl.ColumnWidth = {'1x', 160};
             gl.RowHeight = [repmat({22}, 1, 8), {'1x'}];
@@ -1245,6 +1443,7 @@ classdef CHSStormDBImportUI < handle
             ok_btn.Layout.Column = 3;
             region_dd.ValueChangedFcn = @(~, ~) toggle_uncertainty();
             fig.CloseRequestFcn = @(~, ~) uiresume(fig);
+            obj.auxLib.add_dialog_keys(fig, @() ok_pressed(), @() uiresume(fig), ok_btn);
             toggle_uncertainty();
             % Wait For User (OK Stores The Details In fig.UserData)
             uiwait(fig);
@@ -1342,9 +1541,10 @@ classdef CHSStormDBImportUI < handle
                 [~, src_name, src_ext] = fileparts(obj.storm_data_input.src);
                 obj.db_info = storm_db_info('create', obj.db_info, 0, Nyrs_XC, Nstm_XC, [src_name src_ext]);
                 db_info = obj.db_info; %#ok<PROPLC> Saved By Name
-                obj.create_dir(obj.outpath);
-                save(fullfile(obj.outpath, [obj.db_name '.mat']), 'storm', 'prob_mass', 'db_info');
-                obj.output_paths.storm_db = fullfile(obj.outpath, [obj.db_name, '.mat']);
+                % Staged Until Import (commit_staged Gives It The Name <db>.mat)
+                obj.create_dir(obj.staging_dir());
+                obj.output_paths.storm_db = fullfile(obj.staging_dir(), 'staged.mat');
+                save(obj.output_paths.storm_db, 'storm', 'prob_mass', 'db_info');
                 return;
             end
             %
@@ -1402,14 +1602,15 @@ classdef CHSStormDBImportUI < handle
                     % Save Out And Store Pointer
                     [obj.dlgObj] = obj.auxLib.progress_window(8.9/9, ['Writting storm & prob_mass to ' obj.db_name '.mat'],...
                         'Storm Database Creation Progress', obj.dlgObj, false);
-                    obj.create_dir(obj.outpath);
+                    obj.create_dir(obj.staging_dir());
                     storm = obj.study_datum_adjustment(storm, study_datum_offset);
                     % Storm Database Details (Library storm_db_info.m): Bias & Uncertainty Set At Import, TC Bias Correction, XC Record
                     [~, src_name, src_ext] = fileparts(obj.source_paths.chs_zip);
                     obj.db_info = storm_db_info('create', obj.db_info, tc_bias_corrected, Nyrs_XC, Nstm_XC, [src_name src_ext]);
                     db_info = obj.db_info; %#ok<PROPLC> Saved By Name
-                    save(fullfile(obj.outpath, [obj.db_name '.mat']), 'storm', 'prob_mass', 'db_info');
-                    obj.output_paths.storm_db = fullfile(obj.outpath, [obj.db_name, '.mat']);
+                    % Staged Until Import (commit_staged Gives It The Name <db>.mat)
+                    obj.output_paths.storm_db = fullfile(obj.staging_dir(), 'staged.mat');
+                    save(obj.output_paths.storm_db, 'storm', 'prob_mass', 'db_info');
                     [obj.dlgObj] = obj.auxLib.progress_window(9/9, 'Complete',...
                         'Storm Database Creation Progress', obj.dlgObj);
                 else

@@ -15,6 +15,7 @@ classdef chessProject < handle
         stormDB_assignment cell
         project_response_files cell
         sim_record table
+        chs_dependencies char = '' % CHS_Dependencies Folder Of The Project Region (project_region), Set By The First CHS Storm DB
     end
 
     properties (Access=public)
@@ -234,11 +235,20 @@ classdef chessProject < handle
             obj.project_response_files = {};
         end
 
-        function remove_pse(obj, pse_name)
-            % Removes PSE From Every Per-PSE Field (Keeps Fields Aligned)
+        function leftover = remove_pse(obj, pse_name, delete_files)
+            % Removes PSE From Every Per-PSE Field (Keeps Fields Aligned). delete_files (Default false): Its Folder
+            % <path>\<name>\PSE\<pse> Is Deleted First (delete_folder; An Error Leaves The Project Unchanged).
+            % leftover: Path delete_folder Could Not Fully Remove ('' If None)
+            if nargin < 3
+                delete_files = false;
+            end
+            leftover = '';
             indx = find(strcmp(pse_name, obj.pse_list), 1);
             if isempty(indx)
                 return
+            end
+            if delete_files
+                leftover = chessProject.delete_folder(fullfile(obj.path, obj.name, 'PSE', pse_name));
             end
             fields = {'pse_list', 'alternative_list', 'pse_tables', 'pse_geometry',...
                 'stormDB_assignment', 'project_response_files'};
@@ -251,8 +261,14 @@ classdef chessProject < handle
             obj.alt_indx = [];
         end
 
-        function remove_alternative(obj, pse_name, alt_name)
-            % Removes Alternative From Every Per-Alternative Field (Removes PSE If Last Alternative)
+        function leftover = remove_alternative(obj, pse_name, alt_name, delete_files)
+            % Removes Alternative From Every Per-Alternative Field (Removes PSE If Last Alternative). delete_files (Default
+            % false): Its Folder <path>\<name>\PSE\<pse>\<alt> (The PSE Folder For The Last Alternative) Is Deleted First
+            % (delete_folder; An Error Leaves The Project Unchanged). leftover: Path Not Fully Removed ('' If None)
+            if nargin < 4
+                delete_files = false;
+            end
+            leftover = '';
             p_indx = find(strcmp(pse_name, obj.pse_list), 1);
             if isempty(p_indx) || p_indx > numel(obj.alternative_list)
                 return
@@ -262,8 +278,11 @@ classdef chessProject < handle
                 return
             end
             if numel(obj.alternative_list{p_indx}) == 1
-                obj.remove_pse(pse_name);
+                leftover = obj.remove_pse(pse_name, delete_files);
                 return
+            end
+            if delete_files
+                leftover = chessProject.delete_folder(fullfile(obj.path, obj.name, 'PSE', pse_name, alt_name));
             end
             fields = {'alternative_list', 'pse_tables', 'pse_geometry',...
                 'stormDB_assignment', 'project_response_files'};
@@ -292,11 +311,12 @@ classdef chessProject < handle
 
         function remove_stormdb(obj, db_name)
             % Removes A Storm Database. stormDB_assignment Holds Indices Into stormDB_list:
-            % Alternatives Assigned To It Lose Their Assignment & Results Pointer, Later Indices Shift Down By One.
+            % Alternatives Assigned To It Lose Their Assignment & Results Pointer (clear_stormdb_links), Later Indices Shift Down By One.
             indx = find(strcmp(db_name, {obj.stormDB_list.db_name}), 1);
             if isempty(indx)
                 return
             end
+            obj.clear_stormdb_links(db_name);
             obj.stormDB_list(indx) = [];
             if iscell(obj.stormDB_assignment)
                 for pp = 1:numel(obj.stormDB_assignment)
@@ -305,19 +325,90 @@ classdef chessProject < handle
                     end
                     for aa = 1:numel(obj.stormDB_assignment{pp})
                         db_a = obj.stormDB_assignment{pp}{aa};
-                        if isequal(db_a, indx)
-                            obj.stormDB_assignment{pp}{aa} = [];
-                            if numel(obj.project_response_files) >= pp && iscell(obj.project_response_files{pp})...
-                                    && numel(obj.project_response_files{pp}) >= aa
-                                obj.project_response_files{pp}{aa} = [];
-                            end
-                        elseif isnumeric(db_a) && isscalar(db_a) && db_a > indx
+                        if isnumeric(db_a) && isscalar(db_a) && db_a > indx
                             obj.stormDB_assignment{pp}{aa} = db_a - 1;
                         end
                     end
                 end
             end
             obj.db_indx = [];
+        end
+
+        function clear_stormdb_links(obj, db_name)
+            % Alternatives Assigned To Storm Database db_name Lose Their Assignment & Results Pointer (Entry Itself Kept)
+            indx = find(strcmp(db_name, {obj.stormDB_list.db_name}), 1);
+            if isempty(indx) || ~iscell(obj.stormDB_assignment)
+                return
+            end
+            for pp = 1:numel(obj.stormDB_assignment)
+                if ~iscell(obj.stormDB_assignment{pp})
+                    continue
+                end
+                for aa = 1:numel(obj.stormDB_assignment{pp})
+                    if isequal(obj.stormDB_assignment{pp}{aa}, indx)
+                        obj.stormDB_assignment{pp}{aa} = [];
+                        if numel(obj.project_response_files) >= pp && iscell(obj.project_response_files{pp})...
+                                && numel(obj.project_response_files{pp}) >= aa
+                            obj.project_response_files{pp}{aa} = [];
+                        end
+                    end
+                end
+            end
+        end
+
+        function files = stormdb_run_files(obj, db_name)
+            % Run Files Of Storm Database db_name In Every Alternative (Library chess_paths:
+            % PSE\<pse>\<alt>\<wf_folder>\<db>_<wflow_name>_<config_file|project_forcing|project_responses|sampling_seed>.mat,
+            % Run Backups *_prev.mat Included). Exact Name Match (Case-Insensitive, Windows): A Storm DB Whose Name Only
+            % Starts With db_name Is Not Picked Up
+            files = cell(0, 1);
+            pse_dir = fullfile(obj.path, obj.name, 'PSE');
+            wf = {'PROS', 'PROS-(RB|FB)'; 'DET', 'DET'; 'LCS', 'LCS'};
+            for kk = 1:size(wf, 1)
+                d = dir(fullfile(pse_dir, '*', '*', wf{kk, 1}, '*.mat'));
+                pat = ['^' regexptranslate('escape', db_name) '_' wf{kk, 2}...
+                    '_(config_file|project_forcing|project_responses|sampling_seed)(_prev)?\.mat$'];
+                keep = ~cellfun(@isempty, regexpi({d.name}, pat, 'once'));
+                files = [files; fullfile({d(keep).folder}', {d(keep).name}')]; %#ok<AGROW>
+            end
+        end
+
+        function lines = stormdb_tied_sims(obj, db_name)
+            % Simulations Tied To Storm Database db_name, One Line Per Alternative: '<pse> / <alt>  (<workflows>)' From Its
+            % Run Files (stormdb_run_files; Workflow = File Name Token After '<db>_', e.g. PROS-RB), Or
+            % '<pse> / <alt>  (linked, no saved results)' For An Alternative Assigned To It Without Run Files
+            keys = cell(0, 1);
+            wfs = cell(0, 1);
+            files = obj.stormdb_run_files(db_name);
+            for ff = 1:numel(files)
+                parts = strsplit(files{ff}, filesep); % ...\PSE\<pse>\<alt>\<wf_folder>\<file> (Folder Names May Contain Dots)
+                key = [parts{end-3} ' / ' parts{end-2}];
+                [~, fname] = fileparts(files{ff});
+                wf = regexp(fname(numel(db_name)+2:end), '^[^_]+', 'match', 'once');
+                kk = find(strcmpi(key, keys), 1);
+                if isempty(kk)
+                    keys{end+1, 1} = key; %#ok<AGROW>
+                    wfs{end+1, 1} = {wf}; %#ok<AGROW>
+                elseif ~any(strcmpi(wf, wfs{kk}))
+                    wfs{kk}{end+1} = wf;
+                end
+            end
+            indx = find(strcmp(db_name, {obj.stormDB_list.db_name}), 1);
+            if ~isempty(indx) && iscell(obj.stormDB_assignment)
+                for pp = 1:min(numel(obj.stormDB_assignment), numel(obj.pse_list))
+                    if ~iscell(obj.stormDB_assignment{pp})
+                        continue
+                    end
+                    for aa = 1:min(numel(obj.stormDB_assignment{pp}), numel(obj.alternative_list{pp}))
+                        key = [obj.pse_list{pp} ' / ' obj.alternative_list{pp}{aa}];
+                        if isequal(obj.stormDB_assignment{pp}{aa}, indx) && ~any(strcmpi(key, keys))
+                            keys{end+1, 1} = key; %#ok<AGROW>
+                            wfs{end+1, 1} = {'linked, no saved results'}; %#ok<AGROW>
+                        end
+                    end
+                end
+            end
+            lines = cellfun(@(k, w) [k '  (' strjoin(w, ', ') ')'], keys, wfs, 'un', false);
         end
 
         function sync_alt_fields(obj)
@@ -346,10 +437,14 @@ classdef chessProject < handle
 
         function relocate(obj, new_root)
             % [NEW] Project Folder Moved/Copied To new_root (Import From Another Location): Stored Paths Under
-            % <path>\<name> (Tide Files, Response Files, Storm DB Files) Point Into <new_root>\<name>, Subpaths Unchanged.
-            % source_paths (CHS Sources Outside The Project) And outpath_dirlist (Rebuilt On Use) Are Left As Is
-            old_dir = fullfile(obj.path, obj.name);
-            new_dir = fullfile(new_root, obj.name);
+            % <path>\<name> Point Into <new_root>\<name> (remap_paths)
+            obj.remap_paths(fullfile(obj.path, obj.name), fullfile(new_root, obj.name));
+            obj.path = new_root;
+        end
+
+        function remap_paths(obj, old_dir, new_dir)
+            % Stored Paths Under old_dir (Tide Files, Response Files, Storm DB Files, chs_dependencies) -> Same Subpath Under
+            % new_dir. source_paths (CHS Sources Outside The Project) And outpath_dirlist (Rebuilt On Use) Are Left As Is
             remap = @(p) chessProject.relocate_path(p, old_dir, new_dir);
             obj.tide_files_list = cellfun(remap, obj.tide_files_list, 'un', false);
             for pp = 1:numel(obj.project_response_files)
@@ -373,7 +468,149 @@ classdef chessProject < handle
                     end
                 end
             end
-            obj.path = new_root;
+            obj.chs_dependencies = remap(obj.chs_dependencies);
+        end
+
+        function region = project_region(obj)
+            % CHS Study Of The Project's Storm DBs ('' If None). Custom_Modeling Storm DBs Give No Region
+            studies = {obj.stormDB_list.study};
+            studies = studies(~cellfun(@isempty, studies) & ~strcmp(studies, 'Custom_Modeling'));
+            region = '';
+            if ~isempty(studies)
+                region = studies{1};
+            end
+        end
+
+        function info = rename(obj, level, new_name, pse_name, alt_name, project_names)
+            % Rename The Project, A PSE Or An Alternative (level 'proj' | 'pse' | 'alt'; pse_name/alt_name Name The Item).
+            % In Order: Name Check (name_problem; The Target Folder Must Not Exist Unless Only The Case Changes), Folder
+            % Moved (If Any; Nothing Changed When That Fails), Names + Stored Paths Updated (remap_paths), Saved Run Configs
+            % (*_config_file.mat) Under The Moved Folder Rewritten (Name Field, out_files, tide_file), Project File Renamed
+            % (Project Level). project_names: The Other Loaded Projects (Project Level).
+            % info: old_dir, new_dir, rewritten (Config Files), failed ('<file>: <error>', Not Rewritten)
+            arguments
+                obj
+                level {mustBeMember(level, {'proj', 'pse', 'alt'})}
+                new_name {mustBeTextScalar}
+                pse_name {mustBeText} = ''
+                alt_name {mustBeText} = ''
+                project_names cell = {}
+            end
+            new_name = char(new_name);
+            proj_dir = fullfile(obj.path, obj.name);
+            switch level
+                case 'proj'
+                    current = obj.name;
+                    siblings = project_names;
+                    parent = obj.path;
+                    name_field = 'project_name';
+                case 'pse'
+                    p = find(strcmp(pse_name, obj.pse_list), 1);
+                    current = pse_name;
+                    siblings = obj.pse_list([1:p-1, p+1:end]);
+                    parent = fullfile(proj_dir, 'PSE');
+                    name_field = 'struc_id';
+                case 'alt'
+                    p = find(strcmp(pse_name, obj.pse_list), 1);
+                    alts = obj.alternative_list{p};
+                    a = find(strcmp(alt_name, alts), 1);
+                    current = alt_name;
+                    siblings = alts([1:a-1, a+1:end]);
+                    parent = fullfile(proj_dir, 'PSE', pse_name);
+                    name_field = 'case_name';
+            end
+            msg = chessProject.name_problem(new_name, siblings, current);
+            if ~isempty(msg)
+                error('CHESS:renameInvalid', '%s', msg);
+            end
+            old_dir = fullfile(parent, current);
+            new_dir = fullfile(parent, new_name);
+            case_only = strcmpi(new_name, current);
+            % movefile Onto An Existing Folder Would Move The Old Folder Inside It
+            if ~case_only && (isfolder(new_dir) || isfile(new_dir))
+                error('CHESS:renameExists', '"%s" already exists on disk. Choose another name.', new_dir);
+            end
+            if isfolder(old_dir)
+                chessProject.move_item(old_dir, new_dir, case_only);
+            end
+            switch level
+                case 'proj'
+                    obj.name = new_name;
+                case 'pse'
+                    obj.pse_list{p} = new_name;
+                case 'alt'
+                    obj.alternative_list{p}{a} = new_name;
+            end
+            obj.remap_paths(old_dir, new_dir);
+            info = struct('old_dir', old_dir, 'new_dir', new_dir, 'rewritten', {{}}, 'failed', {{}});
+            % Saved Run Configs (Run Backups *_config_file_prev.mat Do Not Match The Pattern). '-append' Keeps 'structure'
+            files = dir(fullfile(new_dir, '**', '*_config_file.mat'));
+            for ff = 1:numel(files)
+                f = fullfile(files(ff).folder, files(ff).name);
+                try
+                    S = load(f, 'config');
+                    config = S.config;
+                    config.(name_field) = new_name;
+                    for fld = fieldnames(config.out_files)'
+                        config.out_files.(fld{1}) = chessProject.relocate_path(config.out_files.(fld{1}), old_dir, new_dir);
+                    end
+                    config.tide_file = chessProject.relocate_path(config.tide_file, old_dir, new_dir);
+                    save(f, 'config', '-append');
+                    info.rewritten{end+1, 1} = f;
+                catch ME
+                    info.failed{end+1, 1} = [f ': ' ME.message];
+                end
+            end
+            % Project File Follows The Project Name (The Caller Then Saves The Updated Project Over It)
+            old_file = fullfile(new_dir, ['CHESS_project_' current '.mat']);
+            if strcmp(level, 'proj') && isfile(old_file)
+                try
+                    chessProject.move_item(old_file, fullfile(new_dir, ['CHESS_project_' new_name '.mat']), case_only);
+                catch ME
+                    info.failed{end+1, 1} = [old_file ': ' ME.message];
+                end
+            end
+        end
+
+        function note = export_archive(obj, zip_file)
+            % Project Archive zip_file: <name>/... (The Project Folder) Plus, When The Project Has A Region (project_region) And A
+            % Valid chs_dependencies Folder Elsewhere, <name>/CHS_Dependencies/ With That Region's Files Only: Grid_Files\<region>,
+            % Bias_and_Uncertainty\<region>, Probability_Masses\<region> (If Any), Probability_Masses\*.mat (Shared TC Files).
+            % java.util.zip (MATLAB zip Takes One Root Folder): Nothing Is Copied Into The Project Folder. note: Status Text
+            proj_dir = fullfile(obj.path, obj.name);
+            bundle_dir = fullfile(proj_dir, 'CHS_Dependencies');
+            region = obj.project_region();
+            [src, names] = chessProject.folder_entries(proj_dir, obj.name);
+            if isempty(region)
+                note = sprintf('Project exported to %s without CHS_Dependencies: the project has no CHS region.', zip_file);
+            elseif chessProject.same_path(obj.chs_dependencies, bundle_dir)
+                note = sprintf('Project exported to %s with its CHS_Dependencies folder (region %s).', zip_file, region);
+            elseif ~isempty(chessProject.chs_dependencies_problem(obj.chs_dependencies, region))
+                note = sprintf('Project exported to %s without CHS_Dependencies: no valid %s folder found at "%s".',...
+                    zip_file, region, obj.chs_dependencies);
+            else
+                % A CHS_Dependencies Folder Left In The Project (Imported, Then Re-Pointed) Is Replaced By The Region Subset
+                keep = ~startsWith(names, [obj.name '/CHS_Dependencies/']);
+                src = src(keep);
+                names = names(keep);
+                top = [obj.name '/CHS_Dependencies'];
+                src = [src; {''; ''; ''; ''}];
+                names = [names; strcat(top, {'/'; '/Grid_Files/'; '/Bias_and_Uncertainty/'; '/Probability_Masses/'})];
+                for sub = {'Grid_Files', 'Bias_and_Uncertainty', 'Probability_Masses'}
+                    sub_dir = fullfile(obj.chs_dependencies, sub{1}, region);
+                    if isfolder(sub_dir)
+                        [s, n] = chessProject.folder_entries(sub_dir, [top '/' sub{1} '/' region]);
+                        src = [src; s]; %#ok<AGROW>
+                        names = [names; n]; %#ok<AGROW>
+                    end
+                end
+                pm = dir(fullfile(obj.chs_dependencies, 'Probability_Masses', '*.mat'));
+                pm = pm(~[pm.isdir]);
+                src = [src; fullfile({pm.folder}', {pm.name}')];
+                names = [names; strcat([top '/Probability_Masses/'], {pm.name}')];
+                note = sprintf('Project exported to %s with CHS_Dependencies (region %s files).', zip_file, region);
+            end
+            chessProject.write_zip(zip_file, src, names);
         end
     end
 
@@ -549,9 +786,175 @@ classdef chessProject < handle
             % [NEW] Same Folder/File ('\' Or '/', Trailing Separators Ignored, Case-Insensitive On Windows)
             tf = strcmp(chessProject.norm_path(a), chessProject.norm_path(b));
         end
+
+        function msg = name_problem(new_name, sibling_names, current_name, parent_dir)
+            % '' When new_name Can Rename current_name (Project, PSE Or Alternative: A Folder Name), Else A Short Message.
+            % sibling_names Exclude The Current Item; Clashes Are Case-Insensitive (Windows Folders), A Case-Only Change Is Allowed.
+            % Wizards Pass current_name ''. parent_dir (Optional): Folder The Item Lives In; A Folder Or File Of That Name There
+            % Is A Clash Too (Not For A Case-Only Change)
+            if nargin < 4
+                parent_dir = '';
+            end
+            new_name = char(new_name);
+            reserved = [{'CON', 'PRN', 'AUX', 'NUL'}, compose('COM%d', 1:9), compose('LPT%d', 1:9)];
+            if isempty(new_name)
+                msg = 'Enter a name.';
+            elseif any(isspace(new_name))
+                msg = 'Spaces are not allowed.';
+            elseif any(ismember(new_name, '\/:*?"<>|')) || any(new_name < 32)
+                msg = 'These characters are not allowed: \ / : * ? " < > |';
+            elseif new_name(end) == '.'
+                msg = 'The name cannot end with a dot.';
+            elseif any(strcmpi(extractBefore([new_name '.'], '.'), reserved)) % Windows Also Reserves "CON.txt"
+                msg = sprintf('"%s" is a reserved Windows name.', new_name);
+            elseif strcmp(new_name, current_name)
+                msg = 'Enter a different name.';
+            elseif any(strcmpi(new_name, sibling_names))
+                msg = sprintf('"%s" already exists.', new_name);
+            elseif ~isempty(parent_dir) && ~strcmpi(new_name, current_name) && isfile(fullfile(parent_dir, new_name))
+                msg = sprintf('A file named "%s" already exists on disk (folder %s).', new_name, chessProject.folder_name(parent_dir));
+            elseif ~isempty(parent_dir) && ~strcmpi(new_name, current_name) && isfolder(fullfile(parent_dir, new_name))
+                msg = sprintf('A folder named "%s" already exists on disk (folder %s).', new_name, chessProject.folder_name(parent_dir));
+            else
+                msg = '';
+            end
+        end
+
+        function msg = db_name_problem(name)
+            % '' When name Is A Valid Storm DB Name (name_problem Rules), Else A Short Message. A Name Ending With "_raw_files"
+            % Would Collide With <db>_raw_files.mat (Library chess_paths). Clashes With Existing Storm DBs Are Not Problems Here
+            % (Overwrite, Confirmed At Import)
+            msg = chessProject.name_problem(name, {}, '');
+            if isempty(msg) && endsWith(char(name), '_raw_files', 'IgnoreCase', true)
+                msg = 'The name cannot end with "_raw_files".';
+            end
+        end
+
+        function leftover = delete_folder(folder)
+            % Delete folder: One Atomic Move To A Temporary Name Next To It First (Fails With The Reason, e.g. A File Inside
+            % Open Elsewhere, And Changes Nothing), Then rmdir Best Effort. leftover: Temporary Folder Not Fully Removed ('' If None)
+            leftover = '';
+            if ~isfolder(folder)
+                return
+            end
+            tmp = tempname(fileparts(folder));
+            try
+                chessProject.nio_move(folder, tmp);
+            catch ME
+                error('CHESS:deleteFailed', ['Could not delete "%s" (%s). A file inside may be open in another program ',...
+                    '(File Explorer, MATLAB): close it and try again.'], folder, chessProject.nio_reason(ME));
+            end
+            try
+                rmdir(tmp, 's');
+            catch
+            end
+            if isfolder(tmp)
+                leftover = tmp;
+            end
+        end
+
+        function move_item(src, dst, case_only)
+            % Rename src -> dst (Folder Or File) As One File System Move (java.nio ATOMIC_MOVE): It Works Or Changes Nothing.
+            % Not movefile: With A File Inside Locked It Copies What It Can And Leaves A Partial Copy. A Case-Only Rename Goes
+            % Through A Temporary Name (Windows Is Case-Insensitive). case_only: Default false
+            if nargin < 3
+                case_only = false;
+            end
+            try
+                if case_only
+                    tmp = tempname(fileparts(src));
+                    chessProject.nio_move(src, tmp);
+                    try
+                        chessProject.nio_move(tmp, dst);
+                    catch ME
+                        chessProject.nio_move(tmp, src);
+                        rethrow(ME);
+                    end
+                else
+                    chessProject.nio_move(src, dst);
+                end
+            catch ME
+                error('CHESS:renameMoveFailed', ['Could not rename "%s" to "%s" (%s). A file inside may be open in another ',...
+                    'program (File Explorer, MATLAB): close it and try again.'], src, dst, chessProject.nio_reason(ME));
+            end
+        end
+
+        function msg = chs_dependencies_problem(chs_dir, region)
+            % '' When chs_dir Is A CHS_Dependencies Folder (Bias_and_Uncertainty, Grid_Files, Probability_Masses) That, For A
+            % Non-Empty region, Holds Grid_Files\<region> And Bias_and_Uncertainty\<region> (Great Lakes Studies Have No
+            % Probability_Masses\<region>). Else The Message Shown To The User
+            msg = '';
+            if isempty(chs_dir) || ~all(isfolder(fullfile(chs_dir, {'Bias_and_Uncertainty', 'Grid_Files', 'Probability_Masses'})))
+                msg = 'Selected CHS_Dependencies folder does not meet required folder structure.';
+            elseif ~isempty(region) && ~all(isfolder(fullfile(chs_dir, {'Grid_Files', 'Bias_and_Uncertainty'}, region)))
+                msg = sprintf('This CHS_Dependencies folder has no %s files. Select a folder containing region %s.', region, region);
+            end
+        end
     end
 
     methods (Static, Access = private)
+        function nio_move(src, dst)
+            % One java.nio ATOMIC_MOVE (move_item, delete_folder)
+            opts = javaArray('java.nio.file.CopyOption', 1);
+            opts(1) = java.nio.file.StandardCopyOption.ATOMIC_MOVE;
+            java.nio.file.Files.move(java.io.File(src).toPath(), java.io.File(dst).toPath(), opts);
+        end
+
+        function name = folder_name(folder)
+            % Last Folder Of A Path (Trailing Separators Ignored), For Short Messages
+            [~, name, ext] = fileparts(regexprep(char(folder), '[\\/]+$', ''));
+            name = [name ext];
+        end
+
+        function reason = nio_reason(ME)
+            % Short Reason Of A Failed nio_move, e.g. 'access denied'
+            reason = regexp(ME.message, 'java\.nio\.file\.(\w+)Exception', 'tokens', 'once');
+            if isempty(reason)
+                reason = strtrim(ME.message);
+            else
+                reason = lower(regexprep(reason{1}, '(?<=[a-z])([A-Z])', ' $1'));
+            end
+        end
+
+        function [src, names] = folder_entries(root, prefix)
+            % Zip Entries Of Every File And Folder Under root, Named prefix/<subpath> ('/' Separators, Folders End With '/').
+            % src: File Path ('' For A Folder Entry)
+            d = dir(fullfile(root, '**'));
+            d = d(~ismember({d.name}, {'.', '..'}));
+            rel = strrep(extractAfter(fullfile({d.folder}', {d.name}'), numel(root)), '\', '/');
+            names = [{[prefix '/']}; strcat(prefix, rel)];
+            src = [{''}; fullfile({d.folder}', {d.name}')];
+            is_dir = [true; [d.isdir]'];
+            names(is_dir & ~endsWith(names, '/')) = strcat(names(is_dir & ~endsWith(names, '/')), '/');
+            src(is_dir) = {''};
+        end
+
+        function write_zip(zip_file, src, names)
+            % Zip Archive Of src (Files; '' = Folder Entry) Under names, File Dates Kept. A Failed Write Leaves No Archive
+            zos = java.util.zip.ZipOutputStream(java.io.FileOutputStream(zip_file));
+            try
+                for kk = 1:numel(names)
+                    entry = java.util.zip.ZipEntry(names{kk});
+                    if ~isempty(src{kk})
+                        entry.setTime(java.io.File(src{kk}).lastModified());
+                    end
+                    zos.putNextEntry(entry);
+                    if ~isempty(src{kk})
+                        java.nio.file.Files.copy(java.io.File(src{kk}).toPath(), zos);
+                    end
+                    zos.closeEntry();
+                end
+                zos.close();
+            catch ME
+                try
+                    zos.close();
+                catch
+                end
+                delete(zip_file);
+                rethrow(ME);
+            end
+        end
+
         function p = norm_path(p)
             % [NEW] Comparison Form: '/' Separators, No Trailing Separator, Lower Case On Windows. Length Matches The Input
             % (Up To Trailing Separators), So relocate_path Can Index The Original Path With It

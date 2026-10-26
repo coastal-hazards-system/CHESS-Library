@@ -1,4 +1,4 @@
-function [Resp] = call_project_response(config, project_forcing, structure, create_plots)
+function [Resp] = call_project_response(config, project_forcing, structure)
 % CALL_PROJECT_RESPONSE Computes structure response based on a workflow config.
 
     %% ================= CONFIGURATION & VARIABLE MAPPING =================

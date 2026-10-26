@@ -60,8 +60,13 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
     methods (Access = private)
 
         % Code that executes after component creation
-        function startupFcn(app, wProj)
-            % NOAA Tidal Prediction Download For A CHESS Project
+        function startupFcn(app, wProj, parent_fig)
+            % NOAA Tidal Prediction Download For A CHESS Project. parent_fig: Optional Window This UI Opens Centered On
+            % ([]: Screen)
+            if nargin < 3
+                parent_fig = [];
+            end
+            center_on_parent(auxUIFunctions(), app.UIFigure, parent_fig);
             app.wProj = wProj;
             app.GetDataButton.Enable = 'off'; % Enabled Once A Station And Its Datums Are Loaded
             % Progress Bar
@@ -198,7 +203,7 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
             % Create UIFigure and hide until all components are created
             app.UIFigure = uifigure('Visible', 'off');
             app.UIFigure.Position = [100 100 452 237];
-            app.UIFigure.Name = 'MATLAB App';
+            app.UIFigure.Name = 'NOAA Tide Predictions';
 
             % Create GridLayout
             app.GridLayout = uigridlayout(app.UIFigure);

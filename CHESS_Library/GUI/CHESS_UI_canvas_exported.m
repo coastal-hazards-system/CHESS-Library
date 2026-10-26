@@ -151,6 +151,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         plotFontSize = 12 % Base Font Of Every GUI Plot, Tab And Pop-Out (Library Rule: Title +2, Labels Base, Ticks -2)
         resultsMirror % Panel Over PSEAxes_3 (Same Grid Cell) Showing A Multi-Panel Results Plot When The Cell Is Big Enough (Created In startupFcn)
         resultsMirrorFits = [] % Fit State Of The Shown Multi-Panel Results Plot ([] If None): The Tab Resize Redraws Only When It Flips
+        runActive = false
     end
 
 
@@ -527,6 +528,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if ~chessProject.same_path(new_root, wProj.path)
                 wProj.relocate(new_root);
             end
+            % A CHS_Dependencies Folder Bundled In The Project (Export Project) Is Always Used
+            bundle_dir = fullfile(new_root, wProj.name, 'CHS_Dependencies');
+            if isfolder(bundle_dir)
+                wProj.chs_dependencies = bundle_dir;
+            end
             app.append_project(wProj);
             app.save_project();
         end
@@ -731,13 +737,16 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             config = state.config;
             storm = [];
             dsw = [];
-            add_events = strcmp(row.key, 'hc') && strcmp(aux, 'On');
+            add_events = 0; % Hazard Curve Events Overlay Mode: 0 Off, 1 Run Sample, 2 Storm Values
+            if strcmp(row.key, 'hc') && ~strcmp(ds_query.storm_type, 'CC') % CC: No Overlays
+                add_events = max([0, find(strcmp(aux, {'Run Sample', 'Storm Values'}), 1)]);
+            end
             if any(strcmp(row.key, {'event', 'scheme'}))
                 storm = app.load_storm(state.dbObj);
                 config.sp_ID = state.dbObj.get_savepoint_id(); % Title (GUI Run Configs Leave sp_ID Empty)
             end
             project_forcing = state.project_forcing;
-            if add_events || strcmp(row.key, 'scheme') % Events Overlay / Sampling Scheme Need Project Forcing + TC Probability Masses
+            if add_events > 0 || strcmp(row.key, 'scheme') % Events Overlay / Sampling Scheme Need Project Forcing + TC Probability Masses
                 [project_forcing, dsw] = app.results_forcing_and_dsw();
             end
             chessPlot = CHESSPlots(config, state.Resp, storm, project_forcing, dsw, state.structure, base_fnt, app.wProj.unitsys);
@@ -1282,6 +1291,102 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.sync_saved_sim(user_switch);
         end
 
+        function rename_tree_node(app, node)
+            % Project Tree Right-Click "Rename...": Project, PSE Or Alternative Of node (chessProject.rename: Folder, Stored Paths,
+            % Saved Run Configs). Session State Holding The Old Paths/Names Follows The Rename, So The View Stays As It Was
+            if app.runActive
+                uialert(app.UIFigure, 'Rename is not available while a run is in progress.', 'Rename', 'Icon', 'info');
+                return
+            end
+            level = node.NodeData.type;
+            [pse_name, alt_name] = deal('');
+            switch level
+                case 'proj'
+                    proj_node = node;
+                case 'pse'
+                    proj_node = node.Parent;
+                    pse_name = node.Text;
+                case 'alt'
+                    proj_node = node.Parent.Parent;
+                    pse_name = node.Parent.Text;
+                    alt_name = node.Text;
+            end
+            proj_names = {app.chess_projects.name};
+            proj = app.chess_projects(strcmp(proj_names, proj_node.Text));
+            current = node.Text;
+            % parent_dir: Folder Holding The Item (A Folder Or File Of The New Name There Is Shown While Typing)
+            switch level
+                case 'proj'
+                    siblings = proj_names(~strcmp(proj_names, current));
+                    title_str = 'Rename Project';
+                    prompt = sprintf('New name for project "%s":', current);
+                    parent_dir = proj.path;
+                case 'pse'
+                    siblings = proj.pse_list(~strcmp(proj.pse_list, current));
+                    title_str = 'Rename PSE';
+                    prompt = sprintf('New name for PSE "%s":', current);
+                    parent_dir = fullfile(proj.path, proj.name, 'PSE');
+                case 'alt'
+                    alts = proj.alternative_list{strcmp(proj.pse_list, pse_name)};
+                    siblings = alts(~strcmp(alts, current));
+                    title_str = 'Rename Alternative';
+                    prompt = sprintf('New name for alternative "%s" (PSE %s):', current, pse_name);
+                    parent_dir = fullfile(proj.path, proj.name, 'PSE', pse_name);
+            end
+            app.auxLib.editfield_input_dlgbox(prompt, title_str, current, @(v) chessProject.name_problem(v, siblings, current, parent_dir), 'Rename');
+            new_name = app.auxLib.dialog_answer;
+            if isempty(new_name)
+                return
+            end
+            % Active Selection And Run Tab Context Before The Rename (Kept, Under The New Name)
+            act_proj = app.wProj.name;
+            [act_pse, act_alt] = app.get_active_names();
+            ctx_before = strjoin({act_proj, act_pse, act_alt}, '|');
+            try
+                info = proj.rename(level, new_name, pse_name, alt_name, siblings);
+            catch ME
+                app.auxLib.error_dlgbox(['Could not rename "' current '": ' ME.message]);
+                return
+            end
+            is_active = proj == app.wProj;
+            switch level
+                case 'proj'
+                    if is_active
+                        act_proj = new_name;
+                    end
+                case 'pse'
+                    if is_active && strcmp(act_pse, current)
+                        act_pse = new_name;
+                    end
+                case 'alt'
+                    if is_active && strcmp(act_pse, pse_name) && strcmp(act_alt, current)
+                        act_alt = new_name;
+                    end
+            end
+            if strcmp(app.simContext, ctx_before)
+                app.simContext = strjoin({act_proj, act_pse, act_alt}, '|');
+            end
+            % Paths Under The Moved Folder: Cached storm/CHS_Data Dropped (Reloaded From The New Paths); Saved Simulation Keys
+            % (get_config_path) And Older-DB Alerts Remapped; Loaded Results Reloaded By refresh_active_view
+            remap = @(p) chessProject.relocate_path(p, info.old_dir, info.new_dir);
+            keys = app.stormCache.keys();
+            moved = keys(~strcmp(keys, cellfun(remap, keys, 'un', false)));
+            if ~isempty(moved)
+                remove(app.stormCache, moved);
+            end
+            app.simKey = remap(app.simKey);
+            app.declinedSimKey = remap(app.declinedSimKey);
+            app.oldDbWarned = cellfun(remap, app.oldDbWarned, 'un', false);
+            app.resultsState = [];
+            app.save_project(proj);
+            app.set_active_selection(act_proj, act_pse, act_alt);
+            app.refresh_active_view();
+            if ~isempty(info.failed)
+                uialert(app.UIFigure, sprintf('Renamed to "%s", but these files could not be updated:\n%s', new_name,...
+                    strjoin(info.failed, newline)), 'Rename', 'Icon', 'warning');
+            end
+        end
+
         function reset_empty_axes(app, ax)
             % [NEW] Empty Viewer Axes (Nothing Plotted): Full Reset, Then The Design View Look, So An Axes Cleared After A
             % Plot Looks The Same As At Startup. Plots Are Free To Restyle It
@@ -1381,10 +1486,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             on = false;
             lc_items = @(n) [{'All'}, arrayfun(@num2str, 1:n, 'un', false)];
             switch key
-                case 'hc'
+                case 'hc' % CC Is Derived: No Run Sample Or Storm Set To Overlay
                     lbl = 'Add Events:';
-                    items = {'Off', 'On'};
-                    on = true;
+                    if strcmp(ds_query.storm_type, 'CC')
+                        items = {'Off'};
+                    else
+                        items = {'Off', 'Run Sample', 'Storm Values'};
+                        on = true;
+                    end
                 case 'det_scatter' % X Axis (Color: Right-Click Plot Options)
                     lbl = 'X Axis:';
                     items = app.det_field_list(data);
@@ -1604,8 +1713,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             opts = app.get_results_options(row.key);
             n_opt = numel(row.options);
-            fig = uifigure('Name', ['Plot Options: ' row.label], 'WindowStyle', 'modal', 'Position', [100 100 460 70 + 32*n_opt]);
-            fig.Position(1:2) = app.UIFigure.Position(1:2) + (app.UIFigure.Position(3:4) - fig.Position(3:4))/2;
+            fig = uifigure('Name', ['Plot Options: ' row.label], 'WindowStyle', 'modal', 'Visible', 'off', 'Position', [100 100 460 70 + 32*n_opt]);
+            app.auxLib.center_on_parent(fig);
             gl = uigridlayout(fig, [n_opt + 1, 2]);
             gl.ColumnWidth = {'1x', 190};
             gl.RowHeight = [repmat({22}, 1, n_opt), {'fit'}];
@@ -1649,9 +1758,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             btn_gl.RowHeight = {'fit'};
             uibutton(btn_gl, 'Text', 'Reset To Defaults', 'ButtonPushedFcn', @(~, ~) finish('reset'));
             uibutton(btn_gl, 'Text', 'Cancel', 'ButtonPushedFcn', @(~, ~) finish('cancel'));
-            uibutton(btn_gl, 'Text', 'OK', 'ButtonPushedFcn', @(~, ~) finish('ok'));
+            ok_btn = uibutton(btn_gl, 'Text', 'OK', 'ButtonPushedFcn', @(~, ~) finish('ok'));
             fig.CloseRequestFcn = @(~, ~) finish('cancel');
+            app.auxLib.add_dialog_keys(fig, @() finish('ok'), @() finish('cancel'), ok_btn);
             redraw = false;
+            fig.Visible = 'on';
             uiwait(fig);
             if isvalid(fig)
                 delete(fig);
@@ -1827,12 +1938,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
-        function save_project(app)
-            % Save out Project state
-            if isempty(app.proj_indx)
-                return
+        function save_project(app, chess_project)
+            % Save out Project state (Default: The Active Project)
+            if nargin < 2
+                if isempty(app.proj_indx)
+                    return
+                end
+                chess_project = app.chess_projects(app.proj_indx); %#ok<ADPROP,*ADPROPLC>
             end
-            chess_project = app.chess_projects(app.proj_indx); %#ok<ADPROP,*ADPROPLC>
             save(fullfile(chess_project.path, chess_project.name, ['CHESS_project_' chess_project.name '.mat']), 'chess_project'); %#ok<ADPROP>
         end
 
@@ -1913,6 +2026,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if ~isempty(app.resultsState)
                 app.set_sim_status(app.results_status());
             end
+        end
+
+        function set_run_active(app, tf)
+            % [NEW] Run In Progress Flag (RunSimulationButtonPushed Clears It On Every Exit Through onCleanup)
+            app.runActive = tf;
         end
 
         function set_sim_state(app, opMode, config_file)
@@ -2152,7 +2270,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 load_it = app.storm_db_info_ok(dbObj) && ~app.sim_inputs_changed(S.config);
             end
             if ~load_it
-                app.auxLib.set_window_position(app.UIFigure.Position);
                 app.auxLib.choice_dlgbox(['A simulation for ' label ' already exists. Load it?'], {'Load', 'Keep current inputs'},...
                     'Saved Simulation Found');
                 load_it = isequal(app.auxLib.dialog_answer, 'Load');
@@ -2168,14 +2285,16 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function update_project_tree(app)
-            % Clear Project Tree
+            % Clear Project Tree (And The Nodes' Right-Click Menus, Which Belong To The Figure)
             delete(app.ProjectTree.Children);
+            delete(findall(app.UIFigure, 'Type', 'uicontextmenu', 'Tag', 'ProjectTreeNodeMenu'));
             act_node = [];
             for kk = 1:length(app.chess_projects)
                 wObj = app.chess_projects(kk);
                 % Create Project Node
                 proj_node = uitreenode(app.ProjectTree, 'Text', wObj.name,...
                     'NodeData', struct('type', 'proj'));
+                add_rename_menu(proj_node);
                 if kk == app.proj_indx
                     act_node = proj_node;
                 end
@@ -2183,6 +2302,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 for jj = 1:length(wObj.pse_list)
                     pse_node = uitreenode(proj_node, 'Text', wObj.pse_list{jj},...
                         'NodeData', struct('type', 'pse'));
+                    add_rename_menu(pse_node);
                     if kk == app.proj_indx && isequal(jj, app.pse_indx)
                         act_node = pse_node;
                     end
@@ -2191,6 +2311,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     for ii = 1:length(altList)
                         alt_node = uitreenode(pse_node, 'Text', altList{ii},...
                             'NodeData', struct('type', 'alt'));
+                        add_rename_menu(alt_node);
                         if kk == app.proj_indx && isequal(jj, app.pse_indx) && isequal(ii, app.alt_indx)
                             act_node = alt_node;
                         end
@@ -2201,6 +2322,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if ~isempty(act_node)
                 expand(app.ProjectTree, 'all');
                 app.ProjectTree.SelectedNodes = act_node;
+            end
+
+            function add_rename_menu(node)
+                % One Menu Per Node: R2022b ContextMenuOpeningFcn Event Data Does Not Say Which Tree Node Was Right-Clicked
+                cm = uicontextmenu(app.UIFigure, 'Tag', 'ProjectTreeNodeMenu');
+                uimenu(cm, 'Text', 'Rename...', 'MenuSelectedFcn', @(~, ~) app.rename_tree_node(node));
+                node.ContextMenu = cm;
             end
         end
 
@@ -2265,8 +2393,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Code that executes after component creation
         function startupFcn(app)
-          % Initialize Aux Library Class
+            % Initialize Aux Library Class
             app.auxLib = auxUIFunctions();
+            app.auxLib.set_parent(app.UIFigure); % auxLib Dialogs Open Centered On The CHESS Window
             % CHESS_Library Path: The App Lives In CHESS_Library\GUI, So The Library Is Its Parent Folder
             app_dir = fileparts(mfilename('fullpath'));
             lib_dir = fileparts(app_dir);
@@ -2300,8 +2429,12 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: CreateNewProjectMenu
         function CreateNewProjectMenuSelected(app, event)
-            % Call Project Creation UI
-            obj = ProjectCreationUI(); % We Already Append Project List In Here
+            % Call Project Creation UI (Loaded Project Names: A New Project Cannot Take One)
+            proj_names = {};
+            if ~isempty(app.chess_projects)
+                proj_names = {app.chess_projects.name};
+            end
+            obj = ProjectCreationUI(app.UIFigure, proj_names);
             % Wait For UI Figure To Close
             uiwait(obj.uifig);
             % If User Submited Project, Go Ahead And Populate UI
@@ -2333,7 +2466,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: ExportProjectMenu
         function ExportProjectMenuSelected(app, event)
-          if isempty(app.wProj)
+            if isempty(app.wProj)
                 return
             end
             % Wait For User To Define Export Location And Name
@@ -2342,8 +2475,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if ~all(file == 0)
                 % Save out Project state
                 app.save_project();
-                % Create Project Archive
-                zip(fullfile(fPath, file), fullfile(app.wProj.path, app.wProj.name));
+                % Create Project Archive: <name>/ + The Region's CHS_Dependencies Files (chessProject.export_archive)
+                try
+                    note = app.wProj.export_archive(fullfile(fPath, file));
+                catch ME
+                    app.auxLib.error_dlgbox(['Could not export the project: ' ME.message]);
+                    return
+                end
+                app.set_sim_status(note);
             end
         end
 
@@ -2370,7 +2509,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             % Call PSE Creation UI
-            obj = PSECreationUI(event.Source.Text, app.wProj, '');
+            obj = PSECreationUI(event.Source.Text, app.wProj, '', app.UIFigure);
             uiwait(obj.uifig);
             if obj.pse_created
                 app.set_active_selection(app.wProj.name, obj.pse_name, obj.alt_name);
@@ -2388,14 +2527,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Get PSE List For Active Project
             pseList = app.wProj.get_project_field('pse_list', '', '', 'proj');
             % Ask User For PSE Template
-            app.auxLib.set_window_position(app.UIFigure.Position);
-            app.auxLib.dropdown_input_dlgbox('Choose PSE to use as template for alternative.', pseList, 'Add New Alternative To Project PSE');
+            app.auxLib.dropdown_input_dlgbox('Choose PSE to use as template for alternative.', pseList, 'Add New Alternative To Project PSE', 'OK');
             if isempty(app.auxLib.dialog_answer)
                 return
             end
             pse_geo = app.wProj.get_project_field('pse_geometry', app.auxLib.dialog_answer, '', 'pse');
             % Call PSE Creation UI (PSE Type From First Alternative)
-            obj = PSECreationUI(pse_geo{1}.pse_type, app.wProj, app.auxLib.dialog_answer);
+            obj = PSECreationUI(pse_geo{1}.pse_type, app.wProj, app.auxLib.dialog_answer, app.UIFigure);
             uiwait(obj.uifig);
             if obj.pse_created
                 app.set_active_selection(app.wProj.name, obj.pse_name, obj.alt_name);
@@ -2414,7 +2552,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if isempty(app.wProj)
                 return
             end
-            app.auxLib.set_window_position(app.UIFigure.Position);
+            % Not While A Run Writes Into The Project Folders
+            if app.runActive
+                uialert(app.UIFigure, 'Removing is not available while a run is in progress.', 'Project Management: Remove', 'Icon', 'info');
+                return
+            end
+            % PSE / Alternative: Confirmed, Then Its Folder Deleted (chessProject.delete_folder: Nothing Changes If That Fails)
+            leftover = '';
             switch event.Source.Text
                 case 'PSE'
                     choices = app.wProj.get_project_field('pse_list', '', '', 'proj');
@@ -2422,10 +2566,22 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         return
                     end
                     app.auxLib.dropdown_input_dlgbox(['Remove PSE from project ' app.wProj.name '.'], choices, 'Project Management: Remove');
-                    if isempty(app.auxLib.dialog_answer)
+                    pse_name = app.auxLib.dialog_answer;
+                    if isempty(pse_name)
                         return
                     end
-                    app.wProj.remove_pse(app.auxLib.dialog_answer);
+                    app.auxLib.confirmation_dlgbox(sprintf('Remove PSE "%s" and delete its folder (all alternatives and run results)?',...
+                        pse_name), 'Remove', 'Remove PSE');
+                    if ~app.auxLib.dialog_answer
+                        return
+                    end
+                    try
+                        leftover = app.wProj.remove_pse(pse_name, true);
+                    catch ME
+                        app.auxLib.error_dlgbox(['Could not remove PSE "' pse_name '": ' ME.message]);
+                        return
+                    end
+                    app.resultsState = [];
                 case 'Alternative'
                     choices = app.wProj.get_project_field('pse_list', '', '', 'proj');
                     if isempty(choices)
@@ -2438,10 +2594,28 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     end
                     choices = app.wProj.get_project_field('alternative_list', pse_name, '', 'pse');
                     app.auxLib.dropdown_input_dlgbox(['Remove alternative from PSE ' pse_name '.'], choices, 'Project Management: Remove');
-                    if isempty(app.auxLib.dialog_answer)
+                    alt_name = app.auxLib.dialog_answer;
+                    if isempty(alt_name)
                         return
                     end
-                    app.wProj.remove_alternative(pse_name, app.auxLib.dialog_answer);
+                    % Last Alternative: The PSE Goes With It (chessProject.remove_alternative)
+                    if numel(choices) == 1
+                        prompt = sprintf(['"%s" is the last alternative of PSE "%s", so the PSE is removed too.\n',...
+                            'Remove PSE "%s" and delete its folder (all alternatives and run results)?'], alt_name, pse_name, pse_name);
+                    else
+                        prompt = sprintf('Remove alternative "%s" of PSE "%s" and delete its folder (all run results)?', alt_name, pse_name);
+                    end
+                    app.auxLib.confirmation_dlgbox(prompt, 'Remove', 'Remove Alternative');
+                    if ~app.auxLib.dialog_answer
+                        return
+                    end
+                    try
+                        leftover = app.wProj.remove_alternative(pse_name, alt_name, true);
+                    catch ME
+                        app.auxLib.error_dlgbox(['Could not remove alternative "' alt_name '": ' ME.message]);
+                        return
+                    end
+                    app.resultsState = [];
                 case 'Tides'
                     tide_files = app.wProj.get_project_field('tide_files_list', '', '', 'proj');
                     if isempty(tide_files)
@@ -2459,6 +2633,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
             app.refresh_active_view();
             app.save_project();
+            if ~isempty(leftover)
+                uialert(app.UIFigure, sprintf('Removed, but this folder could not be fully deleted (a file inside may be open):\n%s\nDelete it manually.',...
+                    leftover), 'Project Management: Remove', 'Icon', 'warning');
+            end
         end
 
         % Value changed function: ProjectDropDown
@@ -2506,7 +2684,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         % Button pushed function: Button_6, ExtrudeFigureButton, 
         % ...and 1 other component
         function ExtrudeFigureButtonPushed(app, event)
-           % Pop-Out: Redraw The Tab's Plot With Its CHESS-Library Plot Method In A Classic Figure
+            % Pop-Out: Redraw The Tab's Plot With Its CHESS-Library Plot Method In A Classic Figure
             base_fnt = app.plotFontSize; % Same Base Font As The Tab Plots
             tab = ancestor(event.Source, 'matlab.ui.container.Tab'); % Button Sits In A Nested Grid, Not On The Tab
             % Nothing To Plot -> Inform User (No Empty Figure)
@@ -2545,42 +2723,64 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: ImportCHSStudyHDF5Menu
         function CHSDatabaseMenu(app, event)
-          if isempty(app.wProj)
+            if isempty(app.wProj)
                 return
             end
-            % Initialize CHS Library
+            % Initialize CHS Library (The Project's CHS_Dependencies And Region: The Wizard Keeps Them). The Project's Storm DB
+            % Names And Their Usage (Alternatives, Run Files): A Clash Is An Overwrite, Confirmed In The Wizard At Import
             paths = chess_paths(app.wProj.path, app.wProj.name);
-            dbObj = CHSStormDBImportUI('', paths.event_db_dir,...
-                app.pull_input_table_value(app.ConstantsTable.Data, 'Gravity Constant'), app.wProj.vdatum, app.wProj.unitsys);
+            db_list = {app.wProj.stormDB_list.db_name};
+            dbObj = CHSStormDBImportUI(app.wProj.chs_dependencies, paths.event_db_dir,...
+                app.pull_input_table_value(app.ConstantsTable.Data, 'Gravity Constant'), app.wProj.vdatum, app.wProj.unitsys,...
+                app.UIFigure, app.wProj.project_region(), db_list,...
+                @(name) [app.wProj.stormdb_usage(name), numel(app.wProj.stormdb_run_files(name))]);
             % Call import Wizard
             dbObj.create_ui();
             uiwait(dbObj.figUI); % Wait for uifigure to close
             if ~dbObj.db_created
                 return
             end
-            % Get List Of Existing Storm DBs
-            db_list = {app.wProj.get_project_field('stormDB_list','','','proj').db_name};
-            if any(strcmp(dbObj.db_name, db_list))
-                % User Is Replacing DB, Prompt User
-                app.auxLib.confirmation_dlgbox(['Storm DB "' dbObj.db_name '" already exist. Overwrite?']);
-                if app.auxLib.dialog_answer
-                    app.wProj.set_project_field('stormDB_list', dbObj, dbObj.db_name, '', 'db');
-                    % Drop Cached Storm For Replaced DB
-                    if isKey(app.stormCache, dbObj.output_paths.storm_db)
-                        remove(app.stormCache, dbObj.output_paths.storm_db);
+            indx = find(strcmpi(dbObj.db_name, db_list), 1);
+            if dbObj.overwrite_flag && ~isempty(indx)
+                % Overwrite Of A Project Storm DB (Index Kept): Its Run Files Deleted And Its Alternatives Unlinked (Saved
+                % Simulations Are File Based, Old Results Would Otherwise Show As Saved); Session State Of The Old DB Dropped
+                old = app.wProj.stormDB_list(indx);
+                failed = {};
+                for ff = app.wProj.stormdb_run_files(old.db_name)'
+                    delete(ff{1});
+                    if isfile(ff{1})
+                        failed{end+1} = ff{1}; %#ok<AGROW>
                     end
-                else
-                    % Append First Free Number To Name
-                    base_name = dbObj.db_name;
-                    nn = 2;
-                    while any(strcmp([base_name ' (' num2str(nn) ')'], db_list))
-                        nn = nn + 1;
-                    end
-                    dbObj.db_name = [base_name ' (' num2str(nn) ')'];
-                    app.wProj.add_project_field('stormDB_list', dbObj, '', '', 'pse');
                 end
-            else % Name Is Unique
+                app.wProj.clear_stormdb_links(old.db_name);
+                app.wProj.stormDB_list(indx) = dbObj;
+                db_files = {dbObj.output_paths.storm_db, fullfile(paths.event_db_dir, [dbObj.db_name '_raw_files.mat'])};
+                if isstruct(old.output_paths)
+                    db_files = [db_files, struct2cell(old.output_paths)'];
+                end
+                keys = app.stormCache.keys();
+                stale = keys(ismember(lower(keys), lower(db_files)));
+                if ~isempty(stale)
+                    remove(app.stormCache, stale);
+                end
+                app.oldDbWarned = app.oldDbWarned(~ismember(lower(app.oldDbWarned), lower(db_files)));
+                app.simKey = [];
+                app.declinedSimKey = '';
+                app.resultsState = [];
+                if ~isempty(failed)
+                    uialert(app.UIFigure, sprintf('Storm DB "%s" overwritten, but these run files could not be deleted:\n%s',...
+                        dbObj.db_name, strjoin(failed, newline)), 'Storm DB Overwrite', 'Icon', 'warning');
+                end
+            else
                 app.wProj.add_project_field('stormDB_list', dbObj, '', '', 'pse');
+            end
+            % Project CHS_Dependencies: Set By The First CHS (Non-Custom) Storm DB, Or Re-Pointed When The Stored Folder Is No
+            % Longer Valid; Cleared When An Overwrite Left No CHS Storm DB
+            region = app.wProj.project_region();
+            if isempty(region)
+                app.wProj.chs_dependencies = '';
+            elseif ~strcmp(dbObj.study, 'Custom_Modeling') && ~isempty(chessProject.chs_dependencies_problem(app.wProj.chs_dependencies, region))
+                app.wProj.chs_dependencies = dbObj.source_paths.chs_dependencies_path;
             end
             % Refresh UI & Show New DB On Storm DB Viewer
             app.refresh_active_view();
@@ -2628,8 +2828,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Button pushed function: RunSimulationButton
         function RunSimulationButtonPushed(app, event)
-            % Get Window Position
-            app.auxLib.set_window_position(app.UIFigure.Position);
+            % Run In Progress Until This Callback Exits (Project Tree Rename Refused; It Could Run At A Queued-Event Point)
+            app.set_run_active(true);
+            run_flag = onCleanup(@() app.set_run_active(false));
             prog = []; % App-Scoped Progress Dialog: Locks The CHESS Window Only (Other MATLAB Windows Stay Usable)
             % Slot Files This Run Backed Up (backup_sim_files): Restored If The Run Fails, Dropped Once The Results Are Saved
             backed = [];
@@ -2643,7 +2844,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
                 db_indx = app.wProj.db_indx;
                 pseObj = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                % Damaging Depth Needs An Offshore Elevation (Storm DB Study Grid, Else Inputs Table): Checked Before Any Dialog Or
+                % Every Run Needs An Offshore Elevation (Storm DB Study Grid, Else The PSE Geometry): Checked Before Any Dialog Or
                 % Backup, So A Failed Check Touches Nothing (Library check_offshore_elevation, Error Shown In The Run-Failed Dialog)
                 check_offshore_elevation(app.create_resp_config(pseObj, dbObj, false));
                 % Saved Simulation For This Alternative / Workflow / Storm DB: Run Dialog First. No Saved Simulation: Coldstart
@@ -2691,7 +2892,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
                 %%%% ---- 5. Run CHESS Simulation
                 set(prog, 'Value', 4/5, 'Message', 'Computing Project Responses');
-                call_project_response(config, project_forcing, pseObj, 0);
+                call_project_response(config, project_forcing, pseObj);
                 % Results Saved (Written Once, At The End Of call_project_response): Previous Run's Files No Longer Needed
                 for kk = 1:numel(backed)
                     if backed(kk).existed && isfile(backed(kk).prev)
@@ -2775,12 +2976,18 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: RemoveStormDatabaseMenu
         function RemoveStormDatabaseMenuSelected(app, event)
-            % Remove A Storm Database From The Active Project (Optionally Delete Its Files)
+            % Remove A Storm Database From The Active Project. Tied To Simulations (Run Files Or Linked Alternatives): Deleted
+            % With Its Files And Those Run Files. Otherwise: Remove (Files Kept) Or Remove & Delete Files
             if isempty(app.wProj) || isempty(app.wProj.stormDB_list)
                 return
             end
+            % Not While A Run Writes Into The Project Folders
+            if app.runActive
+                uialert(app.UIFigure, 'Removing is not available while a run is in progress.', 'Storm Database Management: Remove', 'Icon', 'info');
+                return
+            end
             app.auxLib.dropdown_input_dlgbox(['Remove storm database from project ' app.wProj.name '.'],...
-                {app.wProj.stormDB_list.db_name}, 'Storm Database Management: Remove');
+                {app.wProj.stormDB_list.db_name}, 'Storm Database Management: Remove', 'Remove');
             db_name = app.auxLib.dialog_answer;
             if isempty(db_name)
                 return
@@ -2793,35 +3000,74 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     db_files{end+1} = dbObj.output_paths.(ff{1}); %#ok<AGROW>
                 end
             end
-            % Confirm (Alternatives Last Run With It Keep Their Result Files But Lose The Link)
-            n_alt = app.wProj.stormdb_usage(db_name);
-            msg = sprintf('Remove storm database "%s"?', db_name);
-            if n_alt > 0
-                msg = sprintf('%s\n%d alternative(s) were last run with it; their result files are kept but will not be shown.', msg, n_alt);
-            end
-            options = {'Remove', 'Cancel'};
-            if ~isempty(db_files)
-                options = {'Remove', 'Remove & Delete Files', 'Cancel'};
-            end
-            app.auxLib.choice_dlgbox(msg, options, 'Remove Storm Database');
-            answer = app.auxLib.dialog_answer;
-            if isempty(answer) || strcmp(answer, 'Cancel') % Cancel Or Window Closed
-                return
-            end
-            % Drop Cached storm / CHS_Data Of This Database
-            for ff = 1:numel(db_files)
-                if ~isempty(app.stormCache) && isKey(app.stormCache, db_files{ff})
-                    remove(app.stormCache, db_files{ff});
+            tied = app.wProj.stormdb_tied_sims(db_name);
+            if ~isempty(tied)
+                % Tied Simulations: Only Delete (Results Of A Removed Storm DB Could Not Be Shown Or Rerun)
+                n_max = 15;
+                lines = strcat({['  ' char(8226) ' ']}, tied);
+                if numel(lines) > n_max
+                    lines = [lines(1:n_max-1); {sprintf('  %sand %d more', char(8230), numel(tied) - n_max + 1)}];
+                end
+                msg = sprintf('Storm DB "%s" is tied to the following simulations:\n%s\n\nDeleting the storm DB will remove these alternatives'' simulation results.',...
+                    db_name, strjoin(lines, newline));
+                app.auxLib.choice_dlgbox(msg, {'Delete', 'Cancel'}, 'Remove Storm Database', 560); % Last Button = Default (Enter): Cancel
+                answer = app.auxLib.dialog_answer;
+                if ~strcmp(answer, 'Delete') % Cancel Or Window Closed
+                    return
+                end
+            else
+                msg = sprintf('Remove storm database "%s"?', db_name);
+                options = {'Remove', 'Cancel'};
+                if ~isempty(db_files)
+                    msg = sprintf('%s\n"Remove" keeps its files in Event_Database; "Remove & Delete Files" deletes them.', msg);
+                    options = {'Remove', 'Remove & Delete Files', 'Cancel'};
+                end
+                app.auxLib.choice_dlgbox(msg, options, 'Remove Storm Database');
+                answer = app.auxLib.dialog_answer;
+                if isempty(answer) || strcmp(answer, 'Cancel') % Cancel Or Window Closed
+                    return
                 end
             end
-            app.wProj.remove_stormdb(db_name);
-            if strcmp(answer, 'Remove & Delete Files')
-                cellfun(@delete, db_files);
+            % Drop Cached storm / CHS_Data Of This Database
+            keys = app.stormCache.keys();
+            stale = keys(ismember(lower(keys), lower(db_files)));
+            if ~isempty(stale)
+                remove(app.stormCache, stale);
+            end
+            failed = {};
+            switch answer
+                case 'Delete'
+                    % Run Files Of Its Simulations And The Storm DB Files Deleted; Session State Of The DB Dropped
+                    run_files = app.wProj.stormdb_run_files(db_name);
+                    app.wProj.remove_stormdb(db_name);
+                    for ff = [run_files; db_files']'
+                        delete(ff{1});
+                        if isfile(ff{1})
+                            failed{end+1} = ff{1}; %#ok<AGROW>
+                        end
+                    end
+                    app.oldDbWarned = app.oldDbWarned(~ismember(lower(app.oldDbWarned), lower(db_files)));
+                    app.simKey = [];
+                    app.declinedSimKey = '';
+                    app.resultsState = [];
+                case 'Remove & Delete Files'
+                    app.wProj.remove_stormdb(db_name);
+                    cellfun(@delete, db_files);
+                otherwise
+                    app.wProj.remove_stormdb(db_name);
+            end
+            % Last CHS (Non-Custom) Storm DB Removed: The Project Has No Region, Its CHS_Dependencies Is Free Again
+            if isempty(app.wProj.project_region())
+                app.wProj.chs_dependencies = '';
             end
             % Refresh & Save
             app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
             app.refresh_active_view();
             app.save_project();
+            if ~isempty(failed)
+                uialert(app.UIFigure, sprintf('Storm DB "%s" removed, but these files could not be deleted:\n%s',...
+                    db_name, strjoin(failed, newline)), 'Remove Storm Database', 'Icon', 'warning');
+            end
         end
 
         % Menu selected function: TidesMenu
@@ -2830,8 +3076,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if isempty(app.wProj)
                 return
             end
-            tidesUI = NOAATidesPredictionsUI(app.wProj);
-            tidesUI.UIFigure.Position(1:2) = app.UIFigure.Position(1:2) + (app.UIFigure.Position(3:4) - tidesUI.UIFigure.Position(3:4))/2;
+            tidesUI = NOAATidesPredictionsUI(app.wProj, app.UIFigure);
             try % Wait Until The Tides UI Closes (It Closes Itself After A Successful Download)
                 waitfor(tidesUI.UIFigure);
             catch % Already Closed
@@ -3519,7 +3764,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.WorkflowInputsTable.ColumnName = {'model_var'; 'Field'; 'Value'};
             app.WorkflowInputsTable.ColumnWidth = {0.1, 'auto', 'auto'};
             app.WorkflowInputsTable.RowName = {};
-            app.WorkflowInputsTable.ColumnEditable = [false true true];
+            app.WorkflowInputsTable.ColumnEditable = [false false true];
             app.WorkflowInputsTable.CellEditCallback = createCallbackFcn(app, @WorkflowInputsTableCellEdit, true);
             app.WorkflowInputsTable.Layout.Row = 6;
             app.WorkflowInputsTable.Layout.Column = 1;
