@@ -70,8 +70,15 @@ for ii = 1:length(vars_to_process)
         otherwise
             SLR = 0;
     end
+    % Great Lakes Water Levels Are Fitted As Surge (Mean Lake Level Removed, Added Back To The Hazard Curve)
+    switch resp_var
+        case {'SWL','R2p_SWL','DamDepthElev'}
+            lake_offset = mean_lake_level(config);
+        otherwise
+            lake_offset = 0;
+    end
     % Response Information
-    response_data = struct('data', [zeros(drows*dcols, 1) data_to_process.(resp_var)(:) zeros(drows*dcols, 1)],...
+    response_data = struct('data', [zeros(drows*dcols, 1) data_to_process.(resp_var)(:)-lake_offset zeros(drows*dcols, 1)],...
         'flag_value', [],'Ua', U_a,'Ur', U_r, 'SLC', SLR, 'tide_std', 0,...
         'lambda', [],'Nyrs', config.Nyrs_XC*dcols, 'gprMdl', [], 'DataType', 'POT');
     % PST/JPM Options
@@ -83,12 +90,23 @@ for ii = 1:length(vars_to_process)
     % Plot Options
     plot_options = struct('create_plots', 0,'staID', resp_var,'yaxis_Label', [],...
         'yaxis_Limits', [], 'y_log', y_scale_log,'path_out', '');
-    % Check For Full NaN Vector
-    if all(isnan(response_data.data(:, 2))) || all(response_data.data(:, 2)==0)
+    % Check For Full NaN Vector (On Absolute Values)
+    if all(isnan(data_to_process.(resp_var)(:))) || all(data_to_process.(resp_var)(:)==0)
         % Response Variable Has NaNs For All Entries
         disp(['               No valid responses for ' resp_var ', Skipping response var....']);
         % Skip Iteration
         continue;
+    end
+    % Count Events PST/JPM Discard (NaN, Inf, <= 0 After The Lake Level Shift)
+    n_events = drows*dcols;
+    n_dropped = sum(isnan(response_data.data(:, 2)) | isinf(response_data.data(:, 2)) | response_data.data(:, 2) <= 0);
+    if n_dropped > 0
+        if lake_offset ~= 0
+            drop_reason = [' (<= 0 after removing mean lake level ' num2str(lake_offset) ' m)'];
+        else
+            drop_reason = '';
+        end
+        disp(['               ' resp_var ': ' num2str(n_dropped) ' of ' num2str(n_events) ' events dropped' drop_reason]);
     end
 
     %% PREP NAMING STRINGS
@@ -109,6 +127,10 @@ for ii = 1:length(vars_to_process)
     % Define Figure Title
     title_str = {['CHESS: ' wstr ' | '  case_name ' | ' struc_id],...
         ['' storm_type ' | ' var_name ' [' unit_label ']']};
+    % Report Events Not Fitted On The Figure Title
+    if n_dropped > 0
+        title_str{2} = [title_str{2} ' | ' num2str(n_dropped) ' of ' num2str(n_events) ' events not fitted'];
+    end
 
     %% CALL PST/JPM TO BUILD HAZARD CURVES
     switch storm_type
@@ -143,12 +165,18 @@ for ii = 1:length(vars_to_process)
             end
     end
 
+    % Add Mean Lake Level Back To Response Valued Outputs (HC_tbl_rsp_x Holds AEF/AEP)
+    dummy.HC_plt = dummy.HC_plt + lake_offset;
+    dummy.HC_tbl = dummy.HC_tbl + lake_offset;
+    dummy.HC_tbl_rsp_y = dummy.HC_tbl_rsp_y + lake_offset;
+
     %% STORE OUTPUTS
     % Append Results To Output Data Structure
     Output =  rb_response_appender(Output, ctr, resp_var, y_label, title_str,...
         dummy.HC_plt_x, dummy.HC_plt,...
         dummy.HC_tbl_x, dummy.HC_tbl, data_to_process.(resp_var),...
-        y_scale_log, [50,prc], [save_name '_' resp_var '_' storm_type '_Hazard_Curve.png']);
+        y_scale_log, [50,prc], [save_name '_' resp_var '_' storm_type '_Hazard_Curve.png'],...
+        n_events, n_dropped, lake_offset);
     % Add "_rsp" Fields For Hazard Combinations
     if use_aep == 1
         Output(ctr).tbl_rsp_x = dummy.HC_tbl_rsp_x; % x here implies Responses, AEP/AEF -> Responses
@@ -173,7 +201,7 @@ else
 end
 
 %% AUX FUNCTIONS (CONSOLIDATE LINES OF CODE)
-    function Output =  rb_response_appender(Output, rIndx, sVar, y_label, title_str, x_plt, y_plt, x_tbl, y_tbl, POT, y_log_scale, CL, outName)
+    function Output =  rb_response_appender(Output, rIndx, sVar, y_label, title_str, x_plt, y_plt, x_tbl, y_tbl, POT, y_log_scale, CL, outName, n_events, n_dropped, lake_offset)
         % Replace Fields For P2
         Output(rIndx).('var') = sVar;
         Output(rIndx).CL = CL; % Percentiles (Cols)
@@ -188,5 +216,8 @@ end
         Output(rIndx).('title') = title_str;
         Output(rIndx).y_log_scale = y_log_scale; % Y Log Scale For Overtopping
         Output(rIndx).('save_name') = outName;
+        Output(rIndx).n_events = n_events; % Events Handed To PST/JPM
+        Output(rIndx).n_dropped = n_dropped; % Events PST/JPM Discarded (NaN, Inf, <= 0 After Shift)
+        Output(rIndx).lake_offset = lake_offset; % Mean Lake Level Removed Before Fitting
     end
 end

@@ -32,12 +32,7 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
     end
 
     % Mean Lake Level (EB2 SWL Uncertainty Is Computed On Surge, Not TWL)
-    switch config.region
-        case {'CHS-GLM','CHS-GLH'}
-            mean_lake_level = 176.45; % uncertainty needs to be computed for surge not TWL
-        otherwise
-            mean_lake_level = 0;
-    end
+    lake_level = mean_lake_level(config);
 
     emp_coeff = load_empirical_coefficients();
     storm_types = fieldnames(data_in);
@@ -124,9 +119,9 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                    normU_hm0 = randn(length(SWL{1}),MCsim);
                    normU_tp = (1+tp_u.*normU_hm0);
                    % SWL
-                   project_forcing.SWL = {pcha_forcing_uncertainty_EB2(SWL{1} - mean_lake_level,...
+                   project_forcing.SWL = {pcha_forcing_uncertainty_EB2(SWL{1} - lake_level,...
                        swl_u(1), swl_u(2),...
-                       normU_swl, storm_name) + mean_lake_level};
+                       normU_swl, storm_name) + lake_level};
                    % Hm0
                    project_forcing.Hm0 = {pcha_forcing_uncertainty_EB2(Hm0{1},...
                        hm0_u(1), hm0_u(2),...
@@ -210,6 +205,10 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
         Output(rIndx).title       = title_str;
         Output(rIndx).y_log_scale = y_log_scale; 
         Output(rIndx).save_name   = outName;
+        % No PST/JPM Fit: Count Fields Kept For Concatenation With The RB Entries
+        Output(rIndx).n_events    = [];
+        Output(rIndx).n_dropped   = 0;
+        Output(rIndx).lake_offset = 0;
     end
 
     function [var_out, pass_indx] = get_hc_data(data, varname, field_get)
