@@ -22,20 +22,11 @@ plt_indx = round(x_plot_tc, 6)>=5E-04;
 tbl_indx = round(x_tbl_tc, 6)>=5E-04;
 x_tbl_tc = x_tbl_tc(tbl_indx);
 x_plot_tc = x_plot_tc(plt_indx);
-% Find Primary Responses Indexes
-s_indx = 1:min(length(tc_resp),length(xc_resp));
-% Remove Resposes With Missing Pairs
-if length(s_indx)~=max(length(tc_resp),length(xc_resp))
-    if length(tc_resp)>length(xc_resp)
-        tc_resp = tc_resp(ismember({tc_resp.var},{xc_resp.var}));
-    else
-        xc_resp = xc_resp(ismember({xc_resp.var},{tc_resp.var}));
-    end
-end
-% Initialize Storage Var & Fields For CC HC
-cc_resp = tc_resp(s_indx);
-% Remove Plot & Table Fields
-cc_resp = rmfield(cc_resp,{'tbl_rsp_x','tbl_rsp_y'});
+% Pair TC & XC Responses By Name (TC Order; Responses Without A Pair Are Dropped)
+xc_vars = {xc_resp.var};
+s_indx = find(ismember({tc_resp.var}, xc_vars));
+% Initialize Storage Var (Only Combined Responses Are Stored)
+cc_resp = rmfield(tc_resp([]),{'tbl_rsp_x','tbl_rsp_y'});
 % Define Counter
 ctr = 1;
 % Loop Through Each Parameter
@@ -63,17 +54,29 @@ for j = s_indx
         otherwise
             u_field = u_vector{contains(u_names, lower(tc_resp(j).var))};
     end
+    % Matching XC Entry
+    xc_j = xc_resp(find(strcmp(xc_vars, tc_resp(j).var), 1));
+    % CC Entry Starts As A Copy Of The TC Entry
+    cc_resp(ctr) = rmfield(tc_resp(j),{'tbl_rsp_x','tbl_rsp_y'});
     %
     disp(['               Combining ' tc_resp(j).var ' hazard curves....']);
     % Combine HCs To Create Table
-    cc_resp(ctr).y_table = combine_hazard_curves(tc_resp(j).tbl_rsp_x, xc_resp(j).tbl_rsp_x,...
-        xc_resp(j).tbl_rsp_y, x_tbl_tc, tc_resp(j).y_log_scale, tc_resp(j).CL, u_field, tc_resp(j).var);
+    cc_resp(ctr).y_table = combine_hazard_curves(tc_resp(j).tbl_rsp_x, xc_j.tbl_rsp_x,...
+        xc_j.tbl_rsp_y, x_tbl_tc, tc_resp(j).y_log_scale, tc_resp(j).CL, u_field, tc_resp(j).var);
     % Combine HCs To Create Plot
-    cc_resp(ctr).y_plot = combine_hazard_curves(tc_resp(j).tbl_rsp_x, xc_resp(j).tbl_rsp_x,...
-        xc_resp(j).tbl_rsp_y, x_plot_tc, tc_resp(j).y_log_scale, tc_resp(j).CL, u_field, tc_resp(j).var);
+    cc_resp(ctr).y_plot = combine_hazard_curves(tc_resp(j).tbl_rsp_x, xc_j.tbl_rsp_x,...
+        xc_j.tbl_rsp_y, x_plot_tc, tc_resp(j).y_log_scale, tc_resp(j).CL, u_field, tc_resp(j).var);
     % ADjust Figure Title
     %     cc_resp(ctr).title(1) = {strrep(cc_resp(ctr).title{1},'JPM','Combined')};
     cc_resp(ctr).title(2) = {strrep(cc_resp(ctr).title{2},'TC','CC')};
+    % Events Not Fitted: [XC, TC]
+    cc_resp(ctr).n_events = [xc_j.n_events, tc_resp(j).n_events];
+    cc_resp(ctr).n_dropped = [xc_j.n_dropped, tc_resp(j).n_dropped];
+    cc_resp(ctr).title(2) = {regexprep(cc_resp(ctr).title{2}, ' \| \d+ of \d+ events not fitted$', '')};
+    if any(cc_resp(ctr).n_dropped > 0)
+        cc_resp(ctr).title(2) = {sprintf('%s | XC %d/%d, TC %d/%d not fitted', cc_resp(ctr).title{2},...
+            cc_resp(ctr).n_dropped(1), cc_resp(ctr).n_events(1), cc_resp(ctr).n_dropped(2), cc_resp(ctr).n_events(2))};
+    end
     % Adjust Figure Output Names
     cc_resp(ctr).save_name = strrep(cc_resp(ctr).save_name,'TC','CC');
     % Define POT
@@ -85,7 +88,6 @@ end
 for kk = 1:length(cc_resp)
     cc_resp(kk).x_table = cc_resp(kk).x_table(tbl_indx);
     cc_resp(kk).x_plot = cc_resp(kk).x_plot(plt_indx);
-    cc_resp(kk).x_table_ARI = cc_resp(kk).x_table_ARI(tbl_indx);
     cc_resp(kk).x_table_ARI = cc_resp(kk).x_table_ARI(tbl_indx);
 end
 end
