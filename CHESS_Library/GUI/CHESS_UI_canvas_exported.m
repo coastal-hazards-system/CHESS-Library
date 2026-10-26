@@ -20,6 +20,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         RemovePSEMenu                 matlab.ui.container.Menu
         RemoveAlternativeMenu         matlab.ui.container.Menu
         RemoveTidesMenu               matlab.ui.container.Menu
+        RemoveAlternativeSimulationMenu  matlab.ui.container.Menu
         StormDatabaseManagementMenu   matlab.ui.container.Menu
         AddStormDatabaseMenu          matlab.ui.container.Menu
         ImportCHSStudyHDF5Menu        matlab.ui.container.Menu
@@ -153,7 +154,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         resultsMirrorFits = [] % Fit State Of The Shown Multi-Panel Results Plot ([] If None): The Tab Resize Redraws Only When It Flips
         runActive = false
     end
-
 
     methods (Access = private)
         function append_project(app, wProj)
@@ -604,6 +604,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.declinedSimKey = '';
             app.set_sim_state(2, app.get_config_path());
             app.populate_pse_table();
+            app.populate_constants_table();
             app.set_input_table();
             app.populateResultsTab();
         end
@@ -969,8 +970,24 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     rows = [rows; tpl.pros(~strcmp(tpl.pros(:, 1), 'pros_compute_forcing_HC'), :)];
                 case 2 % Deterministic: No Hazard Curve, CL Or LCS Inputs
                 case 3 % LCS
-                    rows = [rows; tpl.mcs; tpl.csr];
+                    rows = [rows; tpl.mcs];
+                    % CSR-DPA (Library chess_csr): Rubble Mound Timeseries Runs Only; Its Settings Only While csr_call_dpa Is 1.
+                    % csr_compute_S_submerged Is Never Shown. Hidden Values Stay In tableState
+                    if chessProject.get_struc_type(pse_obj.pse_type) == 3 && ismember('use_timeseries', app.get_checked_symbols(app.DataTypesTree))
+                        csr = tpl.csr(~strcmp(tpl.csr(:, 1), 'csr_compute_S_submerged'), :);
+                        is_call = strcmp(csr(:, 1), 'csr_call_dpa');
+                        dpa_on = csr{is_call, 4};
+                        if isfield(app.tableState, 'csr_call_dpa')
+                            dpa_on = app.tableState.csr_call_dpa;
+                        end
+                        if ~isequal(dpa_on, 1)
+                            csr = csr(is_call, :);
+                        end
+                        rows = [rows; csr];
+                    end
             end
+            % 0/1 Switch Rows (Template Description Marks Them) Shown As Checkboxes: Logical Values In The Data Cell
+            is_flag = contains(rows(:, 2), {'(0/1)', '(0 - Off / 1 - On)'});
             % Field Label = Description [Units]
             has_units = ~strcmp(rows(:, 3), 'NA') & ~cellfun(@isempty, rows(:, 3));
             rows(has_units, 2) = strcat(rows(has_units, 2), {' '}, rows(has_units, 3));
@@ -981,6 +998,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     tbl{kk, 3} = app.tableState.(tbl{kk, 1});
                 end
             end
+            tbl(is_flag, 3) = cellfun(@(v) isequal(v, 1), tbl(is_flag, 3), 'un', false);
             app.WorkflowInputsTable.Data = tbl;
         end
 
@@ -1041,6 +1059,48 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
                 uitreenode(app.ResponsesTree, "Text", tpl.responses{rr, 2}, 'NodeData', resp_sym{rr});
             end
+        end
+
+        function populate_constants_table(app)
+            % [NEW] Project Panel Constants Table (Display Only; Gravity Constant Is Read By Label): Water Density (Active PSE,
+            % As Used By Runs), Gravity (Library Value), Offshore Elevation (shown_offshore_elevation) And The Run Tab Storm
+            % DB's Bias & Uncertainty (db_info, Library storm_db_info). No Storm DB: '-'. db_info Missing Fields: Re-Import
+            gravity = 9.80665; % m/s^2, Library Value (Setup/call_input_parser.m)
+            density = {'-', NaN};
+            offshore = {'-', '-'};
+            dbObj = [];
+            if app.has_active_alt()
+                [pse_name, alt_name] = app.get_active_names();
+                tbl = app.wProj.get_project_field('pse_tables', pse_name, alt_name, 'alt');
+                geo = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+                density = {erase(tbl{strcmp(tbl(:, 1), 'water_density'), 3}, {'[', ']'}), geo.water_density};
+                if ~isempty(app.StormDBDropDown_run.Items)
+                    dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
+                end
+                unitLib = app.auxLib.update_unit_system(app.wProj.unitsys);
+                offshore = {unitLib.unitSymbols.length, app.shown_offshore_elevation(dbObj)};
+            end
+            % Storm DB Rows. DET Runs Without Forcing Uncertainty
+            u_note = '';
+            if app.WorkflowDropDown.Value == 2
+                u_note = ' (Not Used By DET)';
+            end
+            db_rows = {['SWL Ua' u_note], 'm'; ['SWL Ur' u_note], '-'; ['Hm0 Ua' u_note], 'm'; ['Hm0 Ur' u_note], '-';...
+                ['Tp Ur (From Hm0 Ur)' u_note], '-'; 'SWL Ba (Applied To TC At DB Build)', 'm'; 'SWL Br (Applied To TC At DB Build)', '-';...
+                'TC Bias Corrected', '-'; 'B&U Source (SWL / Hm0)', '-'};
+            if isempty(dbObj)
+                db_rows(:, 3) = {'-'};
+            elseif ~storm_db_info('valid', dbObj.db_info)
+                db_rows(:, 3) = {'n/a (re-import DB)'};
+            else
+                info = dbObj.db_info;
+                yes_no = {'No', 'Yes'};
+                db_rows(:, 3) = {info.chs_swl_u_a; info.chs_swl_u_r; info.chs_hm0_u_a; info.chs_hm0_u_r;...
+                    sqrt(1 + info.chs_hm0_u_r) - 1; info.chs_swl_b_a; info.chs_swl_b_r;... % Tp Ur As In apply_uncertainty
+                    yes_no{1 + isequal(info.tc_bias_corrected, 1)}; [info.chs_swl_bu_source ' / ' info.chs_hm0_bu_source]};
+            end
+            app.ConstantsTable.Data = [{'Water Density', density{:}; 'Gravity Constant', 'm/s^2', gravity;...
+                'Offshore Elevation (Storm DB / PSE)', offshore{:}}; db_rows];
         end
 
         function populate_pse_table(app)
@@ -1204,11 +1264,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             app.simContext = context;
 
-            % 6. Constants Table Offshore Elevation (Storm DB Study Grid, Else The PSE Geometry Value)
-            unitLib = app.auxLib.update_unit_system(app.wProj.unitsys);
-            app.ConstantsTable.Data(3, :) = {'Offshore Elevation (Storm DB / PSE)', unitLib.unitSymbols.length, app.shown_offshore_elevation(dbObj)};
-
-            % 7. Inputs Table & Run Button
+            % 6. Inputs Table & Run Button (Constants Table: Callers Run populate_constants_table Next)
             app.set_input_table();
         end
 
@@ -1286,6 +1342,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % CHESS Run & Results Viewer
             app.populateSimulationTab();
             app.populate_pse_table();
+            app.populate_constants_table();
             app.populateResultsTab();
             % Saved Simulation Of A New Alternative / Workflow / Storm DB (Dialog Only On A User Switch)
             app.sync_saved_sim(user_switch);
@@ -2174,8 +2231,12 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         function [elev, source] = shown_offshore_elevation(app, dbObj)
             % [NEW] Offshore Elevation Shown On The Run Tab And In The PSE Pop-Out: Storm DB Study Grid Value (Wins, As In
-            % create_resp_config), Else The Active PSE's Geometry Value (Fallback Entered At PSE Creation), Else NaN
-            elev = app.db_offshore_elevation(dbObj);
+            % create_resp_config), Else The Active PSE's Geometry Value (Fallback Entered At PSE Creation), Else NaN. dbObj
+            % Empty (No Run Tab Storm DB): The PSE Value
+            elev = [];
+            if ~isempty(dbObj)
+                elev = app.db_offshore_elevation(dbObj);
+            end
             source = 'Storm DB grid';
             if isempty(elev)
                 elev = NaN;
@@ -2406,8 +2467,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             app.stormCache = containers.Map();
             app.tableState = struct();
-            % Intialiaze Constants Table (Starts With Metric)
-            app.ConstantsTable.Data = [{'Water Density';'Gravity Constant'},{'Kg/m^3';'m/s^2'},num2cell([1027;9.81])];
+            % Constants Table (Columns Sized To Their Text; No Project Yet: '-' Rows)
+            app.ConstantsTable.ColumnWidth = {'fit', 'fit', 'fit'};
+            app.populate_constants_table();
             % Results Tab (Created In Code, No Design View Changes): Dropdown Callbacks, Right-Click Plot Options
             set([app.PlotTypeDropDown, app.StormTypeDropDown_results, app.DataTypeDropDown_results,...
                 app.MatchTypeDropDown_results, app.FieldToPlotDropDown_results, app.StormIDDropDown_results],...
@@ -2820,8 +2882,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Value changed function: WorkflowDropDown
         function WorkflowDropDownValueChanged(app, event)
-            % Inputs Table Rows Depend On Workflow; Results Are Per Workflow (Saved Simulation Of This Workflow: sync_saved_sim)
+            % Inputs Table Rows Depend On Workflow; Results Are Per Workflow (Saved Simulation Of This Workflow: sync_saved_sim).
+            % Constants Table: Uncertainty Rows Marked Unused By DET
             app.set_input_table();
+            app.populate_constants_table();
             app.populateResultsTab();
             app.sync_saved_sim(true);
         end
@@ -2954,6 +3018,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if event.Source == app.StormDBDropDown_run
                 app.populateSimulationTab();
                 app.populate_pse_table();
+                app.populate_constants_table();
                 app.populateResultsTab();
                 app.sync_saved_sim(true); % Saved Simulation Of This Storm DB
             elseif app.has_active_alt() % Without An Active Alternative There Are No Inputs To Refresh
@@ -2971,7 +3036,18 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             symbol = app.WorkflowInputsTable.Data{row, 1};
-            app.tableState.(symbol) = event.NewData;
+            val = event.NewData;
+            if strcmp(symbol, 'csr_apply_structure_repair') && ~(isnumeric(val) && isscalar(val) && ismember(val, 0:3))
+                app.WorkflowInputsTable.Data{row, col} = event.PreviousData;
+                uialert(app.UIFigure, 'Structure Repair must be 0 (None), 1 (Above SLS), 2 (Above ULS) or 3 (Above SLS Or ULS).',...
+                    'Inputs: Invalid Value', 'Icon', 'warning');
+                return
+            end
+            app.tableState.(symbol) = val;
+            % DPA Settings Rows Follow csr_call_dpa
+            if strcmp(symbol, 'csr_call_dpa')
+                app.set_input_table();
+            end
         end
 
         % Menu selected function: RemoveStormDatabaseMenu
@@ -3121,12 +3197,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             app.wProj.plot_geometry(pse_name, alt_name, app.PSEAxes, app.plotFontSize);
             app.save_project();
-            % Run Tab: Constants Row 3 (Resolved Offshore Elevation) And Status Bar (PSE Geometry Vs Loaded Results). Same Key: No sync_saved_sim
-            dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
-            if ~isempty(dbObj)
-                unitLib = app.auxLib.update_unit_system(app.wProj.unitsys);
-                app.ConstantsTable.Data(3, :) = {'Offshore Elevation (Storm DB / PSE)', unitLib.unitSymbols.length, app.shown_offshore_elevation(dbObj)};
-            end
+            % Constants Table (Water Density, Resolved Offshore Elevation) And Status Bar (PSE Geometry Vs Loaded Results). Same Key: No sync_saved_sim
+            app.populate_constants_table();
             if ~isempty(app.resultsState)
                 app.set_sim_status(app.results_status());
             end
@@ -3227,6 +3299,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.RemoveTidesMenu = uimenu(app.RemoveProjectElementMenu);
             app.RemoveTidesMenu.MenuSelectedFcn = createCallbackFcn(app, @RemoveProjectElem, true);
             app.RemoveTidesMenu.Text = 'Tides';
+
+            % Create RemoveAlternativeSimulationMenu
+            app.RemoveAlternativeSimulationMenu = uimenu(app.ProjectManagementMenu);
+            app.RemoveAlternativeSimulationMenu.Text = 'Remove Alternative Simulation';
 
             % Create StormDatabaseManagementMenu
             app.StormDatabaseManagementMenu = uimenu(app.UIFigure);
