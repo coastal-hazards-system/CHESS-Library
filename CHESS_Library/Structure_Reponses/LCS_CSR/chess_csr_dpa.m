@@ -160,7 +160,7 @@ Slee_SLS = structure.leeside_design_S; %e.g. S=7, just before exposure of underl
 % surface roughness influence increses for small wave heights.
 gamma_f = structure.roughness_ifactor;
 % ---------- LOGICAL SWITCHES ----------
-% Structure Repair Assesment; 0 - Repairs Not Included In Analysis, 1 - Repairs Are Included In Analysis
+% Structure Repair Assesment; 0 - No Repairs, 1 - Repair Above SLS, 2 - Repair Above ULS, 3 - Repair Above SLS Or ULS
 repair_switch = config.csr_apply_structure_repair;
 % Cutoff Elevation Adjustment Flag;
 % 0 - Seaside Damage is computed even if the structure is submerged

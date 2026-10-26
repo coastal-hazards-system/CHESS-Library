@@ -114,6 +114,10 @@ for fn = fieldnames(lcs_defaults)'
         config.(fn{1}) = lcs_defaults.(fn{1});
     end
 end
+% LCS Damage Progression Analysis (Rubble Mound Timeseries) Is Off Unless Requested
+if ~isfield(config, 'csr_call_dpa') || isempty(config.csr_call_dpa)
+    config.csr_call_dpa = 0;
+end
 % Deprecated Or Hidden Features
 config.chs_wDir_u_a = 0; % Assume Shore Normal Waves
 config.tide_std = 0; % Tidal std , not implemented
