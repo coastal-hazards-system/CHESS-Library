@@ -44,7 +44,9 @@ deps.forcing_build: Fields baked into the generated forcing that do not
 
 deps.f_adjust: Fields consumed by
     Forcing_Generation/Forcing_Adjustments/adjust_project_forcing.m
-    (and its callees apply_depth_limitation.m / apply_random_tide.m).
+    (and its callees adjust_wave_height.m / apply_depth_limitation.m /
+    apply_random_tide.m; adjust_wave_height.m takes its switches as
+    arguments, so every config read stays in adjust_project_forcing.m).
     A change rebuilds the forcing from the storm database and re-applies
     the adjustments; LCS keeps its sampled life cycles.
 

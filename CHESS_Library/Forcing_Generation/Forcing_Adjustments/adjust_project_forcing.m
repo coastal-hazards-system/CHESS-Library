@@ -49,15 +49,8 @@ if swl_slr~=0
 end
 
 %% Hm0 ADJUSTMENTS
-% Compute Water Depth @ Toe
-h = cellfun(@(x) x - toe_elev, SWL(:, 1), 'un', false);
-% Apply Depth Limitation
-if apply_DL == 1
-    [Hm0, Hm0_DL] = cellfun(@(x, y, z) apply_depth_limitation(x, y, z, g), Hm0, Tp, h,'un',false);
-end
-% Emergent Toe (h < 0): No Wave Attack, Regardless Of Depth Limitation. Hm0 = 0 Makes Wave Responses NaN
-% While Surge-Only Responses (e.g. Damaging Depth) Are Still Computed
-Hm0 = cellfun(@(x, z) x .* ~(z < 0), Hm0, h, 'un', false);
+% Depth Limitation + Emergent Toe (Hm0 = 0) From The Water Depth @ Toe
+Hm0 = adjust_wave_height(Hm0, Tp, SWL(:, 1), toe_elev, apply_DL, g);
 
 %% STORE ADJUSTED DATA
 % Store Modifications
