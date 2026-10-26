@@ -66,6 +66,7 @@ classdef pros_methods < CHESSPlotsBase
                 end
                 % Grab CLs
                 prc = plt.CL;
+                p_cl = gobjects(1, length(plt(1).(plt_fld)(1,:)));
                 % For Each CL
                 for i = 1:length(plt(1).(plt_fld)(1,:))
                     % Define Curve Name
@@ -75,49 +76,29 @@ classdef pros_methods < CHESSPlotsBase
                         DataName = [num2str(prc(i)) '%'];
                     end
                     % PLot CL into Axes
-                    p = plot(ax,plt.(plt_fld_x)(s_lim_indx,1),...
+                    p_cl(i) = plot(ax,plt.(plt_fld_x)(s_lim_indx,1),...
                         plt.(plt_fld)(s_lim_indx,i),...
                         colorstr{i},'LineWidth',2,'DisplayName',DataName);
                     % Update Data Tip
                     row = dataTipTextRow('RowID', 1:length(plt.(plt_fld_x)(s_lim_indx,1)));
                     % Append Neew Data Tip
-                    p.DataTipTemplate.DataTipRows(end+1) = row;
+                    p_cl(i).DataTipTemplate.DataTipRows(end+1) = row;
                 end
-                % Overlay POT
-                if add_events == 1
-                    % Compute Mean Value
-                    [emp_coeff] = load_empirical_coefficients();
-                    % Get Number Of Cols
-                    pf = aux_methods.pull_data(ds_names, self.project_forcing);
-                    % Compute Mean Values
-                    data_in = pf;
-                    data_in.SWL = pf.SWL_no_rep;
-                    data_in.Hm0 = pf.Hm0_no_rep;
-                    data_in.Tp = pf.Tp_no_rep;
-                    data_in.dt = pf.dt;
-                    % Compute Replicates
-                    switch field_to_plot
-                        case 'SWL'
-                            pot = cell2mat(data_in.('SWL'));
-                        case {'Hm0','Tp'}
-                            pot = cell2mat(data_in.(field_to_plot));
-                        otherwise
-                            pot_resp = compute_structure_response(self.config, self.structure, data_in, emp_coeff, 1);
-                            pot = pot_resp.(field_to_plot);
-                    end
-                    % Pull Events
-                    hc_aef = plt.(plt_fld_x)(s_lim_indx,1);
-                    hc_resp = plt.(plt_fld)(s_lim_indx,1);
-                    switch ds_names.storm_type
-                        case 'XC'
-                            p2 = self.add_pot(ax, pot, [], hc_aef, hc_resp);
-                        case 'TC'
-                            %
-                            p2 = self.add_pot(ax, pot, self.dsw.TC_Freq, hc_aef, hc_resp);
-                    end
+                % Events Overlay: 0 Off, 1 Run Sample (POT), 2 Storm Values
+                p_ev = gobjects(0);
+                % CC Has No Overlays (POT Is A Note, No CC Storm Set); FB POT Is A Note Too
+                if strcmp(ds_names.storm_type, 'CC') || (double(add_events) == 1 && ~isnumeric(plt.POT))
+                    add_events = 0;
                 end
-                % Add Legend
-                legend2 = legend(ax);
+                switch double(add_events)
+                    case 1
+                        p_ev = self.add_run_sample(ax, plt.POT, ds_names.storm_type, plt.n_dropped);
+                    case 2
+                        p_ev = self.add_storm_values(ax, ds_names, field_to_plot,...
+                            plt.(plt_fld_x)(s_lim_indx,1), plt.(plt_fld)(s_lim_indx,1));
+                end
+                % Add Legend (CLs First; Overlay Entry Wraps To Its Own Row)
+                legend2 = legend(ax, [p_cl, p_ev]);
                 % Get Legend Title Handle
                 htitle = get(legend2,'Title');
                 % Define Legend Location
@@ -659,14 +640,75 @@ classdef pros_methods < CHESSPlotsBase
     %% PRIVATE METHODS
     methods (Access=private)
         % -----------------------------------------
-        % Overlay POT data to hazard curve BE
-        function p = add_pot(self, ax, pot, dsw, benchmark_aef, benchmark_hc)
-            % Get AEF Associated With POT
-            [aef_out, ~] = self.get_aef(pot,...
-                benchmark_aef, benchmark_hc, dsw, []);
-            % Plot POT On Frequency space
-            p = plot(ax, aef_out.aef, aef_out.response, 'o', 'MarkerSize', 4,...
-                'MarkerEdgeColor','k', 'MarkerFaceColor', 'g','DisplayName','Events');
+        % Run Sample: The POT The Hazard Curve Was Built From, All Replicates Pooled (n_dropped: Events PST/JPM Did Not Fit)
+        function p = add_run_sample(self, ax, pot, storm_type, n_dropped)
+            n_cols = size(pot, 2);
+            switch storm_type
+                case 'XC'
+                    [aef, resp] = self.empirical_hazard(pot, [], self.config.Nyrs_XC*n_cols);
+                case 'TC'
+                    [aef, resp] = self.empirical_hazard(pot, repmat(self.dsw.TC_Freq(:)./n_cols, 1, n_cols), []);
+            end
+            if n_dropped > 0
+                legend_str = sprintf('Run sample (n=%d, %d not fitted)', numel(resp), n_dropped);
+            else
+                legend_str = sprintf('Run sample (n=%d)', numel(resp));
+            end
+            p = plot(ax, aef, resp, 'o', 'MarkerSize', 5,...
+                'MarkerEdgeColor', 'k', 'MarkerFaceColor', 'g', 'DisplayName', legend_str);
+        end
+        % -----------------------------------------
+        % Storm Values: One Value Per Storm From The No-Replicate Forcing, Placed On The Best Estimate Curve
+        function p = add_storm_values(self, ax, ds_names, field_to_plot, hc_aef, hc_resp)
+            pf = aux_methods.pull_data(ds_names, self.project_forcing);
+            % Saved Project Forcing Is Already Adjusted: SWL_no_rep Holds Tides/SLR, Hm0_no_rep Is Not Depth Adjusted
+            switch field_to_plot
+                case 'SWL'
+                    vals = cellfun(@(x) max(x, [], 1), pf.SWL_no_rep);
+                case 'Hm0' % Unadjusted, As Fitted (chess_pros add_forcing)
+                    vals = cellfun(@(x) max(x, [], 1), pf.Hm0_no_rep);
+                case 'Tp'
+                    [~, hm0_indx] = cellfun(@(x) max(x, [], 1), pf.Hm0_no_rep);
+                    vals = cellfun(@(x, y) x(y), pf.Tp_no_rep, num2cell(hm0_indx));
+                otherwise
+                    % Toe: Same Rule As adjust_project_forcing (Floodwall Without Toe Berm -> Wall Bottom)
+                    toe_elev = self.structure.toe_elevation;
+                    if self.config.struc_type == 2 && ~self.config.add_toe_berm
+                        toe_elev = self.structure.wall_bottom_elevation;
+                    end
+                    data_in = pf;
+                    data_in.SWL = pf.SWL_no_rep;
+                    data_in.Hm0 = adjust_wave_height(pf.Hm0_no_rep, pf.Tp_no_rep, pf.SWL_no_rep, toe_elev,...
+                        self.config.apply_depth_limitation, self.config.gravity_constant);
+                    data_in.Tp = pf.Tp_no_rep;
+                    pot_resp = compute_structure_response(self.config, self.structure, data_in, load_empirical_coefficients(), 1);
+                    vals = pot_resp.(field_to_plot);
+            end
+            vals = vals(isfinite(vals) & vals > 0);
+            [aef_out, ~] = self.get_aef(vals(:), hc_aef, hc_resp, [], []);
+            % get_aef Clamps To The Curve Ends: Drop Values Outside The Curve's Response Range Instead
+            on_curve = isfinite(hc_resp) & isfinite(log(hc_aef));
+            inside = aef_out.response >= min(hc_resp(on_curve)) & aef_out.response <= max(hc_resp(on_curve)) &...
+                isfinite(aef_out.aef);
+            p = plot(ax, aef_out.aef(inside), aef_out.response(inside), 'o', 'MarkerSize', 5,...
+                'MarkerEdgeColor', 'k', 'MarkerFaceColor', 'g',...
+                'DisplayName', sprintf('CHESS: DET (n=%d, %d outside curve)', sum(inside), sum(~inside)));
+        end
+        % -----------------------------------------
+        % Empirical Hazard Of A POT Sample: Finite Positive Values, Descending (PST Weibull Positions Or JPM Cumulative Masses)
+        function [aef, resp] = empirical_hazard(self, pot, dsw, nyrs)
+            keep = isfinite(pot) & pot > 0;
+            [resp, idx] = sort(pot(keep), 'descend');
+            if isempty(dsw)
+                n = numel(resp);
+                aef = (1:n)'./(n + 1).*n./nyrs;
+            else
+                w = dsw(keep);
+                aef = cumsum(w(idx));
+            end
+            if self.config.pros_use_aep == 1
+                aef = aef2aep(aef);
+            end
         end
         % -----------------------------------------
         function fb_data = call_pros_fb(self, ds_names)
