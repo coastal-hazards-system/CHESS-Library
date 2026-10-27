@@ -8,7 +8,7 @@ function t_size = forcing_storm_lengths(workflow, data)
     %% INPUTS
         workflow: config.workflow. | double
         data: PROS/DET dataset struct (SWL: one cell per storm) or LCS
-            dataset (one life-cycle matrix per cell; 10 columns = Timeseries). | struct/cell
+            dataset (one life-cycle matrix per cell; Timeseries layout: lcs_columns.m). | struct/cell
 
     %% OUTPUTS
         t_size: PROS/DET: one cell per storm holding its row count. LCS: one
@@ -21,7 +21,7 @@ switch workflow
     case {1, 2, 4}
         t_size = cellfun(@(x) size(x,1), data.SWL, 'un', false);
     case {3} % LCS
-        if size(data{1}, 2) == 10 % 10 Cols Is Indicator Of Timeseries
+        if size(data{1}, 2) == lcs_columns().n_timeseries % Timeseries Layout (Step Counter Column)
             t_size = cellfun(@storm_lengths, data, 'un', false);
         else
             t_size = cellfun(@(x) ones(size(x, 1), 1), data, 'un', false);
@@ -30,7 +30,7 @@ switch workflow
         % Add nan on top -> Keep Dimensions Consistent But Remove 0 of first Storm
         % Add Zero To End -> Want to flag final timestep of final storm
         % - 1 -> Gives the end row index of each storm
-        % + 1 -> x(:, 10) goes from 0:n_stsp-1 hence need to add 1 to get proper length
+        % + 1 -> The Step Counter Goes From 0:n_stsp-1 Hence Need To Add 1 To Get Proper Length
 end
 end
 
@@ -39,6 +39,7 @@ function t_size = storm_lengths(x)
 if isempty(x) % Life Cycle Without Storms
     t_size = zeros(0, 1);
 else
-    t_size = x(find([nan;x(2:end, 10);0]== 0)-1, 10)+1;
+    step = lcs_columns().step;
+    t_size = x(find([nan;x(2:end, step);0]== 0)-1, step)+1;
 end
 end

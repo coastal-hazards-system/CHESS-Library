@@ -2,7 +2,8 @@ function [hit, project_forcing, missing_desc] = project_forcing_cache_hit(config
 %PROJECT_FORCING_CACHE_HIT True if the cached project_forcing.mat will be reused as is.
 %{
 %% DESCRIPTION
-The reuse rule of call_project_forcing_formater.m: the cached
+The coverage rule of call_chess_boundary_conditions.m (step 0, which
+also needs config.forcing_stamp): the cached
 config.out_files.project_forcing exists and covers the current request
 (project_forcing_coverage.m). No side effects (a non-covering cache is
 not deleted here). Hotstart resolution runs first and deletes the cache

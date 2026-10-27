@@ -2,7 +2,7 @@ function config = draw_tide_indices(config, project_forcing)
 %{
     %% DESCRIPTION
         Random tide start hours drawn before any dataset is adjusted
-        (call_project_forcing_adjuster.m), so every dataset of a storm type
+        (call_chess_boundary_conditions.m), so every dataset of a storm type
         uses the same config.tide_indx_<type> and a storm gets the same
         tide start hour in each of them.
         - Storm types with Timeseries (CC excluded): each start hour is drawn
@@ -16,7 +16,7 @@ function config = draw_tide_indices(config, project_forcing)
           life cycle, so its start hours are not drawn but derived from
           tide_indx_tc / tide_indx_xc: the TC-then-XC stacked start hours
           are reordered with the permutation chess_lcs.m used to build
-          CC (stable sortrows of [TC; XC] by columns [3, 4, 2]). That sort
+          CC (stable sortrows of [TC; XC] by year, order, bin: lcs_columns.m). That sort
           keeps each Timeseries hydrograph contiguous (constant key within
           a storm) and keeps TC before XC on ties, so the Timeseries CC
           storms come in the same order as the Peaks CC rows. TC/XC
@@ -49,10 +49,7 @@ is_cc = config.workflow == 3 && isfield(project_forcing, 'Peaks') && isfield(pro
 if ~has_ts && ~is_cc
     return
 end
-warning('off');
-tidal_data = readcell(config.tide_file, 'NumHeaderLines', 1);
-warning('on');
-n_tide = size(tidal_data, 1);
+n_tide = numel(read_tide_series(config.tide_file));
 if has_ts
     for st = setdiff(fieldnames(project_forcing.Timeseries.Default)', {'CC'}, 'stable')
         config = draw_type(config, st{1}, project_forcing.Timeseries.Default.(st{1}), n_tide);
@@ -80,7 +77,8 @@ end
 function cc = cc_tide_indices(tc, xc, peaks)
 cc = cell(size(peaks.CC));
 for lc = 1:numel(cc)
-    [~, p] = sortrows([peaks.TC{lc}; peaks.XC{lc}], [3, 4, 2]);
+    C = lcs_columns();
+    [~, p] = sortrows([peaks.TC{lc}; peaks.XC{lc}], [C.year, C.order, C.bin]);
     stacked = [tc{lc}(:); xc{lc}(:)];
     cc{lc} = stacked(p);
 end

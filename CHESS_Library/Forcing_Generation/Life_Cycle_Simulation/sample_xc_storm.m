@@ -79,15 +79,17 @@ OUTPUTS:
 
 OUTPUTS HEADERS:
     LC_MCSimOUT_XC, LC_MCSimOUT_XC_WHP, LC_MCSimOUT_XC_WLP :
-        Size (# of LC's, 8) -> (Rows,Col)
+        Size (# of events, 10) -> Column map: lcs_columns.m
             (01) Storm ID                       [-]
             (02) Storm type                     [0 = extratropical]
             (03) Storm Year                     [-]
             (04) Number of storm in storm year  [-]
             (05) Water Level                    [meters, MSL]
-            (06) Wave Height                    [meters]
-            (07) Peak Wave Period               [seconds]
-            (08) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
+            (06) Wave Height At Toe             [meters] (= Offshore Here; Depth Limited By adjust_project_forcing)
+            (07) Wave Height Offshore           [meters]
+            (08) Peak Wave Period               [seconds]
+            (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
+            (10) Storm Duration                 [days]
             
 
 
@@ -151,8 +153,9 @@ if restrict_rate == 1
     end
 end
 % No Storms Sampled In This Life Cycle: Empty Outputs
+C = lcs_columns();
 if sum(XC_MCS) == 0
-    lcs_data = zeros(0, 9);      % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
+    lcs_data = zeros(0, C.n_peaks); % Life-Cycle Peaks Layout (lcs_columns.m)
     sampled_storms = zeros(0, 4); % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
     return
 end
@@ -187,7 +190,10 @@ end%for j
 % Get Storm Rows To Pull
 [~, stm_2_pull] = find(cell2mat(arrayfun(@(x) XC_INDEX == x, storm_peaks(:, 1), 'un', false)'));
 % Monte Carlo Simulation Outputs (Sample Extratropical Storms Peaks)
-lcs_data = [XC_INDEX, SimOUT_XC, Y, storm_peaks(stm_2_pull, end)]; % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
+lcs_data = zeros(numel(XC_INDEX), C.n_peaks); % Life-Cycle Peaks Layout (lcs_columns.m)
+lcs_data(:, [C.id, C.bin, C.year, C.order]) = [XC_INDEX, SimOUT_XC];
+lcs_data(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir]) = Y(:, [1 2 2 3 4]);
+lcs_data(:, C.dt) = storm_peaks(stm_2_pull, end); % Storm Duration (Storm Database Last Column)
 % Sampled Storm Indexes (For Timeseries LC Creation)
 sampled_storms = [XC_INDEX, SimOUT_XC]; % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
 

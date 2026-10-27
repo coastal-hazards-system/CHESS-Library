@@ -6,7 +6,7 @@ function Hm0 = adjust_wave_height(Hm0, Tp, SWL, toe_elev, apply_DL, g)
 %   water depth at the toe (SWL - toe_elev), then sets Hm0 = 0 where the toe is
 %   emergent (h < 0) regardless of depth limitation. Hm0 = 0 makes wave responses
 %   NaN while surge-only responses (e.g. damaging depth) are still computed.
-%   Shared by adjust_project_forcing.m and the PROS hazard curve storm overlay.
+%   Called by adjust_project_forcing.m: Hm0_offshore in, Hm0_toe out.
 %
 %   Hm0, Tp, SWL: Cell arrays, one cell per storm/life cycle (same sizes).
 %   toe_elev: Toe elevation (signed, <0 below datum zero).

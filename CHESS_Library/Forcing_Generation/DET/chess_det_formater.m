@@ -4,10 +4,9 @@ function project_forcing = chess_det_formater(storm_sampling, storm, print_progr
         Formats the storm suite for CHESS: Deterministic (workflow 2).
         Same layout as chess_pros_formater (data type > match type >
         storm type) but without replicates: every storm is used once, as
-        recorded in the storm database. SWL/Hm0/Tp and their *_no_rep
-        copies start out identical; adjust_project_forcing later adjusts
-        SWL, SWL_no_rep and Hm0 (tides, SLR, depth limitation), so
-        Hm0_no_rep keeps the original (not depth limited) wave height.
+        recorded in the storm database. adjust_project_forcing later
+        adjusts SWL (tides, SLR) and adds Hm0_toe (depth limited at the
+        toe), so Hm0_offshore keeps the database wave height.
 
     %% INPUTS
         storm_sampling: 'XC', 'TC' or 'CC'. | char
@@ -16,8 +15,7 @@ function project_forcing = chess_det_formater(storm_sampling, storm, print_progr
 
     %% OUTPUTS
         project_forcing.(data_type).(match_type).(storm_type) with fields:
-            SWL, Hm0, Tp: Forcing per storm (nSteps x 1 each). | cell
-            SWL_no_rep, Hm0_no_rep, Tp_no_rep: Copies (see above). | cell
+            SWL, Hm0_offshore, Tp: Forcing per storm (nSteps x 1 each). | cell
             dt: Time step per storm [days]. | cell
             storm_id: Storm IDs. | double (nStorms x 1)
             time: Time stamp(s) per storm [datenum]. | cell
@@ -43,11 +41,8 @@ for st = 1:length(storm_types)
         for ii = 1:length(match_types)
             storm_data = storm.(storm_types{st}).(data_type{kk}).(match_types{ii});
             data_out.SWL = cellfun(@(x) x(:, 1), storm_data(:, 2), 'un', false);
-            data_out.Hm0 = cellfun(@(x) x(:, 2), storm_data(:, 2), 'un', false);
+            data_out.Hm0_offshore = cellfun(@(x) x(:, 2), storm_data(:, 2), 'un', false);
             data_out.Tp = cellfun(@(x) x(:, 3), storm_data(:, 2), 'un', false);
-            data_out.SWL_no_rep = data_out.SWL;
-            data_out.Hm0_no_rep = data_out.Hm0;
-            data_out.Tp_no_rep = data_out.Tp;
             data_out.dt = cellfun(@(x) x(:, end), storm_data(:, 2), 'un', false);
             data_out.storm_id = cell2mat(storm_data(:, 1));
             data_out.time = cellfun(@(x) x(:, col_time), storm_data(:, 2), 'un', false);

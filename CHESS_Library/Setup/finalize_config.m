@@ -118,6 +118,10 @@ end
 if ~isfield(config, 'csr_call_dpa') || isempty(config.csr_call_dpa)
     config.csr_call_dpa = 0;
 end
+% Multi-Line Transect: A Single-Line Run Unless The Caller Couples It To A Stage 1 Run (multiline_stage2_config.m)
+if ~isfield(config, 'multiline')
+    config.multiline = [];
+end
 % Deprecated Or Hidden Features
 config.chs_wDir_u_a = 0; % Assume Shore Normal Waves
 config.tide_std = 0; % Tidal std , not implemented

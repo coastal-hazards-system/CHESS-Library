@@ -25,9 +25,9 @@ for st = 1:length(storm_types)
             % Define Normal Discretization To Use
             switch storm_types{st}
                 case 'XC'
-                    RandNorm = 20; % 20 values for XC because there is 1000 bootstrap samples in SST code
+                    RandNorm = 21; % 20 values for XC because there is 1000 bootstrap samples in SST code, + z = 0 (Middle Column)
                 case 'TC'
-                    RandNorm = 444; % 444 values covering the (-3,3) z-score range
+                    RandNorm = 445; % 444 values covering the (-3,3) z-score range, + z = 0 (Middle Column)
             end
             % Create Replicates
             project_forcing.(data_type{kk}).(match_types{ii}).(storm_types{st}) = create_reps(storm.(storm_types{st}).(data_type{kk}).(match_types{ii})(:, 2), RandNorm, [1 2 3]);
@@ -51,14 +51,10 @@ end
 
 %% AUX FUNCTIONS
     function data_out = create_reps(storm_data, n_reps, col_indx)
-        % Reshape Peaks Data To Be nStorms * normal_discretization
+        % Reshape Peaks Data To Be nStorms * normal_discretization (The z = 0 Column Keeps The Database Values)
         data_out.SWL = cellfun(@(x) repmat(x(:,col_indx(1)),1,n_reps),storm_data,'un',false); % SWL
-        data_out.Hm0 = cellfun(@(x) repmat(x(:,col_indx(2)),1,n_reps),storm_data,'un',false); % Hm0
+        data_out.Hm0_offshore = cellfun(@(x) repmat(x(:,col_indx(2)),1,n_reps),storm_data,'un',false); % Hm0 (Hm0_toe Added By adjust_project_forcing)
         data_out.Tp = cellfun(@(x) repmat(x(:,col_indx(3)),1,n_reps),storm_data,'un',false); %  Tp
-        %
-        data_out.SWL_no_rep = cellfun(@(x) x(:,col_indx(1)),storm_data,'un',false); % SWL
-        data_out.Hm0_no_rep = cellfun(@(x) x(:,col_indx(2)),storm_data,'un',false); % Hm0
-        data_out.Tp_no_rep = cellfun(@(x) x(:,col_indx(3)),storm_data,'un',false); % Tp
     end
 end
 

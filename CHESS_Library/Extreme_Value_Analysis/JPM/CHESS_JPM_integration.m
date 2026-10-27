@@ -32,7 +32,8 @@ HC_plt_x=flipud(HC_plt_x);
 if jpm_options.integration_method == 2
     % Define Normal Distribution Discretization Z-Scores
 %     dscrtGauss = [1.9982;1.5632;1.3064;1.1147;0.957;0.8202;0.6973;0.5841;0.478;0.377;0.2798;0.1852;0.0922;0;-0.0922;-0.1852;-0.2798;-0.377;-0.478;-0.5841;-0.6973;-0.8202;-0.957;-1.1147;-1.3064;-1.5632;-1.9982];
-    dscrtGauss = readmatrix('discrete_norm_444.txt');
+    % 444 Z-Scores: The z = 0 Replicate Of The File Is Dropped (drop_z0.m)
+    dscrtGauss = drop_z0(readmatrix('discrete_norm_444.txt')')';
     % Define Number Of Replicates
     nReps = length(dscrtGauss);
     % Repeat Normal Replicates Per Number Of Storms

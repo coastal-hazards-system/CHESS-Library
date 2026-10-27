@@ -64,12 +64,14 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
         for field_str = ["y_table", "y_plot"]
             field = char(field_str);
 
+            % Forcing Curves (pros_forcing_curves.m): Hm0_offshore For Goda/Damaging Depth, Hm0_toe For Toe Responses
             [SWL, pass_swl] = get_hc_data(hc_data, 'SWL', field);
-            [Hm0, pass_hm0] = get_hc_data(hc_data, 'Hm0', field);
+            [Hm0_off, pass_hm0_off] = get_hc_data(hc_data, 'Hm0_offshore', field);
+            [Hm0_toe, pass_hm0_toe] = get_hc_data(hc_data, 'Hm0_toe', field);
             [Tp,  pass_tp]  = get_hc_data(hc_data, 'Tp', field);
             
             % Abort if minimum hazard curves do not exist
-            if ~(pass_swl && pass_hm0 && pass_tp)
+            if ~(pass_swl && pass_hm0_off && pass_hm0_toe && pass_tp)
                 Resp = [];
                 continue; 
             end
@@ -91,7 +93,7 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                            [Resp.(field).p2dyn, Resp.(field).p2sta, Resp.(field).p2total,...
                                Resp.(field).p3dyn, Resp.(field).p3sta, Resp.(field).p3total, Resp.(field).pu] = ...
                                cellfun(@(a, b, c, d, e, f) goda_forces_on_vertical_p2p3(a, b, 1.8, 0, c, d, e, hw, f, rho_w, g), ...
-                               Hm0, Tm10, h, hb, Rc, p1, 'UniformOutput', false);
+                               Hm0_off, Tm10, h, hb, Rc, p1, 'UniformOutput', false);
                        end
 
                        if req_nappe
@@ -100,7 +102,7 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                                Resp.(field).theta_up, Resp.(field).Bx, Resp.(field).X_c_surge,...
                                Resp.(field).theta_center, Resp.(field).Bjet, Resp.(field).Vjet, Resp.(field).Fjet] = ...
                                cellfun(@(a, b, c) floodwall_nappe_response(a, b, c, hw, rho_w, crest_elev), ...
-                               SWL, Hm0, q, 'UniformOutput', false);
+                               SWL, Hm0_toe, q, 'UniformOutput', false);
                        end
                         eb1_fields = fieldnames(Resp.(field));
                         for gg = 1:length(eb1_fields)
@@ -122,15 +124,19 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                    project_forcing.SWL = {pcha_forcing_uncertainty_EB2(SWL{1} - lake_level,...
                        swl_u(1), swl_u(2),...
                        normU_swl, storm_name) + lake_level};
-                   % Hm0
-                   project_forcing.Hm0 = {pcha_forcing_uncertainty_EB2(Hm0{1},...
+                   % Hm0 Offshore (Absolute + Relative Uncertainty)
+                   project_forcing.Hm0_offshore = {pcha_forcing_uncertainty_EB2(Hm0_off{1},...
                        hm0_u(1), hm0_u(2),...
+                       normU_hm0, storm_name)};
+                   % Hm0 At The Toe (Relative Uncertainty Only, Same Draw As Offshore; Samples Are Not Capped By The Breaker Limit)
+                   project_forcing.Hm0_toe = {pcha_forcing_uncertainty_EB2(Hm0_toe{1},...
+                       0, hm0_u(2),...
                        normU_hm0, storm_name)};
                    % Tp
                    project_forcing.Tp = {Tp{1}.*normU_tp};
                    % Storm Duration
                    project_forcing.dt  = {repmat(datenum(0,0,0,config.storm_duration,0,0), size(SWL{1}))};
-                   % Per-Sample MC Forcing (No _no_rep Fields): Tag As PROS-FB Even When Called From A PROS-RB Run (pros_methods.call_pros_fb)
+                   % Per-Sample MC Forcing (Single Column, No z = 0 Replicate): Tag As PROS-FB Even When Called From A PROS-RB Run (pros_methods.call_pros_fb)
                    config_fb = config;
                    config_fb.workflow = 4;
                    Resp.(field) = compute_structure_response(config_fb, structure, project_forcing, emp_coeff, 0);
@@ -239,8 +245,12 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
         end
         %
         a = u_a+iVar; r = u_r.*iVar;
-        u_iVar = 1./sqrt(1./(a).^2 + 1./(r).^2);
-        u_iVar = u_iVar .* (a./abs(a));
+        if u_a == 0 % Relative Only (Same As pcha_forcing_uncertainty.m)
+            u_iVar = 1./sqrt(1./(r).^2);
+        else
+            u_iVar = 1./sqrt(1./(a).^2 + 1./(r).^2);
+            u_iVar = u_iVar .* (a./abs(a));
+        end
         iVar_w_u = iVar + u_iVar.*normU;
     end
 end

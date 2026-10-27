@@ -85,12 +85,16 @@ t2 = tic;
 [storm, ~, prob_mass, config] = call_chs_data_formater(config);
 t2 = toc(t2);
 
-%% STEP 3: CREATE STORM FORCING 
+%% STEP 3: CREATE PROJECT FORCING (BOUNDARY CONDITIONS)
 %{
  Description:
    Once input storm data has been formated the next step is to generate the
-   project forcing. In this step the input storm data will be transformed (reshaped)
-   according to the user specfiied workflow. CHESS provides users with 2 Response Base
+   project forcing. call_chess_boundary_conditions builds it in one call:
+   build (the input storm data is transformed (reshaped) according to the
+   user specified workflow), uncertainty (PROS) and forcing adjustments
+   (SLR, random tides, depth limitation), then saves it once. A complete
+   cached project forcing (hotstart) is loaded instead. Optional 5th input:
+   progress_fcn(step, message); default prints to the command window. CHESS provides users with 2 Response Base
    methods: CHESS: PROS (Design) & CHESS:LCS (Performance). Additionally, there is a
    Frequency Base method (CHESS: PROS-FB) that leverages CHESS: PROS to compute storm
    forcing (SWL, Hm0, Tp) hazard curves and computes structure responses as
@@ -103,6 +107,7 @@ Inputs:
     1. config
     2. storm 
     3. prob_mass
+    4. structure
 
 Outputs: 
   Output variables will be in the form of MATLAB data structures in order
@@ -148,30 +153,16 @@ Outputs:
 
 %}
 t3 = tic;
-[project_forcing, config] = call_project_forcing_formater(config, storm, prob_mass);
+[project_forcing, config] = call_chess_boundary_conditions(config, storm, prob_mass, structure);
 t3 = toc(t3);
 
-%% STEP 4: APPLY UNCERTAINTY TO PROJECT FORCING
+%% STEP 4: COMPUTE  PROJECT RESPONSES 
 t4 = tic;
-[project_forcing, config] = call_uncertainty_engine(config, project_forcing);
+Resp = call_project_response(config, project_forcing, structure);
 t4 = toc(t4);
 
-%% STEP 5: APPLY PORJECT FORCING ADJUSTMENTS 
-% For Response Base Analysis:
-% _no_rep fields are used for SWL, Hm0, Tp, hazard curve calculations
-% Hence will not have depth limitation applied. Hm0 @ Savepoint Depth 
-% SLR, Rand Tide, Depth Limitation
-t5 = tic;
-[project_forcing, config] = call_project_forcing_adjuster(config, project_forcing, structure);
-t5 = toc(t5);
-
-%% STEP 6: COMPUTE  PROJECT RESPONSES 
-t6 = tic;
-Resp = call_project_response(config, project_forcing, structure);
-t6 = toc(t6);
-
 %% PRINT TIME 
-disp(['Simulation Completed. Total run time: ' num2str(round(sum([t1,t2,t3,t4,t5,t6])/60,2)) ' mins...']);
+disp(['Simulation Completed. Total run time: ' num2str(round(sum([t1,t2,t3,t4])/60,2)) ' mins...']);
 % diary 'off';
 
 

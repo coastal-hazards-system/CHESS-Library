@@ -1,13 +1,15 @@
 classdef det_methods < CHESSPlotsBase
     % DET_METHODS CHESS: Deterministic workflow plots (workflow = 2).
     % Instantiated via CHESSPlots(...). Resp layout (chess_det.m):
-    %   Resp.(Peaks|Timeseries).(Default|WLP|WHP).(XC|TC) -> full histories + .Max (one value per storm)
-    % Every field (forcing: SWL, Hm0, Hm0_DL, Tp, h, Rc; and responses) can be used on any axis.
+    %   Resp.(Peaks|Timeseries).(Default|WLP|WHP).(XC|TC) -> storm_id, h, Rc, response histories + .Max (one value per storm,
+    %   forcing maxima included). Forcing histories (time, SWL, Hm0_offshore, Hm0_toe, Tp) come from project_forcing (same
+    %   dataset, same row order), needed by the Timeseries response table only.
+    % Every field (forcing: SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc; and responses) can be used on any axis.
     % Labels, units and log scaling come from response_library_headers.m.
 
     properties (Constant, Access=private)
         % Plotted Before The Responses, In This Order
-        forcing_fields = {'SWL', 'Hm0', 'Hm0_DL', 'Tp', 'h', 'Rc'}
+        forcing_fields = {'SWL', 'Hm0_offshore', 'Hm0_toe', 'Tp', 'h', 'Rc'}
         % Datum-Referenced Elevations (Left yyaxis On Hydrographs)
         elevation_fields = {'SWL', 'R2p_SWL', 'DamDepthElev'}
     end
@@ -242,13 +244,19 @@ classdef det_methods < CHESSPlotsBase
         end
 
         function T = storm_table(self, ds_query, id)
-            % One Row Per Time Step Of One Storm; Time = Elapsed Storm Hours (Hourly Records)
+            % One Row Per Time Step Of One Storm; Time = Elapsed Storm Hours (Hourly Records). Forcing From project_forcing
+            % (Not Copied Into Resp, chess_det.m), Same Row k
             d = self.det_data(ds_query);
+            pf = aux_methods.pull_data(ds_query, self.project_forcing);
             k = find(d.storm_id == id, 1);
-            n = numel(d.time{k});
+            n = numel(pf.time{k});
             T = table((0:n - 1)', 'VariableNames', {'Time'});
             for f = self.available_fields(ds_query)
-                v = d.(f{1});
+                if isfield(d, f{1})
+                    v = d.(f{1});
+                else
+                    v = pf.(f{1});
+                end
                 if iscell(v) && numel(v{k}) == n
                     T.(f{1}) = double(v{k}(:));
                 end

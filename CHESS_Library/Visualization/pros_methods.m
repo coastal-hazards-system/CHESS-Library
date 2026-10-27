@@ -84,17 +84,17 @@ classdef pros_methods < CHESSPlotsBase
                     % Append Neew Data Tip
                     p_cl(i).DataTipTemplate.DataTipRows(end+1) = row;
                 end
-                % Events Overlay: 0 Off, 1 Run Sample (POT), 2 Storm Values
+                % Events Overlay: 0 Off, 1 Run Sample (POT Replicates), 2 Storm Values (POT z = 0 Replicate)
                 p_ev = gobjects(0);
                 % CC Has No Overlays (POT Is A Note, No CC Storm Set); FB POT Is A Note Too
-                if strcmp(ds_names.storm_type, 'CC') || (double(add_events) == 1 && ~isnumeric(plt.POT))
+                if strcmp(ds_names.storm_type, 'CC') || ~isnumeric(plt.POT)
                     add_events = 0;
                 end
                 switch double(add_events)
                     case 1
                         p_ev = self.add_run_sample(ax, plt.POT, ds_names.storm_type, plt.n_dropped);
                     case 2
-                        p_ev = self.add_storm_values(ax, ds_names, field_to_plot,...
+                        p_ev = self.add_storm_values(ax, plt.POT,...
                             plt.(plt_fld_x)(s_lim_indx,1), plt.(plt_fld)(s_lim_indx,1));
                 end
                 % Add Legend (CLs First; Overlay Entry Wraps To Its Own Row)
@@ -493,6 +493,7 @@ classdef pros_methods < CHESSPlotsBase
             function [aef_out, idx, ss] = add_events(ax, pot, xi, xf, aef_hc, ssl_hc, dsw, ari_range, aef_in, idx)
                 if self.config.pros_use_aep == 1; aef_hc = aep2aef(aef_hc); end
 
+                pot = drop_z0(pot); % Replicates Fitted By PST/JPM
                 if size(pot, 2) > 1
                     rep_indx = repmat(1:size(pot, 2), size(pot, 1), 1);
                     mrk_sz = 2;
@@ -640,8 +641,9 @@ classdef pros_methods < CHESSPlotsBase
     %% PRIVATE METHODS
     methods (Access=private)
         % -----------------------------------------
-        % Run Sample: The POT The Hazard Curve Was Built From, All Replicates Pooled (n_dropped: Events PST/JPM Did Not Fit)
+        % Run Sample: The POT The Hazard Curve Was Built From, All Replicates Pooled Except z = 0 (n_dropped: Events PST/JPM Did Not Fit)
         function p = add_run_sample(self, ax, pot, storm_type, n_dropped)
+            pot = drop_z0(pot);
             n_cols = size(pot, 2);
             switch storm_type
                 case 'XC'
@@ -658,32 +660,9 @@ classdef pros_methods < CHESSPlotsBase
                 'MarkerEdgeColor', 'k', 'MarkerFaceColor', 'g', 'DisplayName', legend_str);
         end
         % -----------------------------------------
-        % Storm Values: One Value Per Storm From The No-Replicate Forcing, Placed On The Best Estimate Curve
-        function p = add_storm_values(self, ax, ds_names, field_to_plot, hc_aef, hc_resp)
-            pf = aux_methods.pull_data(ds_names, self.project_forcing);
-            % Saved Project Forcing Is Already Adjusted: SWL_no_rep Holds Tides/SLR, Hm0_no_rep Is Not Depth Adjusted
-            switch field_to_plot
-                case 'SWL'
-                    vals = cellfun(@(x) max(x, [], 1), pf.SWL_no_rep);
-                case 'Hm0' % Unadjusted, As Fitted (chess_pros add_forcing)
-                    vals = cellfun(@(x) max(x, [], 1), pf.Hm0_no_rep);
-                case 'Tp'
-                    [~, hm0_indx] = cellfun(@(x) max(x, [], 1), pf.Hm0_no_rep);
-                    vals = cellfun(@(x, y) x(y), pf.Tp_no_rep, num2cell(hm0_indx));
-                otherwise
-                    % Toe: Same Rule As adjust_project_forcing (Floodwall Without Toe Berm -> Wall Bottom)
-                    toe_elev = self.structure.toe_elevation;
-                    if self.config.struc_type == 2 && ~self.config.add_toe_berm
-                        toe_elev = self.structure.wall_bottom_elevation;
-                    end
-                    data_in = pf;
-                    data_in.SWL = pf.SWL_no_rep;
-                    data_in.Hm0 = adjust_wave_height(pf.Hm0_no_rep, pf.Tp_no_rep, pf.SWL_no_rep, toe_elev,...
-                        self.config.apply_depth_limitation, self.config.gravity_constant);
-                    data_in.Tp = pf.Tp_no_rep;
-                    pot_resp = compute_structure_response(self.config, self.structure, data_in, load_empirical_coefficients(), 1);
-                    vals = pot_resp.(field_to_plot);
-            end
+        % Storm Values: One Value Per Storm, The z = 0 Replicate Of The POT (Forcing Curves: Their Single Column), Placed On The Best Estimate Curve
+        function p = add_storm_values(self, ax, pot, hc_aef, hc_resp)
+            vals = pot(:, replicate_z0_col(size(pot, 2)));
             vals = vals(isfinite(vals) & vals > 0);
             [aef_out, ~] = self.get_aef(vals(:), hc_aef, hc_resp, [], []);
             % get_aef Clamps To The Curve Ends: Drop Values Outside The Curve's Response Range Instead
@@ -729,7 +708,7 @@ classdef pros_methods < CHESSPlotsBase
             % Remove Non-Active Storm Types
             resp_data = rmfield(resp_data, resp_names(~strcmp(ds_names.storm_type, resp_names)));
             % Only Keep Forcing HC
-            v_indx = ~any(cell2mat(cellfun(@(x) strcmp({resp_data.(ds_names.storm_type).var}', x), {'SWL','Hm0','Tp'}, 'un', false)),2);
+            v_indx = ~ismember({resp_data.(ds_names.storm_type).var}', pros_forcing_curves());
             resp_data.(ds_names.storm_type)(v_indx) = [];
             % Run CHESS PROS-FB
             fb_data = chess_pros_frequency_base(self.config, self.structure, resp_data, outPath, 4);

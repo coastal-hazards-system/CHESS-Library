@@ -6,11 +6,11 @@ Acts on the hotstart level of a rerun of the same case. Shared by
 resolve_hotstart_state.m (library) and the GUI (Run dialog "Hotstart").
 Never removes folders (neither does resolve_hotstart_state.m: another
 sp_ID/region is another storm DB, so other run files; chess_paths.m).
-    'full'           u_engine/f_adjust carried from the cached run, so
-                     the cached (adjusted/perturbed) project forcing is
-                     reused as is. LCS: the cached run's tide start hours
-                     (tide_indx_tc/_xc/_cc) are carried too: the reused
-                     forcing holds these tides (the adjuster is skipped).
+    'full'           forcing_stamp carried from the cached run, so the
+                     cached (complete) project forcing is reused as is
+                     (call_chess_boundary_conditions.m step 0). LCS: the
+                     cached run's tide start hours (tide_indx_tc/_xc/_cc)
+                     are carried too: the reused forcing holds these tides.
     'reuse_sampling' LCS: the cached run's TC/XC tide start hours are
                      carried when random tides are on in both runs with
                      the same tide file (tide_indx_cc is re-derived by
@@ -18,7 +18,7 @@ sp_ID/region is another storm DB, so other run files; chess_paths.m).
     'resample'       LCS: this case's sampling seed file is deleted, so
                      new life cycles are drawn.
 Any level but 'full': the cached project_forcing.mat is deleted (it
-holds adjusted/perturbed values) and u_engine/f_adjust are reset.
+holds adjusted/perturbed values).
 config.hotstart_level is set to the level (lcs_reference_reuse.m reads
 'reuse_sampling' to rebuild the life cycles from the sampling seed file).
 
@@ -29,16 +29,19 @@ level: 'full', 'reuse_sampling' or 'resample' (hotstart_plan.m). | char
 is_lcs: LCS workflow. | logical
 
 %% OUTPUTS
-config: config with u_engine, f_adjust, hotstart_level (and LCS tide
-        start hours) resolved.
+config: config with hotstart_level (plus forcing_stamp at 'full' and
+        LCS tide start hours) resolved.
 
 %R DEV SIGNATURE
 Developed by: Fabian A. Garcia Moreno ERDC-CHL
 %}
 switch level
     case 'full'
-        config.f_adjust = config_old.f_adjust;
-        config.u_engine = config_old.u_engine;
+        % The Reused Forcing Keeps Its Build Stamp: Marks It Complete (call_chess_boundary_conditions.m Step 0),
+        % Multi-Line Stage 2 Runs Coupled To It Stay Current
+        if isfield(config_old, 'forcing_stamp')
+            config.forcing_stamp = config_old.forcing_stamp;
+        end
         % LCS: The Reused Forcing Holds These Tides, Keep Them In The Saved Config (Later
         % 'reuse_sampling' Reruns And Reference Cases Read Them). chess_lcs Drops Them If It Resamples.
         if is_lcs
@@ -64,8 +67,6 @@ if ~strcmp(level, 'full')
     if exist(config.out_files.project_forcing, 'file')
         delete(config.out_files.project_forcing);
     end
-    config.f_adjust = 0;
-    config.u_engine = 0;
 end
 config.hotstart_level = level;
 end

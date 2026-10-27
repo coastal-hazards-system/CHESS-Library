@@ -6,6 +6,8 @@ function [Smax,SPcurves,yBox] = compute_lcs_yearly_curve(data, resp_vec, nYears)
 % response and statistical bounds across multiple simulated life cycles.
 
 num_LCs = length(data);
+% Life-Cycle Column Map
+C = lcs_columns();
 
 % Preallocate cells to hold the year and max response for EVERY storm
 all_storm_years = cell(num_LCs, 1);
@@ -17,21 +19,21 @@ for ii = 1:num_LCs
     lc_resp = resp_vec{ii};
 
     % 1. Get Storm Hydrograph Boundaries (Start and End indices)
-    if size(lc_data, 2) >= 10
-        % Find where column 10 is 0 (Start of a storm)
-        stm_beg = find(lc_data(:, 10) == 0);
+    if size(lc_data, 2) == C.n_timeseries
+        % Find where the step counter is 0 (Start of a storm)
+        stm_beg = find(lc_data(:, C.step) == 0);
 
         % Calculate the end index of each storm
         % (The step before the next storm begins, and the final array index)
         stm_end = [stm_beg(2:end) - 1; size(lc_data, 1)];
     else
-        % If not 10 columns, treat every row as a 1-step event
+        % Peaks Layout: Treat Every Row As A 1-Step Event
         stm_beg = (1:size(lc_data, 1)).';
         stm_end = stm_beg;
     end
 
-    % 2. Extract the occurrence year for each storm (from column 3)
-    storm_years = lc_data(stm_beg, 3);
+    % 2. Extract the occurrence year for each storm
+    storm_years = lc_data(stm_beg, C.year);
 
     % 3. Calculate the maximum response for each individual storm
     num_storms = length(stm_beg);

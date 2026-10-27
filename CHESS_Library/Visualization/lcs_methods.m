@@ -109,7 +109,7 @@ classdef lcs_methods < CHESSPlotsBase
             switch ds_query.data_type
                 case 'Timeseries'
                     % Create Dummy Peaks Data (Single Datapoint Per Event)
-                    pull_indx = cellfun(@(x) x(:, 10) == 0, data, 'un', false);
+                    pull_indx = cellfun(@(x) x(:, lcs_columns().step) == 0, data, 'un', false);
                     % Pull Actual Event Sampling Information
                     lc_data = cellfun(@(x, y) x(y, :), data, pull_indx, 'un', false);
                 otherwise
@@ -119,10 +119,11 @@ classdef lcs_methods < CHESSPlotsBase
             stms_per_lc = mean(cellfun(@(x) length(x(:, 1)), lc_data, 'un', true));
             % Create Event Distributions
             % Storm Type Flag: 0-XC, 1-TC_Low, 2-TC_Mid, 3-TC_High
-            n_xc = cellfun(@(x) sum(x(:, 2) == 0), lc_data, 'un', true);
-            n_low = cellfun(@(x) sum(x(:, 2) == 1), lc_data, 'un', true);
-            n_mid = cellfun(@(x) sum(x(:, 2) == 2), lc_data, 'un', true);
-            n_high = cellfun(@(x) sum(x(:, 2) == 3), lc_data, 'un', true);
+            bin = lcs_columns().bin;
+            n_xc = cellfun(@(x) sum(x(:, bin) == 0), lc_data, 'un', true);
+            n_low = cellfun(@(x) sum(x(:, bin) == 1), lc_data, 'un', true);
+            n_mid = cellfun(@(x) sum(x(:, bin) == 2), lc_data, 'un', true);
+            n_high = cellfun(@(x) sum(x(:, bin) == 3), lc_data, 'un', true);
             % Compute Totals
             total_xc = sum(n_xc);
             total_low = sum(n_low);
@@ -246,10 +247,11 @@ classdef lcs_methods < CHESSPlotsBase
             % Uses: self.project_forcing (LCS), self.config (mcs_nYears, Nstm_XC, Nyrs_XC, project_CLs, lcs_* Sampling Settings),
             %       self.dsw (TC), self.storm (Panel 5)
 
-            %% Sampled Life Cycles (Timeseries Rows Repeat Per Timestep: Keep Event Start Rows, Column 10 == 0)
+            %% Sampled Life Cycles (Timeseries Rows Repeat Per Timestep: Keep Event Start Rows, Step Counter == 0)
+            cols = lcs_columns();
             data = aux_methods.pull_data(ds_query, self.project_forcing);
             if strcmp(ds_query.data_type, 'Timeseries')
-                data = cellfun(@(x) x(x(:, 10) == 0, :), data, 'un', false);
+                data = cellfun(@(x) x(x(:, cols.step) == 0, :), data, 'un', false);
             end
             data = data(:);
             n_lc = numel(data);
@@ -268,8 +270,8 @@ classdef lcs_methods < CHESSPlotsBase
             end
             m = lambda*n_years; % Expected Storms Per Life Cycle
             lcs_mode = lcs_sampling_mode(self.config); % Mode The Life Cycles Were Sampled With (0 = Full Poisson, 1 = Rate Matched)
-            % Storms Per Simulation Year (Column 3 = Simulation Year), One Column Per Life Cycle
-            yr_counts = cell2mat(cellfun(@(x) accumarray(x(:, 3), 1, [n_years 1]), data', 'un', false));
+            % Storms Per Simulation Year, One Column Per Life Cycle
+            yr_counts = cell2mat(cellfun(@(x) accumarray(x(:, cols.year), 1, [n_years 1]), data', 'un', false));
 
             %% Axes (2 x 3)
             [gl, subplot_flag] = subplot_manager(self, ax, 2, 3);
@@ -324,7 +326,7 @@ classdef lcs_methods < CHESSPlotsBase
             legend(axs(4), 'Interpreter', 'latex', 'Location', 'best');
 
             %% (5) Storm Selection: Sampled Vs Expected Share Per Storm
-            ids = cell2mat(cellfun(@(x) x(:, 1), data, 'un', false));
+            ids = cell2mat(cellfun(@(x) x(:, cols.id), data, 'un', false));
             [u_ids, ~, ic] = unique(ids);
             sampled = accumarray(ic, 1)/numel(ids);
             expected = nan(size(u_ids));
@@ -474,7 +476,7 @@ classdef lcs_methods < CHESSPlotsBase
             % 2. Calculate Event Start/End Indices Across All LCs
             switch char(ds_query.data_type)
                 case 'Timeseries'
-                    stm_beg = cellfun(@(x) find(x(:,10) == 0), stm_data, 'un', false);
+                    stm_beg = cellfun(@(x) find(x(:, lcs_columns().step) == 0), stm_data, 'un', false);
                     stm_end = cellfun(@(x) x(2:end)-1, stm_beg, 'un', false);
 
                     % Append End For Last Storm
@@ -514,7 +516,7 @@ classdef lcs_methods < CHESSPlotsBase
             s_vector = sim_data.S.(field_to_plot);
 
             % Get Event Start/End Across All LCs
-            stm_beg = cellfun(@(x) find(x(:,10) == 0), stm_data, 'un', false);
+            stm_beg = cellfun(@(x) find(x(:, lcs_columns().step) == 0), stm_data, 'un', false);
             stm_end = cellfun(@(x) x(2:end)-1, stm_beg, 'un', false);
             % Append End For Last Storm
             stm_end = cellfun(@(x,y) [x;length(y(:,1))], stm_end, stm_data, 'un', false);
@@ -600,7 +602,7 @@ classdef lcs_methods < CHESSPlotsBase
             % Find Damaging Instances
             [C, damage_indx] = get_damaging_instances(self, ds_query, field_to_plot);
             % Compute Freeboard For Damaging Timesteps To Determine State
-            Rc = cellfun(@(x,y) self.structure.crest_elevation-x(y,5), stm_data, damage_indx, 'un', false);
+            Rc = cellfun(@(x,y) self.structure.crest_elevation-x(y, lcs_columns().SWL), stm_data, damage_indx, 'un', false);
             % Define Structure Submergence State
             sumergance_state = cellfun(@(x) x<0, Rc, 'un', false);
             % Compute LC percentages
@@ -649,7 +651,8 @@ classdef lcs_methods < CHESSPlotsBase
             stm_data = aux_methods.pull_data(ds_query, self.project_forcing);
 
             % Compute Freeboard For Damaging Timesteps To Determine State
-            Rc = cellfun(@(x) self.structure.crest_elevation-x(:,5), stm_data, 'un', false);
+            cols = lcs_columns();
+            Rc = cellfun(@(x) self.structure.crest_elevation-x(:, cols.SWL), stm_data, 'un', false);
             % Define Structure Submergence State
             sumergance_state = cellfun(@(x) x<0, Rc, 'un', false);
             % SWL Never Above The Crest: Nothing To Bin
@@ -661,15 +664,15 @@ classdef lcs_methods < CHESSPlotsBase
             % Split Rc entries Per Event Across All LCs
             sumergance_state_per_event = split_into_events(self, ds_query, sumergance_state);
             % Do The Same For The dt Column
-            submerged_time_per_event = split_into_events(self, ds_query, cellfun(@(x) x(:, 9), stm_data, 'un', false));
+            submerged_time_per_event = split_into_events(self, ds_query, cellfun(@(x) x(:, cols.dt), stm_data, 'un', false));
             % Define Helper Function To Deal With Nested Cells ( First
             % Cell-> LC Second Cell -> Event Chunks In LC
             f_x = @(a, b) cellfun(@(x, y) sum(x(y)).*24, a, b, 'un',true);
             % Find And Sum Total Submergence Time For Each Event Across All LC
             submerged_time_per_event = cellfun(@(x,y) f_x(x, y), submerged_time_per_event, sumergance_state_per_event,'un',false);
             % Create Dummy LC Sampling Var To Perform Yearly Binnin
-            dummy_stm_data = cellfun(@(x, y) x(y, 1:9),...
-                stm_data, cellfun(@(x) x(:, end) == 0, stm_data, 'un', false),...
+            dummy_stm_data = cellfun(@(x, y) x(y, 1:cols.n_peaks),...
+                stm_data, cellfun(@(x) x(:, cols.step) == 0, stm_data, 'un', false),...
                 'un', false);
             % Bin Duration Values
             [bin_data, bin_edges] = compute_annual_distribution(self, dummy_stm_data, submerged_time_per_event,self.config.mcs_nYears,...

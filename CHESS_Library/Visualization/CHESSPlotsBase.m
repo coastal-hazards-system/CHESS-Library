@@ -190,13 +190,13 @@ classdef CHESSPlotsBase
             % Pull Peaks
             peaks_left = cellfun(@(x) max(x(:, col_indx_left), [], "omitnan"), stm_data(:,2), 'un', true);
             peaks_right = cellfun(@(x) max(x(:, col_indx_right), [], "omitnan"), stm_data(:,2), 'un', true);
-            % Get Labels
+            % Get Labels (Storm Database Hm0 Is Offshore)
             [~, ~, ~,...
                 ~,...
-                ~, y_label_left, ~] = response_library_headers(self.config, char(var_left));
+                ~, y_label_left, ~] = response_library_headers(self.config, char(replace(var_left, "Hm0", "Hm0_offshore")));
             [~, ~, ~,...
                 ~,...
-                ~, y_label_right, ~] = response_library_headers(self.config, char(var_right));
+                ~, y_label_right, ~] = response_library_headers(self.config, char(replace(var_right, "Hm0", "Hm0_offshore")));
             % Define Title (PSE Line Only When A PSE Is Provided, e.g. Not For Storm Database Viewing)
             title_label = {['CHS Region: ' self.config.region ' | Savepoint: ' num2str(self.config.sp_ID) ' ']};
             if isfield(self.config, 'struc_id') && ~isempty(self.config.struc_id)
@@ -235,10 +235,10 @@ classdef CHESSPlotsBase
             col_indx = find(field_to_plot == ["SWL", "Hm0", "Tp"]);
             t_storm = datetime(hydrograph(:, 5), 'ConvertFrom', 'datenum');
             t_start = t_storm(1);
-            % Get Labels
+            % Get Labels (Storm Database Hm0 Is Offshore)
             [~, ~, ~,...
                 ~,...
-                ~, y_label, ~] = response_library_headers(self.config, char(field_to_plot));
+                ~, y_label, ~] = response_library_headers(self.config, char(replace(field_to_plot, "Hm0", "Hm0_offshore")));
             % Define Title
             title_label = [{['Storm ID: ' num2str(event_id) ' | Storm Type: ' ds_query.storm_type]};...
                 {['CHS Region: ' self.config.region ' | Savepoint: ' num2str(self.config.sp_ID) ' ']}];
@@ -334,7 +334,7 @@ classdef CHESSPlotsBase
                 datum_offset double
             end
             % Create figure with 2 subplots stacked vertically.
-            % The top plot must include: SWL, Hm0_no_DL, h, Rc, Hm0_with_DL
+            % The top plot must include: SWL, Hm0 offshore, h, Rc, Hm0 at the toe
             % For the SWL subplot, also include h (SWL - toe_elevation).
             if isempty(datum_offset)
                 datum_offset = 0;
@@ -437,14 +437,10 @@ classdef CHESSPlotsBase
                 ax2.YScale = 'log';
             end
 
-            % Mimic PROS Forcing Adjustment (No reps), Peaks Duration From The Run's config (call_project_forcing_formater Rule)
-            pf = chess_pros_formater(ds_query.storm_type, restamp_peaks_storm_duration(self.storm, self.config.storm_duration), struct('TC_Freq', []), 0);
+            % Deterministic Forcing (No Replicates, No Uncertainty), Peaks Duration From The Run's config (build_boundary_conditions Rule)
+            pf = chess_det_formater(ds_query.storm_type, restamp_peaks_storm_duration(self.storm, self.config.storm_duration), 0);
             % Keep Only Requested Data Product
             pf = pf.(ds_query.data_type).(ds_query.match_type).(ds_query.storm_type);
-            % Remove Replicates
-            pf.SWL = pf.SWL_no_rep;
-            pf.Hm0 = pf.Hm0_no_rep;
-            pf.Tp = pf.Tp_no_rep;
             % Apply Adjustments
             config_mod  = self.config;
             config_mod.apply_depth_limitation = 1; % Force DL
@@ -452,9 +448,24 @@ classdef CHESSPlotsBase
             if self.config.workflow == 3 && isfield(config_mod, ['tide_indx_' lower(ds_query.storm_type)])
                 config_mod = rmfield(config_mod, ['tide_indx_' lower(ds_query.storm_type)]);
             end
-            config_mod.workflow = 1;
+            config_mod.workflow = 2;
             config_names = fieldnames(config_mod);
-            [pf, config_mod] = adjust_project_forcing(config_mod, self.structure, pf, ds_query.storm_type);
+            hm0_off_label = 'Hm0 (offshore)';
+            is_stage2 = isfield(self.config, 'multiline') && isstruct(self.config.multiline);
+            if is_stage2 % Multi-Line Stage 2: Adjusted At The Stage 1 Toe (Rubble Mound), Then Transmitted Behind Stage 1
+                config_s1 = config_mod;
+                config_s1.struc_type = 3;
+                config_s1.add_toe_berm = 0;
+                [pf, config_s1] = adjust_project_forcing(config_s1, self.config.multiline.stage1_structure, pf, ds_query.storm_type);
+                tide_fld = ['tide_indx_' lower(ds_query.storm_type)];
+                if isfield(config_s1, tide_fld)
+                    config_mod.(tide_fld) = config_s1.(tide_fld);
+                end
+                pf = apply_stage1_transmission(config_mod, pf);
+                hm0_off_label = ['Hm0 (offshore, behind ' strrep(self.config.multiline.stage1_alt, '_', '\_') ')']; % Legend: TeX
+            else
+                [pf, config_mod] = adjust_project_forcing(config_mod, self.structure, pf, ds_query.storm_type);
+            end
             % Turn On Computes
             config_mod = config_editor(config_mod, config_names(contains(fieldnames(config_mod),{'compute'})), 1);
             % Compute Structure Responses
@@ -476,11 +487,17 @@ classdef CHESSPlotsBase
                     resp_time = 1:length(resp_signal);
                     resp_style = '-';
                 end
-                hm0_dl_signal = pf.Hm0{cell2mat(stm_data(:,1)) == event_id};
+                hm0_dl_signal = pf.Hm0_toe{cell2mat(stm_data(:,1)) == event_id};
+                if is_stage2
+                    hm0_signal = pf.Hm0_offshore{cell2mat(stm_data(:,1)) == event_id};
+                end
             else
                 resp_time = time_signal;
-                hm0_dl_signal = cell2mat(pf.Hm0);
+                hm0_dl_signal = cell2mat(pf.Hm0_toe);
                 resp_style = 'o';
+                if is_stage2
+                    hm0_signal = cell2mat(pf.Hm0_offshore);
+                end
             end
             
             if any(iscell(resp_signal))
@@ -498,8 +515,8 @@ classdef CHESSPlotsBase
             %Plots
             plot(ax, time_signal, swl_signal, '-r','LineWidth', 1.2,'DisplayName','SWL');
             yline(ax, self.structure.crest_elevation-datum_offset, '--c','LineWidth', 1.2,'DisplayName','PSE Crest');
-            plot(ax, time_signal, hm0_signal, '--k','LineWidth', 1.2,'DisplayName','Hm0 (raw)');
-            plot(ax, time_signal, hm0_dl_signal, '-k','LineWidth', 1.2,'DisplayName','Hm0 (DL)');
+            plot(ax, time_signal, hm0_signal, '--k','LineWidth', 1.2,'DisplayName',hm0_off_label);
+            plot(ax, time_signal, hm0_dl_signal, '-k','LineWidth', 1.2,'DisplayName','Hm0 (at toe)');
             plot(ax, time_signal, h, '--b','LineWidth', 1.2,'DisplayName','h');
             if config_mod.add_toe_berm == 1
                 plot(ax, time_signal, hb, '--m','LineWidth', 1.2,'DisplayName','h (berm)');

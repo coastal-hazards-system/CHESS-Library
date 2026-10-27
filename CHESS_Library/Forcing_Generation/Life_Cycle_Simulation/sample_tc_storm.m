@@ -77,15 +77,17 @@ OUTPUTS:
 
 OUTPUTS HEADERS:
     LC_MCSimOUT_TC, LC_MCSimOUT_TC_WHP, LC_MCSimOUT_TC_WLP :
-        Size (# of LC's, 8) -> (Rows,Col)
+        Size (# of events, 10) -> Column map: lcs_columns.m
             (01) Storm ID                       [-]
             (02) Storm type                     [0 = extratropical]
             (03) Storm Year                     [-]
             (04) Number of storm in storm year  [-]
             (05) Water Level                    [meters, MSL]
-            (06) Wave Height                    [meters]
-            (07) Peak Wave Period               [seconds]
-            (08) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
+            (06) Wave Height At Toe             [meters] (= Offshore Here; Depth Limited By adjust_project_forcing)
+            (07) Wave Height Offshore           [meters]
+            (08) Peak Wave Period               [seconds]
+            (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
+            (10) Storm Duration                 [days]
 
 
 EXTERNAL FUNCTIONS:
@@ -158,8 +160,9 @@ if restrict_rate == 1
     end
 end
 % No Storms Sampled In This Life Cycle: Empty Outputs
+C = lcs_columns();
 if sum(TC_MCS) == 0
-    lcs_data = zeros(0, 9);      % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
+    lcs_data = zeros(0, C.n_peaks); % Life-Cycle Peaks Layout (lcs_columns.m)
     sample_storms = zeros(0, 4); % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
     return
 end
@@ -167,7 +170,7 @@ end
 %% SAMPLE TROPICAL STORMS
 % Initialize Storm Counter
 n=1;
-lcs_data = zeros(sum(TC_MCS),9);
+lcs_data = zeros(sum(TC_MCS), C.n_peaks);
 % Grab Valid Storm Id List
 valid_storms = storm_peaks(:, 1);
 % Intensity Bin Populations (1-Low, 2-Mid, 3-High), Keeping Storms Present In storm_peaks
@@ -189,9 +192,9 @@ for j = 1:simulation_years
         m=1;
         for k = 1:TC_MCS(j,1)
             % Storm Year
-            lcs_data(n,3) = j;
+            lcs_data(n, C.year) = j;
             % Number of Storm In Storm Year
-            lcs_data(n,4) = m;
+            lcs_data(n, C.order) = m;
             % Random Number from 0 - 1
             smpl_flag = rand;
             % Determine Random Intensity To Sample (First Bin Whose Cumulative Probability Exceeds The Draw)
@@ -204,16 +207,16 @@ for j = 1:simulation_years
                 IIdx = find(smpl_flag < cumulativeProb, 1);
             end
             % Stomr Intensity
-            lcs_data(n,2) = IIdx; % 1-Low, 2-Mid, 3-High
+            lcs_data(n, C.bin) = IIdx; % 1-Low, 2-Mid, 3-High
             % Grab Sampling Population From Intensity Bin (Storms Present In storm_peaks)
             smpl = smpl_bins{IIdx};
             % Find Correnponding Frequency
             [~, bi] = ismember(smpl, valid_storms);
             % Sample Random Storm From Instensity Bin (randsample Treats A Scalar As 1:n, So A Single Storm Is Taken Directly)
             if isscalar(smpl)
-                lcs_data(n, 1) = smpl;
+                lcs_data(n, C.id) = smpl;
             else
-                lcs_data(n, 1) = randsample(smpl, 1, true, TC_Freq(bi));
+                lcs_data(n, C.id) = randsample(smpl, 1, true, TC_Freq(bi));
             end
             % Increment Storm
             n=n+1;
@@ -222,11 +225,11 @@ for j = 1:simulation_years
         end% for 
     end% if
 end% for j
-[~, bi] = ismember(lcs_data(:, 1), storm_peaks(:, 1));
-% Pull Storm Responses For Sampled Storms 
-lcs_data(:, 5:end) =  storm_peaks(bi, [2:5,7]);
+[~, bi] = ismember(lcs_data(:, C.id), storm_peaks(:, 1));
+% Pull Storm Responses For Sampled Storms (Storm Database Columns: ID SWL Hm0 Tp wDir datenum duration)
+lcs_data(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir, C.dt]) =  storm_peaks(bi, [2 3 3 4 5 7]);
 
 %% STORE SAMPLED TROPICAL STORMS
 % Sampled Storm Indexes
-sample_storms = lcs_data(:,1:4); % (Headers in script header)
+sample_storms = lcs_data(:, [C.id, C.bin, C.year, C.order]); % (Headers in script header)
 end

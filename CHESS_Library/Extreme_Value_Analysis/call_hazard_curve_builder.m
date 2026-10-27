@@ -1,7 +1,11 @@
 function  [Output]= call_hazard_curve_builder(config, TC_Prob, Resp, storm_type, use_aep, outPath)
 % CALL_STRUCTURE_CURVE_BUILDER Computes hazard curve for provided forcing
 % and structure responses using CHESS's SST & JPM. Supports hazard curve
-% calculations for: SWL, Hm0, Tp, R2p, R2p+SWL, q, Dn50, Dn50_LCBW, p1.
+% calculations for: SWL, Tp, Hm0_offshore, Hm0_toe, R2p, R2p+SWL, q, Dn50, Dn50_LCBW, p1.
+% Responses hold one column per replicate: the z = 0 replicate is dropped
+% (drop_z0.m) before fitting and kept in POT (overlays). Forcing curves
+% SWL, Tp, Hm0_offshore (pros_forcing_curves.m) come in as the z = 0 column
+% only; Hm0_toe comes in with every replicate, like a response.
 % Additionally, computes structure secondary responses from resulting
 % hazard curves. This is meant to be used in a response base context and
 % not as a caller function for CHESS SST/JPM.
@@ -61,15 +65,10 @@ for ii = 1:length(vars_to_process)
     [U_a, U_r, uncert_treatment,...
         unit_label,...
         var_name, y_label, y_scale_log] = response_library_headers(config, resp_var);
+    % Replicates Fitted By PST/JPM (z = 0 Replicate Dropped)
+    fit_data = drop_z0(data_to_process.(resp_var));
     % Get Data Size
-    [drows, dcols] = size(data_to_process.(resp_var));
-    % Include SLR If Dealing With SWL
-    switch resp_var
-        case 'SWL'
-            SLR = config.swl_slr;
-        otherwise
-            SLR = 0;
-    end
+    [drows, dcols] = size(fit_data);
     % Great Lakes Water Levels Are Fitted As Surge (Mean Lake Level Removed, Added Back To The Hazard Curve)
     switch resp_var
         case {'SWL','R2p_SWL','DamDepthElev'}
@@ -78,8 +77,9 @@ for ii = 1:length(vars_to_process)
             lake_offset = 0;
     end
     % Response Information
-    response_data = struct('data', [zeros(drows*dcols, 1) data_to_process.(resp_var)(:)-lake_offset zeros(drows*dcols, 1)],...
-        'flag_value', [],'Ua', U_a,'Ur', U_r, 'SLC', SLR, 'tide_std', 0,...
+    % SLC = 0: The Forcing SWL Already Includes swl_slr (adjust_project_forcing.m)
+    response_data = struct('data', [zeros(drows*dcols, 1) fit_data(:)-lake_offset zeros(drows*dcols, 1)],...
+        'flag_value', [],'Ua', U_a,'Ur', U_r, 'SLC', 0, 'tide_std', 0,...
         'lambda', [],'Nyrs', config.Nyrs_XC*dcols, 'gprMdl', [], 'DataType', 'POT');
     % PST/JPM Options
     eva_options = struct('integration_method', 1,...
@@ -91,7 +91,7 @@ for ii = 1:length(vars_to_process)
     plot_options = struct('create_plots', 0,'staID', resp_var,'yaxis_Label', [],...
         'yaxis_Limits', [], 'y_log', y_scale_log,'path_out', '');
     % Check For Full NaN Vector (On Absolute Values)
-    if all(isnan(data_to_process.(resp_var)(:))) || all(data_to_process.(resp_var)(:)==0)
+    if all(isnan(fit_data(:))) || all(fit_data(:)==0)
         % Response Variable Has NaNs For All Entries
         disp(['               No valid responses for ' resp_var ', Skipping response var....']);
         % Skip Iteration
@@ -116,13 +116,15 @@ for ii = 1:length(vars_to_process)
     wstr = strsplit(wstr,'_');
     wstr = wstr{1};
     % PROS-RB Naming Overwrite When Calling PROS-FB
-    if ismember(resp_var,{'SWL','Hm0','Tp'})
-        % For FB Analysis SWL, Hm0, Tp HC are created using RB
+    if ismember(resp_var, pros_forcing_curves())
+        % For FB Analysis The Forcing HC Are Created Using RB
         if config.workflow == 4
             wstr = 'PROS-RB'; % Forcing Fields Are Computed With Response Base
         end
-        % Redifine Integration Method For JPM
-        eva_options.integration_method = 2; % Let JPM Manage Replicates
+        % Redifine Integration Method For JPM (Hm0_toe Holds Replicates Like Any Response: ATCS)
+        if ~strcmp(resp_var, 'Hm0_toe')
+            eva_options.integration_method = 2; % Let JPM Manage Replicates
+        end
     end
     % Define Figure Title
     title_str = {['CHESS: ' wstr ' | '  case_name ' | ' struc_id],...

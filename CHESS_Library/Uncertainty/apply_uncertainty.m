@@ -1,27 +1,18 @@
 function [project_forcing] = apply_uncertainty(config, project_forcing, RandNorm)
 %% GRAB INFORMATION FROM "config"
-nLC = config.mcs_nLC;
 swl_u_a = config.chs_swl_u_a;
 hm0_u_a = config.chs_hm0_u_a;
 swl_u_r = config.chs_swl_u_r;
 hm0_u_r = config.chs_hm0_u_r;
-% Grab Data Cells According To Workflow
-switch config.workflow
-    case  {1, 4}
-        % Water Level
-        SWL = project_forcing.('SWL');
-        % Wave Height
-        Hm0 = project_forcing.('Hm0');
-        % Wave Peak Period
-        Tp = project_forcing.('Tp');
-        % Copy Normal Distirbution Accross All Events 
-        RandNorm = repmat({RandNorm}, size(SWL));
-    case {3} % LCS
-        SWL = cellfun(@(x) x(:, 5), project_forcing, 'un', false); % Get SWL From LC
-        Hm0 = cellfun(@(x) x(:, 6), project_forcing, 'un', false); % Get Hm0 From LC
-        Tp = cellfun(@(x) x(:, 7), project_forcing, 'un', false); % Get Tp From LC
-        RandNorm =cellfun(@(x) zeros(size(x)), SWL, 'un', false);
-end
+% PROS Dataset (boundary_conditions_uncertainty.m)
+% Water Level
+SWL = project_forcing.('SWL');
+% Wave Height (Offshore: Hm0_toe Is Derived From It By adjust_project_forcing)
+Hm0 = project_forcing.('Hm0_offshore');
+% Wave Peak Period
+Tp = project_forcing.('Tp');
+% Copy Normal Distirbution Accross All Events 
+RandNorm = repmat({RandNorm}, size(SWL));
 % Lake Specific Level (Uncertainty Needs To Be Computed For Surge Not TWL)
 lake_level = mean_lake_level(config);
 
@@ -47,18 +38,9 @@ Tp_U = sqrt(1+hm0_u_r)-1; %0.0724
 Tp = cellfun(@(x, y) x.*(1+Tp_U.*y), Tp, RandNorm, 'un', false);
 
 %% Store Results
-switch config.workflow
-    case  {1, 4}
-        project_forcing.SWL = SWL; % Get SWL From LC
-        project_forcing.Hm0 = Hm0; % Get Hm0 From LC
-        project_forcing.Tp = Tp; % Get Tp From LC
-    case {3}
-        for jj = 1:nLC
-            project_forcing{jj}(:,5) = SWL{jj}; % Get SWL From LC
-            project_forcing{jj}(:,6) = Hm0{jj}; % Get Hm0 From LC
-            project_forcing{jj}(:,7) =Tp{jj}; % Get Tp From LC
-        end
-end
+project_forcing.SWL = SWL;
+project_forcing.Hm0_offshore = Hm0;
+project_forcing.Tp = Tp;
 
 %% Define internal Aux Function
     function x = zero_where(x, m)

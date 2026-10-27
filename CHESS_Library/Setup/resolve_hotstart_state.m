@@ -3,14 +3,13 @@ function config = resolve_hotstart_state(config, wflow2)
 %% DESCRIPTION
 Compares the current run's config against a previously cached
 "_config_file.mat" (if one exists) and decides which hotstart state
-carries over: the u_engine/f_adjust flags that gate
-call_uncertainty_engine.m and
-call_project_forcing_adjuster.m. The cache is this run's own file
+carries over: whether call_chess_boundary_conditions.m reuses the
+cached project forcing (forcing_stamp, carried at level 'full'). The cache is this run's own file
 (chess_paths.m): its name holds the storm database (<region>_SP<sp_ID>
 by default), so a different savepoint or region never finds it and runs
 cold; nothing is deleted. The hotstart level (hotstart_plan.m, acted on
 by apply_hotstart_level.m; both shared with the GUI) decides:
-    'full'           Cached project forcing and flags are reused.
+    'full'           Cached project forcing is reused (forcing_stamp carried).
     'reuse_sampling' The cached project_forcing.mat is deleted (it holds
                      adjusted/perturbed values) and rebuilt from the storm
                      database, then adjusted/perturbed once. LCS keeps its
@@ -36,8 +35,8 @@ wflow2: Workflow subfolder name ('PROS', 'DET' or 'LCS'); 'LCS'
         enables the LCS sampling reuse rules.
 
 %% OUTPUTS
-config: config struct with u_engine/f_adjust/hotstart_level
-        resolved (plus tide_indx_tc/_xc carried over at LCS level
+config: config struct with hotstart_level (and forcing_stamp at
+        'full') resolved (plus tide_indx_tc/_xc carried over at LCS level
         'reuse_sampling'; tide_indx_cc is derived from them by
         draw_tide_indices.m).
 
@@ -74,7 +73,7 @@ if exist(config.out_files.config, 'file')
                     disp_toggle(config.print_progress, sprintf('Hotstart: config field ''%s'' changed since cache -- rebuilding project forcing from the storm database....', reason));
                 end
         end
-        % Level Actions (apply_hotstart_level.m, Shared With The GUI): Flags, LCS Tides, Cache/Seed Deletion
+        % Level Actions (apply_hotstart_level.m, Shared With The GUI): Forcing Stamp, LCS Tides, Cache/Seed Deletion
         config = apply_hotstart_level(config, config_load, level, is_lcs);
     catch ME
         warning('Hotstart cache failed to load: %s -- running cold start....', ME.message);
@@ -84,19 +83,11 @@ if exist(config.out_files.config, 'file')
                 delete(ff{1});
             end
         end
-        % Uncertainty Engine Field Initialization
-        config.u_engine = 0;
-        % Forcing Adjustments Field Initialization
-        config.f_adjust = 0;
         config.hotstart_level = 'cold';
     end
 else
     paths = chess_paths(config);
     disp_toggle(config.print_progress, sprintf('Hotstart: no cache found for storm database ''%s'', running cold start....', paths.db));
-    % Uncertainty Engine Field Initialization
-    config.u_engine = 0;
-    % Forcing Adjustments Field Initialization
-    config.f_adjust = 0;
     config.hotstart_level = 'cold';
 end
 end

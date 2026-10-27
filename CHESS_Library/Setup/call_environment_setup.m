@@ -129,5 +129,5 @@ end
 % Create Structure Variable
 [structure] = create_structure_geometry(config);% Second input argument: 1 - show plot 0 - hide plot
 % Save Out Configuration & Structure File
-save(config.out_files.config, 'config','structure');
+save(config.out_files.config, 'config','structure','-v7.3');
 end

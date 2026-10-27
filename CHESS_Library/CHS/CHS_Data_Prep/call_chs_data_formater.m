@@ -60,12 +60,12 @@ function [storm, CHS_Data, prob_mass, config] = call_chs_data_formater(config)
             tc_bias_corrected, chs_swl_*, chs_hm0_*, Nyrs_XC, Nstm_XC,
                         offshore_elevation (study grid value, when it has one): From
                         db_info (storm_db_info.m 'apply') when the database is built.
-            u_engine, f_adjust, hotstart_level: 0, 0, 'resample' when the
+            hotstart_level: 'resample' when the
                         database is built (fresh or rebuild): once every build
                         step succeeded (before the database is saved), this
                         case's cached project forcing and LCS sampling seed
-                        file are deleted and carried tide_indx_tc/_xc/_cc
-                        removed (the hotstart level, decided before the build,
+                        file are deleted and carried tide_indx_tc/_xc/_cc and
+                        forcing_stamp removed (the hotstart level, decided before the build,
                         cannot see a missing or rebuilt database). Appended to
                         the config file with the db_info fields. A build that
                         stops leaves the cache, the database and the config
@@ -270,7 +270,7 @@ if ~(storm_mat_exists && compatible) && can_coldstart % CHESS needs to create an
         % Convert CHS Data
         CHS_Data = call_chs_h5_converter(full_file_path, disp_on);
         % Export Data
-        save(config.out_files.chs_data,'CHS_Data');
+        save(config.out_files.chs_data,'CHS_Data','-v7.3');
         % Remove Temp Dir
         remove_temp_folder(temp_path);
     else  % CHS_Data .mat exists — Loaded Above
@@ -315,7 +315,7 @@ if ~(storm_mat_exists && compatible) && can_coldstart % CHESS needs to create an
     % Storm Database Details (Bias & Uncertainty, TC Bias Correction, XC Record)
     db_info = storm_db_info('create', bnu, tc_bias_corrected, Nyrs_XC, Nstm_XC, [chs_zip_name fext]);
     % Export Storm Database
-    save(config.out_files.storm_and_prob_mass, 'storm', 'prob_mass', 'db_info');
+    save(config.out_files.storm_and_prob_mass, 'storm', 'prob_mass', 'db_info', '-v7.3');
     % Append Storm Data Dependent Fields To Configuration File
     config = storm_db_info('apply', db_info, config);
     save(config.out_files.config, 'config', '-append');
@@ -389,10 +389,8 @@ for ff = {config.out_files.project_forcing, lcs_sampling_seed_file(config.out_fi
         delete(ff{1});
     end
 end
-config.u_engine = 0;
-config.f_adjust = 0;
 config.hotstart_level = 'resample';
-config = rmfield(config, intersect(fieldnames(config), {'tide_indx_tc', 'tide_indx_xc', 'tide_indx_cc'}));
+config = rmfield(config, intersect(fieldnames(config), {'tide_indx_tc', 'tide_indx_xc', 'tide_indx_cc', 'forcing_stamp'}));
 end
 
 % Remove The Unzipped CHS Input Folder

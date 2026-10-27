@@ -11,17 +11,19 @@ INPUTS:
      config.WaveHeightPriorityCheckBox.Value; -> True or False
      config.SaveNameEditField.Value; -> Output Dir Save Name
 
-OUTPUTS HEADERS:
+OUTPUTS HEADERS (Column Map: lcs_columns.m):
     LC_MCSimOUT:
-        Size (# of LC's, 8) -> (Rows,Col)
+        Size (# of events, 10) -> (Rows,Col)
             (01) Storm ID                       [-]
             (02) Storm type                     [0 = extratropical]
             (03) Storm Year                     [-]
             (04) Number of storm in storm year  [-]
             (05) Water Level                    [meters, MSL]
-            (06) Wave Height                    [meters]
-            (07) Peak Wave Period               [seconds]
-            (08) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
+            (06) Wave Height At Toe             [meters] (Depth Limited By adjust_project_forcing)
+            (07) Wave Height Offshore           [meters] (Before Depth Limitation)
+            (08) Peak Wave Period               [seconds]
+            (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
+            (10) Storm Duration                 [days]
     LC_SimOUT_hyd:
         First Level:
             Size (# of LC's, 1) -> (Rows,Col)
@@ -33,11 +35,12 @@ OUTPUTS HEADERS:
             (03) Storm Year                     [-]
             (04) Number of storm in storm year  [-]
             (05) Water Level                    [meters, MSL]
-            (06) Wave Height                    [meters]
-            (07) Peak Wave Period               [seconds]
-            (08) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
-            (09) Storm Duration           [days]
-            (10) Timestep Counter         [0:storm_tstp-1]
+            (06) Wave Height At Toe             [meters]
+            (07) Wave Height Offshore           [meters]
+            (08) Peak Wave Period               [seconds]
+            (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
+            (10) Time Step                      [days]
+            (11) Timestep Counter               [0:storm_tstp-1]
     MC_indx:
         First Level:
             Size (# of LC's, 1) -> (Rows,Col)
@@ -175,6 +178,9 @@ if ~isempty(reuse.check_types)
     end
 end
 
+%% LIFE-CYCLE COLUMN MAP
+C = lcs_columns();
+
 %% CREATE DUMMY PEAKS DATASET IF NEEDED
 if config.use_peaks == 0
     % Define Storm Types
@@ -189,7 +195,7 @@ if config.use_peaks == 0
         % Get Max Responses [ ]
         dummy_data = cell2mat(cellfun(@(x) max(x,[],1),...
             storm.(stm_list{kk}).('Timeseries').Default(:,2), 'un', false));
-        % Replace Storm Duration For Peak Response
+        % Replace Storm Duration For Peak Response (Storm Database Layout: Last Column)
         dummy_data(:, end) = config.storm_duration/24;
         % Create Dummy Dataset
         storm.(stm_list{kk}).('Peaks').('Default') = [ storm.(stm_list{kk}).('Timeseries').Default(:,1),...
@@ -231,14 +237,15 @@ end
             % Populate Storm Data
             for lc=1:number_of_life_cyles
                 % Create LCs
-                project_forcing.Peaks.Default.('XC'){lc, 1} = reference_lc_peaks(sampled_xc{lc}, storm_data, config.storm_duration/24); % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
+                project_forcing.Peaks.Default.('XC'){lc, 1} = reference_lc_peaks(sampled_xc{lc}, storm_data, config.storm_duration/24); % Life-Cycle Peaks Layout (lcs_columns.m)
                 fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cyles)));
             end
             % XC Peaks Are Copula Samples: Use The Reference's Sampled Values (Sampling Seed File) Instead Of Database Peaks
             xc_seed = load_reference_xc_seed(reuse.seed_pf, sampled_xc, reuse.label);
-            % Only The Copula Values (Cols 5:8) Are Kept: Identity (1:4) And Storm Duration (9) Come From This Run (As For TC)
+            % Only The Copula Values (SWL, Hm0, Tp, wDir) Are Kept: Identity And Storm Duration Come From This Run (As For TC)
             if ~isempty(xc_seed)
-                project_forcing.Peaks.Default.('XC') = cellfun(@(s, d) [d(:, 1:4), s(:, 5:8), d(:, 9:end)], xc_seed,...
+                copula_cols = [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir];
+                project_forcing.Peaks.Default.('XC') = cellfun(@(s, d) copy_columns(d, s, copula_cols), xc_seed,...
                     project_forcing.Peaks.Default.('XC'), 'un', false);
             end
         end
@@ -286,7 +293,7 @@ end
             % Populate Storm Data
             for lc=1:number_of_life_cyles
                 % Create LCs
-                project_forcing.Peaks.Default.('TC'){lc, 1} = reference_lc_peaks(sampled_tc{lc}, storm_data, config.storm_duration/24); % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
+                project_forcing.Peaks.Default.('TC'){lc, 1} = reference_lc_peaks(sampled_tc{lc}, storm_data, config.storm_duration/24); % Life-Cycle Peaks Layout (lcs_columns.m)
                 fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cyles)));
             end
         end
@@ -327,22 +334,22 @@ end
         for lc=1:number_of_life_cyles
             % Combined Suite Of XC and TC for Simulation Period Per Each Modeled Life-Cycle
             project_forcing.Peaks.Default.('CC'){lc, 1} = sortrows([project_forcing.Peaks.Default.('TC'){lc, 1};...
-                project_forcing.Peaks.Default.('XC'){lc, 1}],[3, 4, 2]);
+                project_forcing.Peaks.Default.('XC'){lc, 1}],[C.year, C.order, C.bin]);
 
             if whp_switch
                 % Combined Suite Of XC and TC for Simulation Period Per Each Modeled Life-Cycle
                 project_forcing.Peaks.WHP.('CC'){lc, 1} = sortrows([project_forcing.Peaks.WHP.('TC'){lc, 1};...
-                    project_forcing.Peaks.WHP.('XC'){lc, 1}],[3, 4, 2]);
+                    project_forcing.Peaks.WHP.('XC'){lc, 1}],[C.year, C.order, C.bin]);
             end
             if wlp_switch
                 % Combined Suite Of XC and TC for Simulation Period Per Each Modeled Life-Cycle
                 project_forcing.Peaks.WLP.('CC'){lc, 1} = sortrows([project_forcing.Peaks.WLP.('TC'){lc, 1};...
-                    project_forcing.Peaks.WLP.('XC'){lc, 1}],[3, 4, 2]);
+                    project_forcing.Peaks.WLP.('XC'){lc, 1}],[C.year, C.order, C.bin]);
             end
             % Combine Timseries Data
             if config.use_timeseries == 1
                 project_forcing.Timeseries.Default.('CC'){lc, 1} = sortrows([project_forcing.Timeseries.Default.('TC'){lc, 1};...
-                    project_forcing.Timeseries.Default.('XC'){lc, 1}],[3, 4, 2]);
+                    project_forcing.Timeseries.Default.('XC'){lc, 1}],[C.year, C.order, C.bin]);
             end
         end
     end
@@ -408,7 +415,7 @@ warning('on','all');
     function lc_out = timeseries_lc_creation(sample_indx, storm)
         % Life Cycle Without Storms
         if isempty(sample_indx)
-            lc_out = zeros(0, 10);
+            lc_out = zeros(0, C.n_timeseries);
             return
         end
         % Compute Stride To Make Data Hourly 
@@ -430,8 +437,11 @@ warning('on','all');
         % Create Timestep Arrays To Append
         stm_tstp = arrayfun(@(x) [0:x-1]',...
             cellfun(@(x) size(x, 1), storm(pull_indx, 2)),'un', false);
-        % Build LCS Timeseries Dataset
-        lc_out = [sample_indx_hyd, stm_mat(:, [1:4, 6]), cell2mat(stm_tstp)];
+        % Build LCS Timeseries Dataset (Storm Database Columns: SWL Hm0 Tp wDir datenum dt)
+        lc_out = zeros(size(stm_mat, 1), C.n_timeseries);
+        lc_out(:, [C.id, C.bin, C.year, C.order]) = sample_indx_hyd;
+        lc_out(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir, C.dt]) = stm_mat(:, [1 2 2 3 4 6]);
+        lc_out(:, C.step) = cell2mat(stm_tstp);
     end
 %% AUX FUNCTION: REFERENCE CASE XC PEAK VALUES (SAMPLING SEED FILE)
     function seed = load_reference_xc_seed(ref_pf_file, sampled, ref_label)
@@ -439,7 +449,7 @@ warning('on','all');
         seed = [];
         S = load(lcs_sampling_seed_file(ref_pf_file), 'xc_peaks');
         ok = isfield(S, 'xc_peaks') && isfield(S.xc_peaks, 'Default') && numel(S.xc_peaks.Default) == numel(sampled) &&...
-            all(cellfun(@(a, b) isequal(a(:, 1:4), b), S.xc_peaks.Default(:), sampled(:)));
+            all(cellfun(@(a, b) isequal(a(:, [C.id, C.bin, C.year, C.order]), b), S.xc_peaks.Default(:), sampled(:)));
         if ok
             seed = S.xc_peaks.Default;
             disp(['     Loading XC sampled peak values (copula) from ' ref_label]);
@@ -449,15 +459,21 @@ warning('on','all');
     end
 %% AUX FUNCTION: REFERENCE CASE LIFE CYCLE PEAKS FROM THE STORM DATABASE
     function lc_peaks = reference_lc_peaks(sampled, storm_data, duration_days)
-        % Headers: [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order, SWL, Hm0, Tp, wDir, storm_duration ]
+        % Life-Cycle Peaks Layout (lcs_columns.m)
         % Find Sampled Event On Storm Suite
         stm_indx = arrayfun(@(x) find(cell2mat(storm_data(:, 1)) == x), sampled(:, 1), 'un', true);
-        % Pull Storm Data (Explicit Size: A Life Cycle Without Storms Must Still Have 9 Columns)
-        peaks_data = zeros(numel(stm_indx), 5);
+        % Pull Storm Data (Explicit Size: A Life Cycle Without Storms Must Still Have All Columns)
+        lc_peaks = zeros(numel(stm_indx), C.n_peaks);
+        lc_peaks(:, [C.id, C.bin, C.year, C.order]) = sampled;
         for ss = 1:numel(stm_indx)
-            peaks_data(ss, :) = [storm_data{stm_indx(ss), 2}(:, 1:4) duration_days];
+            % Storm Database Columns: SWL Hm0 Tp wDir
+            lc_peaks(ss, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir]) = storm_data{stm_indx(ss), 2}(:, [1 2 2 3 4]);
         end
-        lc_peaks = [sampled, peaks_data];
+        lc_peaks(:, C.dt) = duration_days;
+    end
+%% AUX FUNCTION: COPY COLUMNS OF ONE LIFE-CYCLE MATRIX INTO ANOTHER
+    function d = copy_columns(d, s, cols)
+        d(:, cols) = s(:, cols);
     end
 %% AUX FUNCTION: NOT CONVERGED LIFE CYCLE COUNT (PROMPT OR WARN)
     function confirm_not_converged(conv, stm_type, prompt)
@@ -486,6 +502,6 @@ warning('on','all');
         [~, bi] = ismember(sampled_indx(:, 1), storm_data(:, 1));
         % Pull WLP/WHP Dataset For Sampled Storms (Life-Cycle Rows Keep Their Order; Was lcs_default(bi, ...),
         % Which Used Database Rows As Life-Cycle Rows And Padded The Life Cycle With Zero Rows)
-        lcs_default(:, 5:end) = storm_data(bi, [2:5,7]);
+        lcs_default(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir, C.dt]) = storm_data(bi, [2 3 3 4 5 7]);
     end
 end

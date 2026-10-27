@@ -49,7 +49,7 @@ switch struc_type
         calc_dn50_ls = 0;
 end
 % No Structural Response Computed
-no_resp = sum([calc_dn50_ss,calc_dn50_ls,calc_dn50_lcbw,calc_r2p,calc_q,calc_q_vol,calc_p1,calc_dd]);
+no_resp = sum([calc_dn50_ss,calc_dn50_ls,calc_dn50_lcbw,calc_r2p,calc_q,calc_q_vol,calc_p1,calc_dd,calc_wave_transmission]);
 
 %% GRAB DETAILS FROM "structure"
 % Define Structure Crest Elevation
@@ -117,23 +117,27 @@ if ismember(struc_type, [1, 3, 4])
 end
 
 %% GET FORCING FIELDS
-% Grab Workflow Specific Fields
+% Hm0 (Toe): Depth Limited At The Toe, Used By Every Toe Response. Hm0_off (Offshore): Before Depth Limitation, Used By
+% The Goda Pressures And The Damaging Depth
 switch workflow
     case {1,2,4} % RB, DET
         % Create Forcing Variables For Simplicity
         SWL = project_forcing.SWL; % SWL
-        Hm0 = project_forcing.Hm0; % Hm0
+        Hm0 = project_forcing.Hm0_toe; % Hm0 At The Toe
+        Hm0_off = project_forcing.Hm0_offshore; % Hm0 Offshore
         Tp = project_forcing.Tp; % Tp
         h = cellfun(@(x) x - toe_elev, SWL, 'un', false);
         Rc = cellfun(@(x) crest_elev - x, SWL, 'un', false);
         dt = cellfun(@(x) x*24*3600, project_forcing.dt, 'un', false); % Convert from days to seconds
     case 3 % LCS
-        SWL = cellfun(@(x) x(:,5),project_forcing,'un',false); % SWL
-        Hm0 = cellfun(@(x) x(:,6),project_forcing,'un',false); % Hm0
-        Tp = cellfun(@(x) x(:,7),project_forcing,'un',false); % Tp
+        C = lcs_columns();
+        SWL = cellfun(@(x) x(:, C.SWL),project_forcing,'un',false); % SWL
+        Hm0 = cellfun(@(x) x(:, C.Hm0_toe),project_forcing,'un',false); % Hm0 At The Toe
+        Hm0_off = cellfun(@(x) x(:, C.Hm0_offshore),project_forcing,'un',false); % Hm0 Offshore
+        Tp = cellfun(@(x) x(:, C.Tp),project_forcing,'un',false); % Tp
         h = cellfun(@(x) x - toe_elev, SWL, 'un', false);
         Rc = cellfun(@(x) crest_elev - x, SWL, 'un', false);
-        dt = cellfun(@(x) x(:, 9)*24*3600,project_forcing,'un',false); % dt
+        dt = cellfun(@(x) x(:, C.dt)*24*3600,project_forcing,'un',false); % dt
 end
 % Compute Water Depth @ Berm
 hb = cellfun(@(x) x - berm_elev, SWL,'un',false);
@@ -167,14 +171,14 @@ if no_resp~=0
             if calc_p1 == 1 || calc_p2_p3 == 1
                 % P1
                 Resp.p1 = cellfun(@(a, b, c, d) goda_forces_on_vertical_p1(a, b, 1.8,...
-                    0, c, d, berm_width, rho_w, g, offshore_slope_tana, berm_slope_tana), Hm0, Ts, h, hb, 'un', false);
+                    0, c, d, berm_width, rho_w, g, offshore_slope_tana, berm_slope_tana), Hm0_off, Ts, h, hb, 'un', false);
             end
             %
             if calc_p2_p3 == 1
                 % Compute P2 & P3 Wall Pressures (Plots)
                 [Resp.p2dyn, Resp.p2sta, Resp.p2total,...
                     Resp.p3dyn, Resp.p3sta, Resp.p3total, Resp.pu] = cellfun(@(a, b, c, d, e, f) goda_forces_on_vertical_p2p3(a, b, 1.8,...
-                    0, c, d, e, hw, f, rho_w, g), Hm0, Ts, h, hb, Rc, Resp.p1, 'un', false);
+                    0, c, d, e, hw, f, rho_w, g), Hm0_off, Ts, h, hb, Rc, Resp.p1, 'un', false);
                 % No Wave Attack (P1 NaN, e.g. Dry Toe): Secondary Pressures Are Undefined, Not Zero
                 p_names = {'p2dyn', 'p2sta', 'p2total', 'p3dyn', 'p3sta', 'p3total', 'pu'};
                 for pp = 1:length(p_names)
@@ -261,10 +265,10 @@ if no_resp~=0
             seward_slope_tana = 0;
         end
         [Kt] = cellfun(@(a,b,c) eurotop_wave_transmission(a,b,c,crest_width,seward_slope_tana,g),Hm0,Tp,Rc,'un',false);
-        % Compute Transmitted Wave
+        % Compute Transmitted Wave (Incident Hm0 At The Toe)
         switch workflow
-            case 1 % PROS-RB: Best-Estimate Incident Hm0 x Kt Replicates (Same As Forcing HCs)
-                Resp.Hm0t = cellfun(@(x, y) x.*y, project_forcing.('Hm0_no_rep'), Kt, 'un', false);
+            case 1 % PROS-RB: Best-Estimate (z = 0) Incident Hm0 x Kt Replicates (Same As Forcing HCs)
+                Resp.Hm0t = cellfun(@(x, y) x(:, replicate_z0_col(size(x, 2))).*y, Hm0, Kt, 'un', false);
             case {2, 3, 4} % DET, LCS, PROS-FB (Hm0 Is The Per-Sample MC Forcing)
                 Resp.Hm0t = cellfun(@(x, y) x.*y, Hm0, Kt, 'un', false);
         end
@@ -279,7 +283,7 @@ if no_resp~=0
             offshore_elevation = config.offshore_elevation;
         end
         [Resp.DamDepthElev, Resp.DamDepth]= cellfun(@(x, y, z, a, b) damaging_depth(x, y, z, offshore_elevation,...
-            calc_dd_ks, a, b, berm_width, berm_slope_tana, offshore_slope_tana, g), SWL, Hm0, Tp, h, hb, 'un', false);
+            calc_dd_ks, a, b, berm_width, berm_slope_tana, offshore_slope_tana, g), SWL, Hm0_off, Tp, h, hb, 'un', false);
     end
     % Compute Overtopping Volume
     if calc_q_vol == 1 && length(Resp.q{1}(:,1)) > 1

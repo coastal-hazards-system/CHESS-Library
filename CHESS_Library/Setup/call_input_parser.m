@@ -212,7 +212,7 @@ if ~chess_storm && strcmp(data_case, 'storm_data')
     bnu = storm_db_bias_uncertainty(config.chs_dependencies, config.region, config.sp_ID, []);
     db_info = storm_db_info('create', bnu, 0, Nyrs_XC, Nstm_XC, [fname fext]);
     % Create CHESS storm file
-    save(paths.storm_db, 'storm', 'prob_mass', 'db_info');
+    save(paths.storm_db, 'storm', 'prob_mass', 'db_info', '-v7.3');
     config = storm_db_info('apply', db_info, config);
 end
 

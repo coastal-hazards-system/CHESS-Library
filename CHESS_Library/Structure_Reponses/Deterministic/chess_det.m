@@ -23,14 +23,19 @@ function Resp = chess_det(config, project_forcing, structure, emp_coeff)
     %% OUTPUTS
         Resp.(storm_type) with fields:
             storm_id: Storm IDs. | double (nStorms x 1)
-            time, dt: Time stamps [datenum] and time steps [days]. | cell
-            SWL, Hm0, Hm0_DL, Tp, h, Rc: Forcing per storm. | cell
-                Hm0 is the original (database) wave height, Hm0_DL the
-                depth limited one used by the response equations.
-                h = SWL - toe_elevation, Rc = crest_elevation - SWL.
+            h, Rc: Derived forcing per storm, h = SWL - toe_elevation,
+                Rc = crest_elevation - SWL. | cell
             <response>: Every response computed by
                 compute_structure_response (R2p, q, Dn50, ...). | cell
-            Max: One value per storm for every field above. | struc
+            Max: One value per storm for storm_id, the forcing (SWL,
+                Hm0_offshore, Hm0_toe, Tp), h, Rc and every response,
+                plus time (datenum of the peak SWL). | struc
+        The forcing itself (time, dt, SWL, Hm0_offshore, Hm0_toe, Tp) is
+        not copied: read it from project_forcing, same data type, match
+        type and storm type, same row order (one row per storm).
+        Hm0_offshore is the database wave height (Goda pressures, damaging
+        depth), Hm0_toe the one depth limited at the toe (every other
+        response).
 
     %% DEV SIGNATURE
         Developed by: Fabian A. Garcia Moreno ERDC-CHL
@@ -38,13 +43,13 @@ function Resp = chess_det(config, project_forcing, structure, emp_coeff)
 storm_types = fieldnames(project_forcing);
 for st = 1:length(storm_types)
     pf = project_forcing.(storm_types{st});
-    % Forcing As Used By The Response Equations
+    % Forcing As Used By The Response Equations (Forcing Copies Only Feed storm_maxima, Dropped Below)
     out.storm_id = pf.storm_id;
     out.time = pf.time;
     out.dt = pf.dt;
     out.SWL = pf.SWL;
-    out.Hm0 = pf.Hm0_no_rep; % Database Wave Height
-    out.Hm0_DL = pf.Hm0; % After Depth Limitation (Equal To Hm0 When Off)
+    out.Hm0_offshore = pf.Hm0_offshore; % Database Wave Height
+    out.Hm0_toe = pf.Hm0_toe; % After Depth Limitation (Equal To Hm0_offshore When Off, Except An Emergent Toe)
     out.Tp = pf.Tp;
     out.h = cellfun(@(x) x - structure.toe_elevation, pf.SWL, 'un', false);
     out.Rc = cellfun(@(x) structure.crest_elevation - x, pf.SWL, 'un', false);
@@ -56,8 +61,9 @@ for st = 1:length(storm_types)
             out.(resp_names{rr}) = R.(resp_names{rr});
         end
     end
-    % One Value Per Storm
+    % One Value Per Storm (Forcing Maxima Included), Then The Forcing Copies Are Dropped (Rows Match project_forcing)
     out.Max = storm_maxima(out);
+    out = rmfield(out, {'time', 'dt', 'SWL', 'Hm0_offshore', 'Hm0_toe', 'Tp'});
     Resp.(storm_types{st}) = out;
     clear out
 end

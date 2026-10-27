@@ -157,14 +157,16 @@ tan_ls = 1./leeside_slope;
 %% READ & FORMAT ADDITIONAL DATA
 % Gravitational acceleration (m/s^2)
 g = config.gravity_constant;
+% Life-Cycle Column Map
+C = lcs_columns();
 % Loop Through All Life Cycles
 for lcS=1:length(LC_MCSimOUT)
 
     %% BUILD STORM FORCING DATA MATRIX
     % Build Forcing Parameters Matrix For Current LC
-    WL = LC_MCSimOUT{lcS}(:,5); %Water Level
-    Hm0 = LC_MCSimOUT{lcS}(:,6); %Wave Height
-    Tp = LC_MCSimOUT{lcS}(:,7); %Peak Wave Period
+    WL = LC_MCSimOUT{lcS}(:, C.SWL); %Water Level
+    Hm0 = LC_MCSimOUT{lcS}(:, C.Hm0_toe); %Wave Height (At The Toe)
+    Tp = LC_MCSimOUT{lcS}(:, C.Tp); %Peak Wave Period
     % Number Of Simulations (# Of Storms)
     nSim = size(LC_MCSimOUT{lcS},1);
     % Life Cycle Without Storms: No Failure (Reliability 1)

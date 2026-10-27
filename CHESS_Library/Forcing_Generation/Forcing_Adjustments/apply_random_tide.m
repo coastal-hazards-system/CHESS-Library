@@ -1,11 +1,6 @@
 function [SWL, tide_indx] = apply_random_tide(tide_file, SWL, t_size, tide_indx)
 %% IMPORT TIDAL DATA
-warning('off');
-% Import Tidal Data Provided
-tidal_data = readcell(tide_file,'NumHeaderLines',1);
-% Keep Only Final Column
-tidal_data = cell2mat(tidal_data(:,end));
-warning('on');
+tidal_data = read_tide_series(tide_file);
 
 %% ADD RANDOM TIDE ACCORDINGLY
 % Start Hours: Drawn If None Were Given; Each Storm Hydrograph Fits The Tide Record

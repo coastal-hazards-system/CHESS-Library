@@ -46,9 +46,12 @@ for j = s_indx
         case {'p2dyn','p2sta','p2total','p3dyn','p3sta','p3total','pu','X_low','theta_low','X_up','theta_up','Bx','X_c_surge','theta_center','Bjet','Vjet','Fjet'}
             % Skip Until Issues Are Sorted
             continue;
-        case {'Hm0t'}
+        case {'Hm0t', 'Hm0_toe'}
             % Use Values Associated To Hm0
             u_field = u_vector{contains(u_names, 'hm0_u_r')};
+        case 'Hm0_offshore'
+            % Same Lookup As The Former 'Hm0' Curve (First Config Field Containing 'hm0')
+            u_field = u_vector{contains(u_names, 'hm0')};
         case 'SWL'
             u_field = u_vector{contains(u_names, 'chs_swl_u_r')};
         otherwise

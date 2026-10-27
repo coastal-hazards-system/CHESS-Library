@@ -27,13 +27,26 @@ switch staID
         unit_label = 'm';
         y_label = ['SWL [' unit_label ', ' datum ']'];
         var_name = 'SWL';
-    case 'Hm0'
+    case 'Hm0_offshore' % Before Depth Limitation (Goda Pressures, Damaging Depth)
         U_a = hm0_u_a;
         U_r = hm0_u_r;
         uncert_treatment_jpm = 'combined';
         unit_label = 'm';
-        y_label = ['$H_{m_{0}}$ [' unit_label ']'];
-        var_name = '$H_{m_{0}}$';
+        y_label = ['$H_{m_{0}}$ (offshore) [' unit_label ']'];
+        var_name = '$H_{m_{0}}$ (offshore)';
+        % Multi-Line Stage 2: Waves Transmitted Behind Stage 1 (apply_stage1_transmission.m)
+        if isfield(config, 'multiline') && isstruct(config.multiline)
+            behind = ['(offshore, behind ' regexprep(config.multiline.stage1_alt, '([_&%#{}])', '\\$1') ')'];
+            y_label = ['$H_{m_{0}}$ ' behind ' [' unit_label ']'];
+            var_name = ['$H_{m_{0}}$ ' behind];
+        end
+    case 'Hm0_toe' % Depth Limited At The Toe (Toe Responses)
+        U_a = 0;
+        U_r = hm0_u_r;
+        uncert_treatment_jpm = 'relative';
+        unit_label = 'm';
+        y_label = ['$H_{m_{0}}$ (at toe) [' unit_label ']'];
+        var_name = '$H_{m_{0}}$ (at toe)';
     case 'Hm0t'
         U_a = hm0_u_a;
         U_r = hm0_u_r;
@@ -41,12 +54,6 @@ switch staID
         unit_label = 'm';
         y_label = ['$H_{m_{0t}}$ [' unit_label ']'];
         var_name = '$H_{m_{0t}}$';
-    case 'Hm0_DL' % Depth Limited Hm0 (CHESS: Deterministic)
-        U_a = 0;U_r = 0;
-        uncert_treatment_jpm = 'none';
-        unit_label = 'm';
-        y_label = ['$H_{m_{0}}$ DL [' unit_label ']'];
-        var_name = '$H_{m_{0}}$ DL';
     case 'h' % Water Depth At Toe: SWL - toe_elevation
         U_a = 0;U_r = 0;
         uncert_treatment_jpm = 'none';

@@ -204,22 +204,24 @@ K_ls2 = emp_coeff.k_ls2; % Leeside Damage Coeff
 Nz_ini = emp_coeff.ini_waves;
 
 %% ADJUST AND COMPUTE FORCING PARAMETERS
+% Life-Cycle Column Map
+C = lcs_columns();
 % Extract Water Level
-WL = cellfun(@(x) x(:,5),LC_SimOUT_hyd,'un',false);
+WL = cellfun(@(x) x(:, C.SWL),LC_SimOUT_hyd,'un',false);
 % Compute Water Column
 h = cellfun(@(x) x-toe_elevation,WL,'un',false);
 % Compute Freeboard
 Rc = cellfun(@(x,y) crest_elevation - x,WL,'un',false);
-% Extract Wave Height
-Hm0 = cellfun(@(x) x(:,6),LC_SimOUT_hyd,'un',false);
+% Extract Wave Height (At The Toe)
+Hm0 = cellfun(@(x) x(:, C.Hm0_toe),LC_SimOUT_hyd,'un',false);
 % Extract Wave Peak Period
-Tp = cellfun(@(x) x(:,7),LC_SimOUT_hyd,'un',false);
+Tp = cellfun(@(x) x(:, C.Tp),LC_SimOUT_hyd,'un',false);
 % Spectral Wave Period (Tm_-1,0)
-Tm10 = cellfun(@(x) x(:,7)/1.1,LC_SimOUT_hyd,'un',false);
+Tm10 = cellfun(@(x) x(:, C.Tp)/1.1,LC_SimOUT_hyd,'un',false);
 % Mean wave period (sec)
 Tm = cellfun(@(x) x./1.2,Tp,'un',false);
 % Storm increment duration (hr)
-Dstm = cellfun(@(x) x(:,9).*24,LC_SimOUT_hyd,'un',false);
+Dstm = cellfun(@(x) x(:, C.dt).*24,LC_SimOUT_hyd,'un',false);
 % Number of waves per increment
 Nz = cellfun(@(x,y) (x.*3600)./y,Dstm,Tm,'un',false);
 
@@ -397,7 +399,7 @@ LS_final = lc_values(SLee_no_repairs, @(x) x(end));
 diagnostics(1,:) = cellfun(@(a) table(WL{a},Hm0{a},...
     Tp{a},h{a},Nz{a},Rc{a},z1p{a},u1p{a},Szero_no_repairs{a},Ssea_no_repairs{a},Szero_with_repairs{a},...
     Ssea_with_repairs{a}, SLee_no_repairs{a}, SLee_with_repairs{a}, 'VariableNames',...
-    {'WL','Hm0','Tp','h','Nz','Rc','z1p','u1p',...
+    {'WL','Hm0_toe','Tp','h','Nz','Rc','z1p','u1p',...
     'Szero_no_repairs','Ssea_no_repairs','Szero_with_repairs','Ssea_with_repairs',...
     'SLee_no_repairs','SLee_with_repairs'}),...
     num2cell(1:nLC),'un',false)';
@@ -516,7 +518,7 @@ CSR_Timeseries_DPA.diagnostics = diagnostics;
     end
 % DETERMINE STORM END ROW
     function  storm_end_row = find_storm_end(LC_SimOUT_hyd, NlcS, Ntime)
-        storm_tstps = LC_SimOUT_hyd{NlcS}(Ntime:end,10); % 0:73 or 0:96 repeated for 70ish storms except missing first Ntime values
+        storm_tstps = LC_SimOUT_hyd{NlcS}(Ntime:end, C.step); % 0:73 or 0:96 repeated for 70ish storms except missing first Ntime values
         % Find Row Index Of 1st TimeStep of Storms In LC
         storm_end_row = find(storm_tstps==0);
         % Find End Row Of present Storm
