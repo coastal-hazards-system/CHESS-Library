@@ -98,12 +98,13 @@ classdef CHSStormDBImportUI < handle
         storm_data_input % storm & prob_mass .mat Import (src, storm, prob_mass, create_wlp, create_whp, BnU)
         expected_region char % Project Region (chessProject.project_region; '': None): CHS_Dependencies Must Hold It, CHS Data Must Match
         name_state % Storm DB Name Status: 'red' (Invalid) | 'green' | 'yellow' (Exists: Overwrite Confirmed At Import)
+        layout % Storm Types, Data/Match Types And Storm Counts Of The Created Storm DB (storm_layout), Recorded By to_record
     end
 
     properties (Access=private, Transient)
         parent_fig % Window The Wizard Opens Centered On ([]: Screen). Transient: The Storm DB Is Saved In The Project File, The App Window Must Not Be
         existing_db_names cell = {} % Storm DB Names Of The Project (Case-Insensitive Clash: Overwrite, Confirmed At Import)
-        db_usage_fcn % @(db_name) [n_alt, n_run_files] Of A Project Storm DB, For The Overwrite Confirmation ([]: Not Shown)
+        db_usage_fcn % @(db_name) [n_alt, n_run_files] Of A Project Storm DB (chessProject Registry), For The Overwrite Confirmation ([]: Not Shown)
     end
 
     %% CONSTRUCTOR
@@ -373,12 +374,14 @@ classdef CHSStormDBImportUI < handle
            obj.CreateWHPStormDBCheckBox.Text = 'Create WHP Storm DB';
            obj.CreateWHPStormDBCheckBox.Layout.Row = 1;
            obj.CreateWHPStormDBCheckBox.Layout.Column = 2;
+           obj.CreateWHPStormDBCheckBox.Tooltip = 'Requires Peaks and Timeseries files';
 
             % Create CreateWLPStormDBCheckBox
            obj.CreateWLPStormDBCheckBox = uicheckbox(obj.GridLayout2_3);
            obj.CreateWLPStormDBCheckBox.Text = 'Create WLP Storm DB';
            obj.CreateWLPStormDBCheckBox.Layout.Row = 1;
            obj.CreateWLPStormDBCheckBox.Layout.Column = 3;
+           obj.CreateWLPStormDBCheckBox.Tooltip = 'Requires Peaks and Timeseries files';
 
             % Create GridLayout2_4
            obj.GridLayout2_4 = uigridlayout(obj.GridLayout);
@@ -434,6 +437,10 @@ classdef CHSStormDBImportUI < handle
            obj.VerticalOffsetEditField.HorizontalAlignment = 'center';
            obj.VerticalOffsetEditField.Layout.Row = 1;
            obj.VerticalOffsetEditField.Layout.Column = 2;
+            % Datum Offset Disabled (Value 0): No Storm DB Gets An SWL Shift Until The Project Datum Is Supported
+           obj.VerticalOffsetEditField.Value = 0;
+           obj.VerticalOffsetEditField.Enable = 'off';
+           obj.VerticalOffsetEditField.Tooltip = 'Not available yet: requires a project datum';
 
             % Create CreateStormDBButton
            obj.CreateStormDBButton = uibutton(obj.GridLayout2_5, 'push');
@@ -638,8 +645,8 @@ classdef CHSStormDBImportUI < handle
                         usage = obj.db_usage_fcn(existing_name);
                     end
                     if any(usage > 0)
-                        msg = sprintf(['%s\n%d alternative(s) were last run with it. Its %d run file(s) will be deleted and ',...
-                            'those alternatives will show no results.'], msg, usage(1), usage(2));
+                        msg = sprintf(['%s\n%d alternative(s) have simulations with it. Its %d run file(s) will be deleted and ',...
+                            'those simulations removed.'], msg, usage(1), usage(2));
                     end
                 else
                     msg = sprintf(['Storm DB "%s" already exists. Overwrite?\nIts files in Event_Database are not part of ',...
@@ -667,8 +674,9 @@ classdef CHSStormDBImportUI < handle
             obj.import_chs_modeling(obj.CHSZipFolderEditField.Value);
             if obj.modeling_imported
                 % storm_duration 1 h: Placeholder Stamped On Peaks Column 6 And WLP/WHP. Not Used As Is: Runs Restamp It With
-                % config.storm_duration (Library call_project_forcing_formater) Or Read The Config (Dn50, CSR, FB, LCS)
-                [storm, ~] = obj.create_storm_database(obj.create_wlp, obj.create_whp, 1, obj.VerticalOffsetEditField.Value);
+                % config.storm_duration (Library build_boundary_conditions) Or Read The Config (Dn50, CSR, FB, LCS)
+                [storm, ~] = obj.create_storm_database(obj.create_wlp, obj.create_whp, 1, 0);
+                obj.layout = CHSStormDBImportUI.storm_layout(storm);
                 %
                 obj.PlotControlsPanel.Enable = 'on';
                 obj.update_buttons();
@@ -810,13 +818,20 @@ classdef CHSStormDBImportUI < handle
                 % Inspect provided CHS zip folder
                 obj.chs_zip_inspect(fullfile(sel_pth, sel_file));
                 obj.region_ok();
-                % WLP/WHP: Built From CHS Files | Fixed By A storm + prob_mass .mat
+                % WLP/WHP: Built From CHS Files With Both Peaks And Timeseries (Library call_chs_data_formater) | Fixed By A
+                % storm + prob_mass .mat
                 storm_file = ~isempty(obj.storm_data_input);
-                obj.CreateWLPStormDBCheckBox.Enable = matlab.lang.OnOffSwitchState(~storm_file);
-                obj.CreateWHPStormDBCheckBox.Enable = matlab.lang.OnOffSwitchState(~storm_file);
+                can_build = ~storm_file && isequal(obj.has_peaks, true) && isequal(obj.has_timeseries, true);
+                obj.CreateWLPStormDBCheckBox.Enable = matlab.lang.OnOffSwitchState(can_build);
+                obj.CreateWHPStormDBCheckBox.Enable = matlab.lang.OnOffSwitchState(can_build);
                 if storm_file
                     obj.CreateWLPStormDBCheckBox.Value = obj.create_wlp;
                     obj.CreateWHPStormDBCheckBox.Value = obj.create_whp;
+                elseif ~can_build
+                    obj.CreateWLPStormDBCheckBox.Value = false;
+                    obj.CreateWHPStormDBCheckBox.Value = false;
+                    obj.create_wlp = false;
+                    obj.create_whp = false;
                 else
                     obj.create_wlp = obj.CreateWLPStormDBCheckBox.Value;
                     obj.create_whp = obj.CreateWHPStormDBCheckBox.Value;
@@ -1544,7 +1559,7 @@ classdef CHSStormDBImportUI < handle
                 % Staged Until Import (commit_staged Gives It The Name <db>.mat)
                 obj.create_dir(obj.staging_dir());
                 obj.output_paths.storm_db = fullfile(obj.staging_dir(), 'staged.mat');
-                save(obj.output_paths.storm_db, 'storm', 'prob_mass', 'db_info');
+                save(obj.output_paths.storm_db, 'storm', 'prob_mass', 'db_info', '-v7.3');
                 return;
             end
             %
@@ -1610,7 +1625,7 @@ classdef CHSStormDBImportUI < handle
                     db_info = obj.db_info; %#ok<PROPLC> Saved By Name
                     % Staged Until Import (commit_staged Gives It The Name <db>.mat)
                     obj.output_paths.storm_db = fullfile(obj.staging_dir(), 'staged.mat');
-                    save(obj.output_paths.storm_db, 'storm', 'prob_mass', 'db_info');
+                    save(obj.output_paths.storm_db, 'storm', 'prob_mass', 'db_info', '-v7.3');
                     [obj.dlgObj] = obj.auxLib.progress_window(9/9, 'Complete',...
                         'Storm Database Creation Progress', obj.dlgObj);
                 else
@@ -1619,38 +1634,6 @@ classdef CHSStormDBImportUI < handle
                     prob_mass = [];
                     return;
                 end
-            end
-        end
-
-        function info = get_db_info(obj)
-            % Storm Database Details (Library storm_db_info.m). Databases Imported Before db_info Existed Have None
-            if ~storm_db_info('valid', obj.db_info)
-                error('Storm database "%s" has no db_info (imported with an older CHESS version): rebuild the storm database (import it again).', obj.db_name);
-            end
-            info = obj.db_info;
-        end
-
-        function sp_id = get_savepoint_id(obj)
-            % CHS ADCIRC Savepoint ID Of This Storm Database ([] If Unknown)
-            sp_id = [];
-            if isstruct(obj.sp_ids) && isfield(obj.sp_ids, 'adcirc')
-                sp_id = obj.sp_ids.adcirc;
-            end
-        end
-
-        function out = get_model_uncertainty(obj, field, component)
-            arguments
-                obj
-                field {mustBeMember(field, {'swl','hm0'})}
-                component {mustBeMember(component, {'relative','absolute','combined'})}
-            end
-            switch component
-                case 'relative'
-                    out = obj.db_info.(['chs_' field '_u_r']);
-                case 'absolute'
-                    out = obj.db_info.(['chs_' field '_u_a']);
-                case 'combined'
-                    out = [[{'Ua'};{'Ur'}],[{obj.db_info.(['chs_' field '_u_a'])};{obj.db_info.(['chs_' field '_u_r'])}]];
             end
         end
 
@@ -1667,6 +1650,92 @@ classdef CHSStormDBImportUI < handle
                     out = obj.db_info.(['chs_' field '_b_a']);
                 case 'combined'
                     out = [[{'Ba'};{'Br'}],[{obj.db_info.(['chs_' field '_b_a'])};{obj.db_info.(['chs_' field '_b_r'])}]];
+            end
+        end
+    end
+
+    %% STORM DB RECORD (chessProject.stormDB_list)
+    methods (Access=public)
+        function rec = to_record(obj)
+            % Storm DB Record Kept In The Project (chessProject.stormDB_list): The Fields Of record_fields(), No UI Handles
+            % Or Wizard State. A Re-Import Opens A New Wizard
+            rec = struct();
+            for fld = CHSStormDBImportUI.record_fields()
+                rec.(fld{1}) = obj.(fld{1});
+            end
+        end
+    end
+
+    methods (Static)
+        function fields = record_fields()
+            % Fields Of A Storm DB Record (to_record), In Order
+            fields = {'db_name', 'output_paths', 'outpath', 'source_paths', 'study', 'study_datum', 'db_info', 'sp_coords',...
+                'sp_ids', 'create_wlp', 'create_whp', 'storm_duration', 'gravity_constant', 'db_created', 'layout'};
+        end
+
+        function recs = empty_records()
+            % No Storm DB Records (0x1, Every Record Field)
+            fields = CHSStormDBImportUI.record_fields();
+            recs = cell2struct(cell(numel(fields), 0), fields, 1);
+        end
+
+        function layout = storm_layout(storm)
+            % Storm DB Layout Without Event IDs (Run Tab And Results Lists; Recorded At Import, While storm Is In Memory):
+            %   storm_types: XC/TC In Storm DB Order (Row Cell)
+            %   data_types.(st): Peaks/Timeseries; match_types.(st).(dt): Default/WLP/WHP (Row Cells)
+            %   counts.(st).(dt).(mt): Storms; qc_removed.(st): Storms Removed By The Library Quality Check (0 If Not Recorded)
+            st = fieldnames(storm);
+            st = st(ismember(st, {'XC', 'TC'}));
+            layout = struct('storm_types', {st(:)'}, 'data_types', struct(), 'match_types', struct(), 'counts', struct(),...
+                'qc_removed', struct());
+            for ss = 1:numel(st)
+                dts = intersect(fieldnames(storm.(st{ss})), {'Peaks', 'Timeseries'}, 'stable');
+                layout.data_types.(st{ss}) = dts(:)';
+                for dd = 1:numel(dts)
+                    mts = fieldnames(storm.(st{ss}).(dts{dd}));
+                    layout.match_types.(st{ss}).(dts{dd}) = mts(:)';
+                    for mm = 1:numel(mts)
+                        layout.counts.(st{ss}).(dts{dd}).(mts{mm}) = size(storm.(st{ss}).(dts{dd}).(mts{mm}), 1);
+                    end
+                end
+                removed = 0;
+                if isfield(storm.(st{ss}), 'removed_storms') && isfield(storm.(st{ss}).removed_storms, 'Default')
+                    removed = numel(storm.(st{ss}).removed_storms.Default);
+                end
+                layout.qc_removed.(st{ss}) = removed;
+            end
+        end
+
+        function info = get_db_info(rec)
+            % Storm Database Details Of A Record (Library storm_db_info.m). Databases Imported Before db_info Existed Have None
+            if ~storm_db_info('valid', rec.db_info)
+                error('Storm database "%s" has no db_info (imported with an older CHESS version): rebuild the storm database (import it again).', rec.db_name);
+            end
+            info = rec.db_info;
+        end
+
+        function sp_id = get_savepoint_id(rec)
+            % CHS ADCIRC Savepoint ID Of A Storm DB Record ([] If Unknown)
+            sp_id = [];
+            if isstruct(rec.sp_ids) && isfield(rec.sp_ids, 'adcirc')
+                sp_id = rec.sp_ids.adcirc;
+            end
+        end
+
+        function out = get_model_uncertainty(rec, field, component)
+            % Modeling Uncertainty Of A Storm DB Record (db_info)
+            arguments
+                rec
+                field {mustBeMember(field, {'swl','hm0'})}
+                component {mustBeMember(component, {'relative','absolute','combined'})}
+            end
+            switch component
+                case 'relative'
+                    out = rec.db_info.(['chs_' field '_u_r']);
+                case 'absolute'
+                    out = rec.db_info.(['chs_' field '_u_a']);
+                case 'combined'
+                    out = [[{'Ua'};{'Ur'}],[{rec.db_info.(['chs_' field '_u_a'])};{rec.db_info.(['chs_' field '_u_r'])}]];
             end
         end
     end

@@ -8,14 +8,20 @@ classdef chessProject < handle
         unitsys char
         pse_list cell
         alternative_list cell
-        stormDB_list CHSStormDBImportUI
+        % Storm DB Records (Struct Array, CHSStormDBImportUI.to_record): Names, Paths, db_info, Savepoint, layout. Projects Saved
+        % With Wizard Objects Are Converted By The Import Sync (sync_sims 'project')
+        stormDB_list
         tide_files_list cell
         pse_tables cell
         pse_geometry cell
-        stormDB_assignment cell
-        project_response_files cell
+        % Simulation Registry sims{pse}{alt} (Same Shape As alternative_list): Struct Array, One Row Per (Storm DB, Workflow)
+        % Bundle With A Responses File (sim_row_from_config). Names Only, Never Paths (chess_paths)
+        sims cell = {}
         sim_record table
         chs_dependencies char = '' % CHS_Dependencies Folder Of The Project Region (project_region), Set By The First CHS Storm DB
+        % Multi-Line Transect PSEs (Name Based), One Entry Each: pse, stage1 (Its '<name>_stage_1' Rubble Mound Alternative),
+        % stage2 (Column Cell Of Its '<name>_stage_2' Alternatives). A Multi-Line PSE Holds Only These Alternatives
+        multiline struct = struct('pse', {}, 'stage1', {}, 'stage2', {})
     end
 
     properties (Access=public)
@@ -43,17 +49,21 @@ classdef chessProject < handle
             obj.alternative_list = {};
             obj.pse_tables = {};
             obj.pse_geometry = {};
+            obj.stormDB_list = CHSStormDBImportUI.empty_records();
         end
     end
 
     %% PLOT METHODS
     methods (Access=public)
-        function ax = plot_geometry(obj, pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source)
+        function ax = plot_geometry(obj, pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source, stage1)
             % Library Transect Plot Of A PSE/Alternative Into ax.
             %   base_fnt: Base Font Size (Default 12, The GUI Plot Font)
             %   keep_text_box: Keep Library Offshore Slope/Elevation Text Box (Default false)
             %   offshore_elevation: Offshore Elevation For The Text Box ([] -> PSE Geometry Value, Else 'n/a')
             %   elevation_source: Label Shown Next To The Elevation (e.g. 'Storm DB: SP123')
+            %   stage1: Multi-Line Stage 2 Only. struct: The Stage 1 Structure Drawn In Line Before It (The Saved structure Of
+            %       Stage 1's Run Its Forcing Comes From; Never Stage 1's Current PSE Table). char: Stage 2 Alone With This Note
+            %       (No Text Box). Default []: Stage 2 Alone
             if nargin < 5 || isempty(base_fnt)
                 base_fnt = 12;
             end
@@ -66,8 +76,84 @@ classdef chessProject < handle
             if nargin < 8
                 elevation_source = '';
             end
-            % Get Structure For PSE/Alternative
+            if nargin < 9
+                stage1 = [];
+            end
             structure = obj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+            if obj.alt_stage(pse_name, alt_name) == 2
+                if isstruct(stage1)
+                    ax = obj.plot_multiline(pse_name, obj.stage1_alt(pse_name), stage1, alt_name, ax, base_fnt, keep_text_box,...
+                        offshore_elevation, elevation_source);
+                    return
+                end
+                % Stage 2 Alone: Its Offshore End Is Stage 1's Toe, Unknown Here (No Text Box)
+                ax = obj.plot_single(structure, pse_name, alt_name, ax, base_fnt, false, [], '');
+                if ischar(stage1) && ~isempty(stage1)
+                    text(ax, 0.02, 0.98, stage1, 'Units', 'normalized', 'VerticalAlignment', 'top', 'HorizontalAlignment', 'left',...
+                        'BackgroundColor', 'white', 'EdgeColor', 'black', 'Interpreter', 'none', 'FontSize', base_fnt - 2,...
+                        'Tag', 'stage_note');
+                end
+                return
+            end
+            ax = obj.plot_single(structure, pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source);
+        end
+
+        function ax = plot_multiline(obj, pse_name, stage1_alt, stage1_structure, stage2_alt, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source)
+            % Multi-Line Transect Into ax: Stage 1 (stage1_structure; Text Box = Its Offshore End, plot_geometry Inputs), Then
+            % Stage 2 (Its Current pse_geometry) To Its Right After A Display Gap (The Stages Have No Distance Between Them In The
+            % Analysis), Joined By A Sand Strip Between The Drawn Sand Tops (Library pse_transect_plot: Every Profile Starts On
+            % Its Sand Top, At toe_elevation; A Floodwall Without A Toe Berm Has toe_elevation = wall_bottom_elevation,
+            % finalize_structure_config). Also Used By PSECreationUI For A Stage 2 Not Yet Linked (stage2_alt = Its Placeholder)
+            if nargin < 7 || isempty(base_fnt)
+                base_fnt = 12;
+            end
+            if nargin < 8 || isempty(keep_text_box)
+                keep_text_box = false;
+            end
+            if nargin < 9
+                offshore_elevation = [];
+            end
+            if nargin < 10
+                elevation_source = '';
+            end
+            ax = obj.plot_single(stage1_structure, pse_name, stage1_alt, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source);
+            s2 = obj.get_project_field('pse_geometry', pse_name, stage2_alt, 'alt');
+            sand1 = findobj(ax.Children, 'flat', 'Tag', 'sand');
+            if isempty(s2) || ~isfield(s2, 'struc_type') || isempty(sand1)
+                return
+            end
+            fig = figure('Visible', 'off');
+            closer = onCleanup(@() delete(fig));
+            ax2 = obj.plot_single(s2, pse_name, stage2_alt, axes(fig), base_fnt, false, [], '');
+            sand2 = findobj(ax2.Children, 'flat', 'Tag', 'sand');
+            [x1, x2] = deal(ax.XLim(2), ax2.XLim(2));
+            dx = x1 + 0.25*max(x1, x2); % Display Gap Only
+            [b1, b2] = deal(min(sand1.Shape.Vertices(:, 2)), min(sand2.Shape.Vertices(:, 2)));
+            [t1, t2] = deal(max(sand1.Shape.Vertices(:, 2)), max(sand2.Shape.Vertices(:, 2)));
+            plot(ax, polyshape([x1 dx dx x1], [t1 t2 b2 b1]), 'FaceColor', [0.92,0.82,0.08],...
+                'EdgeColor', 'none', 'FaceAlpha', 1, 'Tag', 'sand');
+            for h = flipud(findobj(ax2.Children, 'flat', 'Type', 'polygon'))'
+                hn = copyobj(h, ax);
+                hn.Shape = translate(hn.Shape, dx, 0);
+            end
+            for lbl = {x1/2, stage1_alt, b1; dx + x2/2, stage2_alt, b2}'
+                text(ax, lbl{1}, lbl{3}, lbl{2}, 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom',...
+                    'Interpreter', 'none', 'FontSize', base_fnt - 2, 'Tag', 'stage_label');
+            end
+            text_box = findobj(ax.Children, 'flat', 'Type', 'text', '-not', 'Tag', 'stage_label');
+            if ~isempty(text_box)
+                uistack(text_box, 'top');
+            end
+            xlim(ax, [0, dx + x2]);
+            ylim(ax, [min(ax.YLim(1), ax2.YLim(1)), max(ax.YLim(2), ax2.YLim(2))]);
+            ax.Title.String = ['PSE ID: ' pse_name ' | Multi-Line: ' stage1_alt ' -> ' stage2_alt];
+        end
+    end
+
+    methods (Access=private)
+        function ax = plot_single(obj, structure, pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source)
+            % One Transect (structure: A pse_geometry Entry Or A Saved Run structure) Into ax; Names For The Title
+            % (plot_geometry Inputs)
             % Clear Axes
             cla(ax);
             % Nothing To Plot
@@ -231,8 +317,8 @@ classdef chessProject < handle
             obj.alternative_list = {};
             obj.pse_tables = {};
             obj.pse_geometry = {};
-            obj.stormDB_assignment = {};
-            obj.project_response_files = {};
+            obj.sims = {};
+            obj.multiline = obj.multiline([]);
         end
 
         function leftover = remove_pse(obj, pse_name, delete_files)
@@ -250,21 +336,22 @@ classdef chessProject < handle
             if delete_files
                 leftover = chessProject.delete_folder(fullfile(obj.path, obj.name, 'PSE', pse_name));
             end
-            fields = {'pse_list', 'alternative_list', 'pse_tables', 'pse_geometry',...
-                'stormDB_assignment', 'project_response_files'};
+            fields = {'pse_list', 'alternative_list', 'pse_tables', 'pse_geometry', 'sims'};
             for kk = 1:length(fields)
                 if numel(obj.(fields{kk})) >= indx
                     obj.(fields{kk})(indx) = [];
                 end
             end
+            obj.multiline(strcmp(pse_name, {obj.multiline.pse})) = [];
             obj.pse_indx = [];
             obj.alt_indx = [];
         end
 
         function leftover = remove_alternative(obj, pse_name, alt_name, delete_files)
-            % Removes Alternative From Every Per-Alternative Field (Removes PSE If Last Alternative). delete_files (Default
-            % false): Its Folder <path>\<name>\PSE\<pse>\<alt> (The PSE Folder For The Last Alternative) Is Deleted First
-            % (delete_folder; An Error Leaves The Project Unchanged). leftover: Path Not Fully Removed ('' If None)
+            % Removes Alternative From Every Per-Alternative Field (Removes PSE If Last Alternative, Or If It Is The Stage 1 Of A
+            % Multi-Line PSE: The Whole Multi-Line PSE Goes). delete_files (Default false): Its Folder <path>\<name>\PSE\<pse>\<alt>
+            % (The PSE Folder When The PSE Goes) Is Deleted First (delete_folder; An Error Leaves The Project Unchanged).
+            % leftover: Path Not Fully Removed ('' If None)
             if nargin < 4
                 delete_files = false;
             end
@@ -277,162 +364,285 @@ classdef chessProject < handle
             if isempty(a_indx)
                 return
             end
-            if numel(obj.alternative_list{p_indx}) == 1
+            if numel(obj.alternative_list{p_indx}) == 1 || obj.alt_stage(pse_name, alt_name) == 1
                 leftover = obj.remove_pse(pse_name, delete_files);
                 return
             end
             if delete_files
                 leftover = chessProject.delete_folder(fullfile(obj.path, obj.name, 'PSE', pse_name, alt_name));
             end
-            fields = {'alternative_list', 'pse_tables', 'pse_geometry',...
-                'stormDB_assignment', 'project_response_files'};
+            fields = {'alternative_list', 'pse_tables', 'pse_geometry', 'sims'};
             for kk = 1:length(fields)
                 if numel(obj.(fields{kk})) >= p_indx && iscell(obj.(fields{kk}){p_indx})...
                         && numel(obj.(fields{kk}){p_indx}) >= a_indx
                     obj.(fields{kk}){p_indx}(a_indx) = [];
                 end
             end
+            mm = find(strcmp(pse_name, {obj.multiline.pse}), 1);
+            if ~isempty(mm)
+                obj.multiline(mm).stage2(strcmp(alt_name, obj.multiline(mm).stage2)) = [];
+            end
             obj.alt_indx = [];
         end
 
         function n_alt = stormdb_usage(obj, db_name)
-            % Number Of Alternatives Whose Last Run Used Storm Database db_name
+            % Number Of Alternatives With A Registry Row (sims) Of Storm Database db_name (Case-Insensitive)
             n_alt = 0;
-            indx = find(strcmp(db_name, {obj.stormDB_list.db_name}), 1);
-            if isempty(indx) || ~iscell(obj.stormDB_assignment)
-                return
-            end
-            for pp = 1:numel(obj.stormDB_assignment)
-                if iscell(obj.stormDB_assignment{pp})
-                    n_alt = n_alt + sum(cellfun(@(x) isequal(x, indx), obj.stormDB_assignment{pp}));
+            for pp = 1:numel(obj.sims)
+                for aa = 1:numel(obj.sims{pp})
+                    n_alt = n_alt + any(strcmpi(db_name, {obj.sims{pp}{aa}.db}));
                 end
             end
         end
 
         function remove_stormdb(obj, db_name)
-            % Removes A Storm Database. stormDB_assignment Holds Indices Into stormDB_list:
-            % Alternatives Assigned To It Lose Their Assignment & Results Pointer (clear_stormdb_links), Later Indices Shift Down By One.
+            % Removes A Storm Database And Its Registry Rows (drop_db_sims). Its Run Files Are Not Touched (stormdb_run_files)
             indx = find(strcmp(db_name, {obj.stormDB_list.db_name}), 1);
             if isempty(indx)
                 return
             end
-            obj.clear_stormdb_links(db_name);
+            obj.drop_db_sims(db_name);
             obj.stormDB_list(indx) = [];
-            if iscell(obj.stormDB_assignment)
-                for pp = 1:numel(obj.stormDB_assignment)
-                    if ~iscell(obj.stormDB_assignment{pp})
-                        continue
-                    end
-                    for aa = 1:numel(obj.stormDB_assignment{pp})
-                        db_a = obj.stormDB_assignment{pp}{aa};
-                        if isnumeric(db_a) && isscalar(db_a) && db_a > indx
-                            obj.stormDB_assignment{pp}{aa} = db_a - 1;
-                        end
-                    end
-                end
-            end
             obj.db_indx = [];
         end
 
-        function clear_stormdb_links(obj, db_name)
-            % Alternatives Assigned To Storm Database db_name Lose Their Assignment & Results Pointer (Entry Itself Kept)
-            indx = find(strcmp(db_name, {obj.stormDB_list.db_name}), 1);
-            if isempty(indx) || ~iscell(obj.stormDB_assignment)
-                return
-            end
-            for pp = 1:numel(obj.stormDB_assignment)
-                if ~iscell(obj.stormDB_assignment{pp})
-                    continue
-                end
-                for aa = 1:numel(obj.stormDB_assignment{pp})
-                    if isequal(obj.stormDB_assignment{pp}{aa}, indx)
-                        obj.stormDB_assignment{pp}{aa} = [];
-                        if numel(obj.project_response_files) >= pp && iscell(obj.project_response_files{pp})...
-                                && numel(obj.project_response_files{pp}) >= aa
-                            obj.project_response_files{pp}{aa} = [];
-                        end
-                    end
+        function drop_db_sims(obj, db_name)
+            % Registry Rows Of Storm Database db_name Dropped In Every Alternative (Case-Insensitive; Storm DB Entry Kept)
+            for pp = 1:numel(obj.sims)
+                for aa = 1:numel(obj.sims{pp})
+                    rows = obj.sims{pp}{aa};
+                    obj.sims{pp}{aa} = rows(~strcmpi(db_name, {rows.db}));
                 end
             end
         end
 
         function files = stormdb_run_files(obj, db_name)
-            % Run Files Of Storm Database db_name In Every Alternative (Library chess_paths:
-            % PSE\<pse>\<alt>\<wf_folder>\<db>_<wflow_name>_<config_file|project_forcing|project_responses|sampling_seed>.mat,
-            % Run Backups *_prev.mat Included). Exact Name Match (Case-Insensitive, Windows): A Storm DB Whose Name Only
-            % Starts With db_name Is Not Picked Up
+            % Run Files Of Storm Database db_name In Every Alternative, Read From Disk For Every Workflow (bundle_files: Every
+            % <db>_<WF>_* Run File, Run Backups *_prev.mat Included), So Bundles Without A Registry Row (Not Yet Synced, Or
+            % Without A Responses File) Are Included Too: A Storm DB Imported Again Under This Name Never Inherits Old Runs.
+            % Case-Insensitive DB Name
             files = cell(0, 1);
-            pse_dir = fullfile(obj.path, obj.name, 'PSE');
-            wf = {'PROS', 'PROS-(RB|FB)'; 'DET', 'DET'; 'LCS', 'LCS'};
-            for kk = 1:size(wf, 1)
-                d = dir(fullfile(pse_dir, '*', '*', wf{kk, 1}, '*.mat'));
-                pat = ['^' regexptranslate('escape', db_name) '_' wf{kk, 2}...
-                    '_(config_file|project_forcing|project_responses|sampling_seed)(_prev)?\.mat$'];
-                keep = ~cellfun(@isempty, regexpi({d.name}, pat, 'once'));
-                files = [files; fullfile({d(keep).folder}', {d(keep).name}')]; %#ok<AGROW>
+            for pp = 1:numel(obj.pse_list)
+                for aa = 1:numel(obj.alternative_list{pp})
+                    for wf = {'PROS-RB', 'DET', 'LCS', 'PROS-FB'}
+                        files = [files; obj.bundle_files(obj.pse_list{pp}, obj.alternative_list{pp}{aa}, db_name, wf{1})]; %#ok<AGROW>
+                    end
+                end
             end
         end
 
         function lines = stormdb_tied_sims(obj, db_name)
-            % Simulations Tied To Storm Database db_name, One Line Per Alternative: '<pse> / <alt>  (<workflows>)' From Its
-            % Run Files (stormdb_run_files; Workflow = File Name Token After '<db>_', e.g. PROS-RB), Or
-            % '<pse> / <alt>  (linked, no saved results)' For An Alternative Assigned To It Without Run Files
-            keys = cell(0, 1);
-            wfs = cell(0, 1);
-            files = obj.stormdb_run_files(db_name);
-            for ff = 1:numel(files)
-                parts = strsplit(files{ff}, filesep); % ...\PSE\<pse>\<alt>\<wf_folder>\<file> (Folder Names May Contain Dots)
-                key = [parts{end-3} ' / ' parts{end-2}];
-                [~, fname] = fileparts(files{ff});
-                wf = regexp(fname(numel(db_name)+2:end), '^[^_]+', 'match', 'once');
-                kk = find(strcmpi(key, keys), 1);
-                if isempty(kk)
-                    keys{end+1, 1} = key; %#ok<AGROW>
-                    wfs{end+1, 1} = {wf}; %#ok<AGROW>
-                elseif ~any(strcmpi(wf, wfs{kk}))
-                    wfs{kk}{end+1} = wf;
-                end
-            end
-            indx = find(strcmp(db_name, {obj.stormDB_list.db_name}), 1);
-            if ~isempty(indx) && iscell(obj.stormDB_assignment)
-                for pp = 1:min(numel(obj.stormDB_assignment), numel(obj.pse_list))
-                    if ~iscell(obj.stormDB_assignment{pp})
-                        continue
+            % Simulations Tied To Storm Database db_name: One Line Per Alternative With Registry Rows Of It Or Run Files Of It
+            % On Disk (bundle_files: Bundles Not Yet Synced Count Too, So Removing The DB Always Prompts),
+            % '<pse> / <alt>  (<workflows>)' (Case-Insensitive DB Name)
+            lines = cell(0, 1);
+            for pp = 1:numel(obj.pse_list)
+                for aa = 1:numel(obj.alternative_list{pp})
+                    wfs = {};
+                    if pp <= numel(obj.sims) && aa <= numel(obj.sims{pp})
+                        rows = obj.sims{pp}{aa};
+                        wfs = {rows(strcmpi(db_name, {rows.db})).workflow};
                     end
-                    for aa = 1:min(numel(obj.stormDB_assignment{pp}), numel(obj.alternative_list{pp}))
-                        key = [obj.pse_list{pp} ' / ' obj.alternative_list{pp}{aa}];
-                        if isequal(obj.stormDB_assignment{pp}{aa}, indx) && ~any(strcmpi(key, keys))
-                            keys{end+1, 1} = key; %#ok<AGROW>
-                            wfs{end+1, 1} = {'linked, no saved results'}; %#ok<AGROW>
+                    for wf = {'PROS-RB', 'DET', 'LCS', 'PROS-FB'}
+                        if ~any(strcmpi(wf{1}, wfs)) && ~isempty(obj.bundle_files(obj.pse_list{pp}, obj.alternative_list{pp}{aa}, db_name, wf{1}))
+                            wfs{end+1} = wf{1}; %#ok<AGROW>
                         end
                     end
+                    if ~isempty(wfs)
+                        lines{end+1, 1} = sprintf('%s / %s  (%s)', obj.pse_list{pp}, obj.alternative_list{pp}{aa},...
+                            strjoin(wfs, ', ')); %#ok<AGROW>
+                    end
                 end
             end
-            lines = cellfun(@(k, w) [k '  (' strjoin(w, ', ') ')'], keys, wfs, 'un', false);
+        end
+
+        function [rows, dropped, changed] = sim_rows(obj, pse_name, alt_name, repair)
+            % Registry Rows Of An Alternative Whose Responses File Exists (One isfile Each, sim_file), Sorted By Label
+            % (sim_label). repair (Default true): Rows Whose Responses File Is Missing Are Dropped (dropped) And Only That
+            % Alternative Is Re-Synced (sync_sims 'sync'; changed: Its stage1_changed Rows {pse, alt, db, workflow}); false:
+            % They Are Only Left Out. Unknown Names: No Rows
+            if nargin < 4
+                repair = true;
+            end
+            rows = chessProject.empty_sim_rows();
+            dropped = rows;
+            changed = cell(0, 4);
+            [p, a] = obj.alt_position(pse_name, alt_name);
+            if isempty(a) || p > numel(obj.sims) || a > numel(obj.sims{p})
+                return
+            end
+            rows = obj.sims{p}{a};
+            ok = false(size(rows));
+            for rr = 1:numel(rows)
+                ok(rr) = isfile(obj.sim_file(pse_name, alt_name, rows(rr)));
+            end
+            dropped = rows(~ok);
+            rows = rows(ok);
+            if repair && ~isempty(dropped)
+                obj.sims{p}{a} = rows;
+                info = obj.sync_sims({pse_name, alt_name}, 'sync');
+                changed = info.stage1_changed;
+                rows = obj.sims{p}{a};
+            end
+            [~, order] = sort(lower(arrayfun(@chessProject.sim_label, rows, 'un', false)));
+            rows = rows(order);
+        end
+
+        function upsert_sim(obj, pse_name, alt_name, row)
+            % Registry Row Of A Bundle (sim_row_from_config) Added, Or Replacing The Row Of The Same Storm DB + Workflow
+            % (Case-Insensitive)
+            obj.sync_alt_fields();
+            [p, a] = obj.alt_position(pse_name, alt_name);
+            rows = obj.sims{p}{a};
+            k = find(strcmpi(row.db, {rows.db}) & strcmpi(row.workflow, {rows.workflow}), 1);
+            if isempty(k)
+                k = numel(rows) + 1;
+            end
+            rows(k, 1) = row;
+            obj.sims{p}{a} = rows;
+        end
+
+        function drop_sim(obj, pse_name, alt_name, db_name, workflow)
+            % Registry Row Of One Bundle (Storm DB + Workflow, Case-Insensitive) Dropped; Its Files Are Not Touched (delete_sim)
+            [p, a] = obj.alt_position(pse_name, alt_name);
+            if isempty(a) || p > numel(obj.sims) || a > numel(obj.sims{p})
+                return
+            end
+            rows = obj.sims{p}{a};
+            obj.sims{p}{a} = rows(~(strcmpi(db_name, {rows.db}) & strcmpi(workflow, {rows.workflow})));
+        end
+
+        function db_name = default_db(obj, pse_name, alt_name)
+            % Storm DB Of The Alternative's Newest Registry Row (resp_file_date) Still In The Project, As Named In stormDB_list
+            % ('' If None)
+            db_name = '';
+            [p, a] = obj.alt_position(pse_name, alt_name);
+            if isempty(a) || p > numel(obj.sims) || a > numel(obj.sims{p})
+                return
+            end
+            names = {obj.stormDB_list.db_name};
+            rows = obj.sims{p}{a};
+            rows = rows(ismember(lower({rows.db}), lower(names)));
+            if ~isempty(rows)
+                [~, k] = max([rows.resp_file_date]);
+                db_name = names{find(strcmpi(rows(k).db, names), 1)};
+            end
+        end
+
+        function info = sync_sims(obj, scope, mode)
+            % Registry Rebuilt From Disk. scope: 'project' Or {pse, alt} (One Alternative). mode:
+            %   'sync': Rows Whose Bundle Is Gone Dropped, Rows Whose Responses File Date Changed Reloaded, Bundles Without A
+            %       Row Added (Only Changed Or New Bundles Load Their Config File)
+            %   'full': Existing Rows Ignored, Every Bundle Reloaded
+            % A Bundle = <db>_<WF>_project_responses.mat In PSE\<pse>\<alt>\<PROS|DET|LCS> (disk_bundles); Its Row Comes From
+            % Its Config File (sim_row_from_config; A Config File That Fails To Load Is Skipped). scope 'project' Also Converts
+            % The Storm DB Wizard Objects Of An Older Project File To Records (convert_stormdb_records) And Retries A Missing
+            % Storm DB layout (fill_stormdb_layouts; Both Modes).
+            % info: added, refreshed, dropped, skipped, converted (Counts); stage1_changed / stage1_dropped: Rows
+            %   {pse, alt, db, workflow} Of Multi-Line Stage 1 Bundles Reloaded With Another forcing_stamp Or structure_kt / Dropped
+            info = struct('added', 0, 'refreshed', 0, 'dropped', 0, 'skipped', 0, 'converted', 0,...
+                'stage1_changed', {cell(0, 4)}, 'stage1_dropped', {cell(0, 4)});
+            obj.sync_alt_fields();
+            if ischar(scope)
+                info.converted = obj.convert_stormdb_records();
+                obj.fill_stormdb_layouts();
+                for pp = 1:numel(obj.pse_list)
+                    for aa = 1:numel(obj.alternative_list{pp})
+                        info = obj.sync_alt(pp, aa, mode, info);
+                    end
+                end
+            else
+                [p, a] = obj.alt_position(scope{1}, scope{2});
+                if ~isempty(a)
+                    info = obj.sync_alt(p, a, mode, info);
+                end
+            end
+        end
+
+        function failed = delete_sim(obj, pse_name, alt_name, db_name, workflow)
+            % Deletes The Run Files Of One Bundle (bundle_files: Responses File First, So A Partial Delete Never Leaves A Saved
+            % Simulation Behind), Then Its Registry Row (drop_sim) Once The Responses File Is Gone. failed: '<file> (<reason>)'
+            % Per File Not Deleted
+            failed = cell(0, 1);
+            for ff = obj.bundle_files(pse_name, alt_name, db_name, workflow)'
+                try
+                    java.nio.file.Files.delete(java.io.File(ff{1}).toPath());
+                catch ME
+                    failed{end+1, 1} = sprintf('%s (%s)', ff{1}, chessProject.nio_reason(ME)); %#ok<AGROW>
+                end
+            end
+            if ~isfile(obj.sim_file(pse_name, alt_name, struct('db', db_name, 'workflow', workflow)))
+                obj.drop_sim(pse_name, alt_name, db_name, workflow);
+            end
+        end
+
+        function stage2 = multiline_stage2(obj, pse_name, alt_name)
+            % Stage 2 Alternatives Coupled To alt_name When It Is The Stage 1 Of A Multi-Line PSE (multiline), Else {}
+            stage2 = cell(0, 1);
+            mm = find(strcmp(pse_name, {obj.multiline.pse}), 1);
+            if ~isempty(mm) && strcmp(alt_name, obj.multiline(mm).stage1)
+                stage2 = obj.multiline(mm).stage2(:);
+            end
+        end
+
+        function tf = is_multiline(obj, pse_name)
+            % PSE Is A Multi-Line Transect (multiline)
+            tf = any(strcmp(pse_name, {obj.multiline.pse}));
+        end
+
+        function stage = alt_stage(obj, pse_name, alt_name)
+            % Multi-Line Stage Of An Alternative: 1, 2, Or 0 (Not A Multi-Line Alternative)
+            stage = 0;
+            mm = find(strcmp(pse_name, {obj.multiline.pse}), 1);
+            if isempty(mm)
+                return
+            elseif strcmp(alt_name, obj.multiline(mm).stage1)
+                stage = 1;
+            elseif any(strcmp(alt_name, obj.multiline(mm).stage2))
+                stage = 2;
+            end
+        end
+
+        function s1 = stage1_alt(obj, pse_name)
+            % Stage 1 Alternative Of A Multi-Line PSE ('' When pse_name Is Not One)
+            s1 = '';
+            mm = find(strcmp(pse_name, {obj.multiline.pse}), 1);
+            if ~isempty(mm)
+                s1 = obj.multiline(mm).stage1;
+            end
+        end
+
+        function names = multiline_pses(obj)
+            % Multi-Line PSE Names (Project PSE Order)
+            names = obj.pse_list(ismember(obj.pse_list, {obj.multiline.pse}));
+            names = names(:)';
+        end
+
+        function link_multiline(obj, pse_name, alt_name, stage)
+            % Record A Created Multi-Line Alternative: stage 1 Starts The Multi-Line PSE pse_name, stage 2 Joins It
+            if stage == 1
+                obj.multiline(end+1) = struct('pse', pse_name, 'stage1', alt_name, 'stage2', {cell(0, 1)});
+            else
+                mm = find(strcmp(pse_name, {obj.multiline.pse}), 1);
+                obj.multiline(mm).stage2{end+1, 1} = alt_name;
+            end
         end
 
         function sync_alt_fields(obj)
-            % Sizes Per-Alternative Fields To Match alternative_list
-            fields = {'stormDB_assignment', 'project_response_files'};
+            % Sizes The Registry (sims) To alternative_list: Alternatives Without An Entry Get No Rows
             nPSE = numel(obj.alternative_list);
-            for kk = 1:length(fields)
-                data = obj.(fields{kk});
-                if ~iscell(data)
-                    data = {};
+            data = obj.sims(1:min(numel(obj.sims), nPSE));
+            for pp = 1:nPSE
+                nAlt = numel(obj.alternative_list{pp});
+                if pp > numel(data) || ~iscell(data{pp})
+                    data{pp, 1} = repmat({chessProject.empty_sim_rows()}, nAlt, 1);
+                elseif numel(data{pp}) < nAlt
+                    data{pp}(end+1:nAlt, 1) = {chessProject.empty_sim_rows()};
+                else
+                    data{pp} = data{pp}(1:nAlt);
                 end
-                data = data(1:min(numel(data), nPSE));
-                for pp = 1:nPSE
-                    nAlt = numel(obj.alternative_list{pp});
-                    if pp > numel(data) || ~iscell(data{pp})
-                        data{pp, 1} = cell(nAlt, 1);
-                    elseif numel(data{pp}) < nAlt
-                        data{pp}(end+1:nAlt, 1) = {[]};
-                    else
-                        data{pp} = data{pp}(1:nAlt);
-                    end
-                end
-                obj.(fields{kk}) = data(:);
             end
+            obj.sims = data(:);
         end
 
         function relocate(obj, new_root)
@@ -443,30 +653,20 @@ classdef chessProject < handle
         end
 
         function remap_paths(obj, old_dir, new_dir)
-            % Stored Paths Under old_dir (Tide Files, Response Files, Storm DB Files, chs_dependencies) -> Same Subpath Under
-            % new_dir. source_paths (CHS Sources Outside The Project) And outpath_dirlist (Rebuilt On Use) Are Left As Is
+            % Stored Paths Under old_dir (Tide Files, Storm DB Files, chs_dependencies) -> Same Subpath Under new_dir.
+            % source_paths (CHS Sources Outside The Project) Are Left As Is. Registry Rows Hold No Paths
             remap = @(p) chessProject.relocate_path(p, old_dir, new_dir);
             obj.tide_files_list = cellfun(remap, obj.tide_files_list, 'un', false);
-            for pp = 1:numel(obj.project_response_files)
-                if ~iscell(obj.project_response_files{pp})
-                    continue
-                end
-                for aa = 1:numel(obj.project_response_files{pp})
-                    f = obj.project_response_files{pp}{aa};
-                    if ischar(f) && ~isempty(f)
-                        obj.project_response_files{pp}{aa} = remap(f);
-                    end
-                end
-            end
             for kk = 1:numel(obj.stormDB_list)
-                dbObj = obj.stormDB_list(kk);
-                dbObj.outpath = remap(dbObj.outpath);
-                if isstruct(dbObj.output_paths)
-                    flds = fieldnames(dbObj.output_paths);
+                rec = obj.stormDB_list(kk);
+                rec.outpath = remap(rec.outpath);
+                if isstruct(rec.output_paths)
+                    flds = fieldnames(rec.output_paths);
                     for ff = 1:numel(flds)
-                        dbObj.output_paths.(flds{ff}) = remap(dbObj.output_paths.(flds{ff}));
+                        rec.output_paths.(flds{ff}) = remap(rec.output_paths.(flds{ff}));
                     end
                 end
+                obj.stormDB_list(kk) = rec;
             end
             obj.chs_dependencies = remap(obj.chs_dependencies);
         end
@@ -520,6 +720,13 @@ classdef chessProject < handle
                     name_field = 'case_name';
             end
             msg = chessProject.name_problem(new_name, siblings, current);
+            stage = 0;
+            if strcmp(level, 'alt')
+                stage = obj.alt_stage(pse_name, alt_name);
+            end
+            if isempty(msg)
+                msg = chessProject.stage_name_problem(new_name, stage);
+            end
             if ~isempty(msg)
                 error('CHESS:renameInvalid', '%s', msg);
             end
@@ -533,13 +740,22 @@ classdef chessProject < handle
             if isfolder(old_dir)
                 chessProject.move_item(old_dir, new_dir, case_only);
             end
+            mm = find(strcmp(pse_name, {obj.multiline.pse}), 1);
             switch level
                 case 'proj'
                     obj.name = new_name;
                 case 'pse'
                     obj.pse_list{p} = new_name;
+                    if ~isempty(mm)
+                        obj.multiline(mm).pse = new_name;
+                    end
                 case 'alt'
                     obj.alternative_list{p}{a} = new_name;
+                    if stage == 1
+                        obj.multiline(mm).stage1 = new_name;
+                    elseif stage == 2
+                        obj.multiline(mm).stage2{strcmp(current, obj.multiline(mm).stage2)} = new_name;
+                    end
             end
             obj.remap_paths(old_dir, new_dir);
             info = struct('old_dir', old_dir, 'new_dir', new_dir, 'rewritten', {{}}, 'failed', {{}});
@@ -559,6 +775,26 @@ classdef chessProject < handle
                     info.rewritten{end+1, 1} = f;
                 catch ME
                     info.failed{end+1, 1} = [f ': ' ME.message];
+                end
+            end
+            % Renamed Multi-Line Stage 1: Its Stage 2 Run Configs Name It (config.multiline.stage1_alt, Library multiline_stage2_config), _prev Backups Included
+            if stage == 1
+                for s2 = obj.multiline(mm).stage2'
+                    files = dir(fullfile(parent, s2{1}, '**', '*_config_file*.mat'));
+                    for ff = 1:numel(files)
+                        f = fullfile(files(ff).folder, files(ff).name);
+                        try
+                            S = load(f, 'config');
+                            config = S.config;
+                            if isfield(config, 'multiline') && isstruct(config.multiline)
+                                config.multiline.stage1_alt = new_name;
+                                save(f, 'config', '-append');
+                                info.rewritten{end+1, 1} = f;
+                            end
+                        catch ME
+                            info.failed{end+1, 1} = [f ': ' ME.message];
+                        end
+                    end
                 end
             end
             % Project File Follows The Project Name (The Caller Then Saves The Updated Project Over It)
@@ -581,6 +817,9 @@ classdef chessProject < handle
             bundle_dir = fullfile(proj_dir, 'CHS_Dependencies');
             region = obj.project_region();
             [src, names] = chessProject.folder_entries(proj_dir, obj.name);
+            keep = ~strcmp(names, [obj.name '/.chess_lock']); % Session Lock (acquire_lock), Not Project Data
+            src = src(keep);
+            names = names(keep);
             if isempty(region)
                 note = sprintf('Project exported to %s without CHS_Dependencies: the project has no CHS region.', zip_file);
             elseif chessProject.same_path(obj.chs_dependencies, bundle_dir)
@@ -614,6 +853,131 @@ classdef chessProject < handle
         end
     end
 
+    methods (Access = private)
+        function [p, a] = alt_position(obj, pse_name, alt_name)
+            % Indices Of A PSE / Alternative In pse_list / alternative_list (a Empty When Not Found)
+            a = [];
+            p = find(strcmp(pse_name, obj.pse_list), 1);
+            if ~isempty(p) && p <= numel(obj.alternative_list)
+                a = find(strcmp(alt_name, obj.alternative_list{p}), 1);
+            end
+        end
+
+        function f = sim_file(obj, pse_name, alt_name, row)
+            % Responses File Of A Registry Row (Library chess_paths: <db>_<WF>_project_responses.mat)
+            paths = chess_paths(obj.path, obj.name, pse_name, alt_name, chessProject.workflow_number(row.workflow), row.db);
+            f = paths.out_files.resp_data;
+        end
+
+        function files = bundle_files(obj, pse_name, alt_name, db_name, workflow)
+            % Run Files Of One Bundle On Disk: <wf_dir>\<db>_<WF>_<config_file|project_forcing|project_responses|sampling_seed>
+            % (_prev).mat (Library chess_paths; Exact, Case-Insensitive Names), Responses File First. Column Cell
+            paths = chess_paths(obj.path, obj.name, pse_name, alt_name, chessProject.workflow_number(workflow), db_name);
+            d = dir(fullfile(paths.wf_dir, '*.mat'));
+            pat = ['^' regexptranslate('escape', [db_name '_' workflow])...
+                '_(config_file|project_forcing|project_responses|sampling_seed)(_prev)?\.mat$'];
+            d = d(~cellfun(@isempty, regexpi({d.name}, pat, 'once')));
+            files = cell(0, 1);
+            for ff = 1:numel(d)
+                files{end+1, 1} = fullfile(d(ff).folder, d(ff).name); %#ok<AGROW>
+            end
+            [~, order] = sort(~strcmpi(files, paths.out_files.resp_data));
+            files = files(order);
+        end
+
+        function bundles = disk_bundles(obj, pse_name, alt_name)
+            % Bundles On Disk With A Responses File: PSE\<pse>\<alt>\<wf_folder>\<db>_<WF>_project_responses.mat (Library
+            % chess_paths; Case-Insensitive, Run Backups Not Counted). Column Struct Array: db, workflow (Upper Case), config
+            % (Its Config File), datenum (Responses File Date)
+            bundles = struct('db', {}, 'workflow', {}, 'config', {}, 'datenum', {});
+            alt_dir = fullfile(obj.path, obj.name, 'PSE', pse_name, alt_name);
+            wf = {'PROS', 'PROS-RB|PROS-FB'; 'DET', 'DET'; 'LCS', 'LCS'};
+            for kk = 1:size(wf, 1)
+                d = dir(fullfile(alt_dir, wf{kk, 1}, '*_project_responses.mat'));
+                tok = regexpi({d.name}, ['^(.+)_(' wf{kk, 2} ')_project_responses\.mat$'], 'tokens', 'once');
+                for ff = find(~cellfun(@isempty, tok))
+                    wf_name = upper(tok{ff}{2});
+                    bundles(end+1, 1) = struct('db', tok{ff}{1}, 'workflow', wf_name, 'datenum', d(ff).datenum,...
+                        'config', fullfile(d(ff).folder, [tok{ff}{1} '_' wf_name '_config_file.mat'])); %#ok<AGROW>
+                end
+            end
+        end
+
+        function info = sync_alt(obj, p, a, mode, info)
+            % sync_sims Of One Alternative (Indices p, a); Counts And Stage 1 Lists Added To info
+            pse_name = obj.pse_list{p};
+            alt_name = obj.alternative_list{p}{a};
+            stage1 = obj.alt_stage(pse_name, alt_name) == 1;
+            old = obj.sims{p}{a};
+            matched = false(size(old));
+            rows = chessProject.empty_sim_rows();
+            for d = obj.disk_bundles(pse_name, alt_name)'
+                k = find(strcmpi(d.db, {old.db}) & strcmpi(d.workflow, {old.workflow}), 1);
+                matched(k) = true;
+                if strcmp(mode, 'sync') && ~isempty(k) && isequal(old(k).resp_file_date, d.datenum)
+                    rows(end+1, 1) = old(k); %#ok<AGROW>
+                    continue
+                end
+                try
+                    S = load(d.config, 'config', 'structure');
+                    row = chessProject.sim_row_from_config(S.config, S.structure, d.datenum);
+                catch
+                    info.skipped = info.skipped + 1;
+                    continue
+                end
+                if isempty(k)
+                    info.added = info.added + 1;
+                else
+                    info.refreshed = info.refreshed + 1;
+                    if stage1 && ~(strcmp(row.forcing_stamp, old(k).forcing_stamp) && isequaln(row.structure_kt, old(k).structure_kt))
+                        info.stage1_changed(end+1, :) = {pse_name, alt_name, row.db, row.workflow};
+                    end
+                end
+                rows(end+1, 1) = row; %#ok<AGROW>
+            end
+            gone = old(~matched);
+            info.dropped = info.dropped + numel(gone);
+            if stage1
+                for gg = 1:numel(gone)
+                    info.stage1_dropped(end+1, :) = {pse_name, alt_name, gone(gg).db, gone(gg).workflow};
+                end
+            end
+            obj.sims{p}{a} = rows;
+        end
+
+        function n = convert_stormdb_records(obj)
+            % Project File Saved With Storm DB Wizard Objects: stormDB_list Becomes Records (CHSStormDBImportUI.to_record; A
+            % Missing layout Is Filled By fill_stormdb_layouts). n: Records Converted
+            n = 0;
+            if ~isa(obj.stormDB_list, 'CHSStormDBImportUI')
+                return
+            end
+            recs = CHSStormDBImportUI.empty_records();
+            for kk = 1:numel(obj.stormDB_list)
+                recs(end+1, 1) = obj.stormDB_list(kk).to_record(); %#ok<AGROW>
+            end
+            obj.stormDB_list = recs;
+            n = numel(recs);
+        end
+
+        function fill_stormdb_layouts(obj)
+            % Storm DB Records Without A layout (Storm DB File Missing Or Unreadable When Last Tried): Computed From The Storm
+            % DB File When It Exists And Loads (One Load Each), Else Left Empty (The GUI Asks For A Re-Import)
+            for kk = 1:numel(obj.stormDB_list)
+                rec = obj.stormDB_list(kk);
+                if ~isempty(rec.layout) || ~isstruct(rec.output_paths) || ~isfield(rec.output_paths, 'storm_db')...
+                        || ~isfile(rec.output_paths.storm_db)
+                    continue
+                end
+                try
+                    S = load(rec.output_paths.storm_db, 'storm');
+                    obj.stormDB_list(kk).layout = CHSStormDBImportUI.storm_layout(S.storm);
+                catch
+                end
+            end
+        end
+    end
+
     %%
     methods (Access = public)
         function chess_structure = create_geometry(obj, pse_name, alt_name, pse_type)
@@ -640,6 +1004,133 @@ classdef chessProject < handle
 
     %% STATIC METHODS
     methods (Static)
+        function row = sim_row_from_config(config, structure, resp_file_date)
+            % Registry Row Of A Completed Run (Run Success And sync_sims). Names Only, Never Paths:
+            %   db, workflow: Library chess_paths db / wflow_name (e.g. 'PROS-RB')
+            %   data_types: Run Tab Data Type Symbols ('peaks_default', 'create_wlp', 'create_whp', 'use_timeseries')
+            %   storm_type: config.storm_sampling
+            %   run_date: 'yyyy-MM-dd HH:mm' Of resp_file_date (datenum Of <db>_<WF>_project_responses.mat)
+            %   forcing_stamp: config.forcing_stamp ('' If None)
+            %   structure_kt: crest_elevation, crest_width, seaside_slope, offshore_slope, toe_elevation Of The Run's
+            %       structure (NaN If Absent); Read For Multi-Line Stage 1 Rows (Stage 2 Kt And Offshore End)
+            %   inherited: multiline_inherited_fields Values Of The Run (Without Its Tide Indices And LCS Convergence Results;
+            %       tide_file As A File Name); Read For Multi-Line Stage 1 Rows
+            %   stage1_stamp: Multi-Line Stage 2 Rows: config.multiline.stage1_stamp (The Stage 1 forcing_stamp Its Forcing
+            %       Came From), Else ''
+            paths = chess_paths(config);
+            row = chessProject.empty_sim_rows();
+            row(1).db = paths.db;
+            row.workflow = paths.wflow_name;
+            dt = {'peaks_default', 'create_wlp', 'create_whp', 'use_timeseries'};
+            row.data_types = dt([config.use_peaks, config.create_wlp, config.create_whp, config.use_timeseries] == 1);
+            row.storm_type = config.storm_sampling;
+            row.run_date = char(datetime(resp_file_date, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm'));
+            row.resp_file_date = resp_file_date;
+            row.forcing_stamp = '';
+            if isfield(config, 'forcing_stamp')
+                row.forcing_stamp = config.forcing_stamp;
+            end
+            row.structure_kt = struct();
+            for fld = {'crest_elevation', 'crest_width', 'seaside_slope', 'offshore_slope', 'toe_elevation'}
+                row.structure_kt.(fld{1}) = NaN;
+                if isfield(structure, fld{1})
+                    row.structure_kt.(fld{1}) = structure.(fld{1});
+                end
+            end
+            row.inherited = struct();
+            run_outputs = {'tide_indx_xc', 'tide_indx_tc', 'tide_indx_cc', 'lcs_convergence_results'};
+            for fld = setdiff(multiline_inherited_fields(), run_outputs, 'stable')
+                if isfield(config, fld{1})
+                    row.inherited.(fld{1}) = config.(fld{1});
+                end
+            end
+            if isfield(row.inherited, 'tide_file')
+                [~, tide_name, tide_ext] = fileparts(row.inherited.tide_file);
+                row.inherited.tide_file = [tide_name tide_ext];
+            end
+            row.stage1_stamp = '';
+            if isfield(config, 'multiline') && isstruct(config.multiline) && isfield(config.multiline, 'stage1_stamp')
+                row.stage1_stamp = config.multiline.stage1_stamp;
+            end
+        end
+
+        function rows = empty_sim_rows()
+            % Registry Rows Of An Alternative Without Bundles (0x1, Every Row Field; sim_row_from_config)
+            rows = struct('db', {}, 'workflow', {}, 'data_types', {}, 'storm_type', {}, 'run_date', {}, 'resp_file_date', {},...
+                'forcing_stamp', {}, 'structure_kt', {}, 'inherited', {}, 'stage1_stamp', {});
+            rows = reshape(rows, 0, 1);
+        end
+
+        function label = sim_label(row)
+            % Display Label Of A Registry Row: '<db> | <workflow>'
+            label = [row.db ' | ' row.workflow];
+        end
+
+        function wf = workflow_number(wflow_name)
+            % Library Workflow Number Of A chess_paths wflow_name (PROS-RB 1, DET 2, LCS 3, PROS-FB 4; Case-Insensitive)
+            wf = find(strcmpi(wflow_name, {'PROS-RB', 'DET', 'LCS', 'PROS-FB'}), 1);
+        end
+
+        function [lock, holder, problem] = acquire_lock(proj_dir)
+            % Exclusive OS Lock Of A Project Folder (One GUI Session Per Project): java.nio FileChannel.tryLock On
+            % <proj_dir>\.chess_lock, Released By The OS When The Holding MATLAB Ends (Crash Included). Locked: lock =
+            % struct(file, raf, lock) (release_lock), The File Then Holds '<user>, <open time>'. Held Elsewhere (Another MATLAB,
+            % Or Another Channel In This One): lock = [], holder = That Text. The Locked Byte Lies Past The Text, So Other
+            % Sessions Can Still Read It (Windows Locks Are Mandatory). A Leftover File Without A Held Lock Blocks Nothing.
+            % Lock File Not Usable (Project Folder Missing, Read-Only, Access Denied): lock = [], holder = '', problem = Reason
+            holder = '';
+            problem = '';
+            f = fullfile(proj_dir, '.chess_lock');
+            try
+                raf = java.io.RandomAccessFile(f, 'rw');
+            catch ME
+                lock = [];
+                if ~isfolder(proj_dir)
+                    problem = sprintf('project folder "%s" not found', proj_dir);
+                else
+                    problem = sprintf('lock file "%s" cannot be written (%s)', f, chessProject.nio_reason(ME));
+                end
+                return
+            end
+            try
+                lk = raf.getChannel().tryLock(int64(2^31), int64(1), false);
+            catch % OverlappingFileLockException: Held In This MATLAB
+                lk = [];
+            end
+            if isempty(lk)
+                raf.close();
+                lock = [];
+                holder = strtrim(fileread(f));
+                if isempty(holder)
+                    holder = 'unknown user';
+                end
+                return
+            end
+            holder = sprintf('%s, %s', char(java.lang.System.getProperty('user.name')),...
+                char(datetime('now', 'Format', 'yyyy-MM-dd HH:mm')));
+            try
+                raf.setLength(0);
+                raf.write(typecast(unicode2native(holder, 'UTF-8'), 'int8'));
+            catch ME
+                lk.release();
+                raf.close();
+                lock = [];
+                holder = '';
+                problem = sprintf('lock file "%s" cannot be written (%s)', f, chessProject.nio_reason(ME));
+                return
+            end
+            lock = struct('file', f, 'raf', raf, 'lock', lk);
+        end
+
+        function release_lock(lock)
+            % Releases An acquire_lock Lock ([] Or Already Released: Nothing). The File Stays (Harmless Without A Held Lock)
+            if isempty(lock) || ~lock.lock.isValid()
+                return
+            end
+            lock.lock.release();
+            lock.raf.close();
+        end
+
         function struc_type = get_struc_type(pse_type)
             % GUI PSE Type -> Library Structure Type (Single Place For GUI Labels).
             % Former Labels 'Vertical Wall' / 'Low Crested Mound' Accepted For Previously Saved Projects
@@ -817,6 +1308,23 @@ classdef chessProject < handle
                 msg = sprintf('A folder named "%s" already exists on disk (folder %s).', new_name, chessProject.folder_name(parent_dir));
             else
                 msg = '';
+            end
+        end
+
+        function suffix = stage_suffix(stage)
+            % Name Suffix Of A Multi-Line Alternative: '_stage_1' | '_stage_2' ('' For stage 0)
+            suffix = '';
+            if stage > 0
+                suffix = sprintf('_stage_%d', stage);
+            end
+        end
+
+        function msg = stage_name_problem(new_name, stage)
+            % '' When new_name Keeps The Multi-Line Suffix Of Its Stage (stage_suffix; Any Name For stage 0), Else A Short Message
+            msg = '';
+            suffix = chessProject.stage_suffix(stage);
+            if ~endsWith(char(new_name), suffix) || strcmp(char(new_name), suffix)
+                msg = sprintf('A multi-line stage %d alternative name must end with "%s".', stage, suffix);
             end
         end
 

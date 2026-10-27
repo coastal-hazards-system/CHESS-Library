@@ -196,6 +196,41 @@ classdef auxUIFunctions < handle
             end
         end
 
+        function dropdown_list_dlgbox(obj, prompt, title_str, dd_label, choices, initial_choice, items_fcn, action_label)
+            % Pick One Of choices (Dropdown, Starts On initial_choice), Then One Or More Of items_fcn(choice) (Multi-Select List,
+            % Refilled When The Dropdown Changes, Nothing Selected). Buttons action_label (Enabled With A Selection) And
+            % Cancel (Last = Default). dialog_answer = struct('choice', ..., 'items', {Selected Items}) On action_label, [] Otherwise
+            obj.dialog_answer = [];
+            [fig, gl, btns] = obj.build_dialog(title_str, prompt, {action_label, 'Cancel'}, 480, [22 160]);
+            dd_gl = uigridlayout(gl, [1 2], 'Padding', [0 0 0 0], 'ColumnSpacing', 8, 'RowHeight', {22}, 'ColumnWidth', {'fit', '1x'});
+            dd_gl.Layout.Row = 2;
+            uilabel(dd_gl, 'Text', dd_label, 'FontSize', 12);
+            dd = uidropdown(dd_gl, 'Items', choices, 'FontSize', 12);
+            if any(strcmp(initial_choice, choices))
+                dd.Value = initial_choice;
+            end
+            lb = uilistbox(gl, 'Multiselect', 'on', 'FontSize', 12);
+            lb.Layout.Row = 3;
+            lb.ValueChangedFcn = @(~, ~) set_enable();
+            dd.ValueChangedFcn = @(~, ~) fill_list();
+            fill_list();
+            fig.Visible = 'on';
+            [answer, value] = obj.run_dialog(fig, @() struct('choice', dd.Value, 'items', {cellstr(lb.Value)}));
+            if strcmp(answer, action_label)
+                obj.dialog_answer = value;
+            end
+
+            function fill_list()
+                lb.Items = items_fcn(dd.Value);
+                lb.Value = {};
+                set_enable();
+            end
+
+            function set_enable()
+                btns(1).Enable = ~isempty(lb.Value);
+            end
+        end
+
         function [dlg] = progress_window(obj, percent, disp_str, window_title, dlg, include_cancel)
             % Progress Dialog Inside The set_parent Window (uiprogressdlg): Created On The First Call (dlg Empty), Updated
             % After, Closed At percent 1 (Or 100). percent NaN: Indeterminate Bar. A Cancel (include_cancel) Closes It And

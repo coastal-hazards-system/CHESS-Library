@@ -15,6 +15,7 @@ classdef PSECreationUI < handle
         PSENameEditField               matlab.ui.control.EditField
         AlternativeNameEditField       matlab.ui.control.EditField
         NameMessageLabel               matlab.ui.control.Label % One-Line Name Problem (Red); Empty When Both Names Are Valid
+        StageSuffixLabel               matlab.ui.control.Label % Locked Multi-Line Suffix After The Alternative Name ('_stage_1' / '_stage_2')
         pse_to_copy
         berm_rows % Template Berm Rows (Added When Berm Is Checked)
         GridLayout                     matlab.ui.container.GridLayout
@@ -30,15 +31,22 @@ classdef PSECreationUI < handle
         pse_name
         alt_name
         auxLib
+        ml_stage double = 0 % Multi-Line Stage Being Created: 0 Regular, 1 New Multi-Line PSE + Its Stage 1, 2 Stage 2 Of PSE alt_pse_name
     end
 
     %% DEFINE CLASS INSTANTIATION METHOD (CONSTRUCTOR)
     methods (Access = public)
-        function obj = PSECreationUI(pse_type, chess_project, alt_pse_name, parent_fig)
+        function obj = PSECreationUI(pse_type, chess_project, alt_pse_name, parent_fig, ml_stage)
             % parent_fig: Optional Window This Wizard Opens Centered On ([]: Screen)
+            % ml_stage: Optional Multi-Line Stage (Default 0): 1 New Multi-Line PSE (alt_pse_name ''), 2 Stage 2 Alternative Of
+            %   Multi-Line PSE alt_pse_name. The Alternative Name Gets The Locked Suffix chessProject.stage_suffix(ml_stage)
             if nargin < 4
                 parent_fig = [];
             end
+            if nargin < 5
+                ml_stage = 0;
+            end
+            obj.ml_stage = ml_stage;
             obj.chess_project = chess_project;
             obj.auxLib = auxUIFunctions();
             % Create UIFigure and components
@@ -65,8 +73,13 @@ classdef PSECreationUI < handle
                     obj.pse_name = alt_pse_name;
                     % Get ALternative List
                     alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
-                    % Grab Table From Existing Alternative
-                    load_pse_table = obj.chess_project.get_project_field('pse_tables', obj.pse_name, alt_list{1}, 'alt');
+                    % Grab Table From The First Existing Alternative Of This PSE Type (Multi-Line PSEs Mix Types), Else The Template
+                    geo_list = obj.chess_project.get_project_field('pse_geometry', obj.pse_name, '', 'pse');
+                    same_type = find(cellfun(@(g) isstruct(g) && isfield(g, 'pse_type') && strcmp(g.pse_type, pse_type), geo_list), 1);
+                    load_pse_table = obj.PSETable.Data;
+                    if ~isempty(same_type)
+                        load_pse_table = obj.chess_project.get_project_field('pse_tables', obj.pse_name, alt_list{same_type}, 'alt');
+                    end
                     % Assign Loaded Table To Alternative
                     obj.chess_project.add_project_field('alternative_list', obj.alt_name, obj.pse_name, obj.alt_name, 'alt');
                     obj.chess_project.add_project_field('pse_tables', {load_pse_table}, obj.pse_name, obj.alt_name, 'alt');
@@ -84,7 +97,7 @@ classdef PSECreationUI < handle
             % Create Geometry
             obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, pse_type);
             % Plot Geometry
-            obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
+            obj.plot_pse();
             % Verify If Berm BOx SHould Be Checked
             obj.AddBermCheckBox.Value = logical(obj.pse_geometry.add_toe_berm);
             obj.check_names(obj.PSENameEditField.Value, obj.AlternativeNameEditField.Value);
@@ -131,6 +144,18 @@ classdef PSECreationUI < handle
                 rows(pull_indx, 3) = {['[' lbl ']']};
             end
         end
+        function plot_pse(obj)
+            % Wizard Plot: The Alternative Being Created; A Multi-Line Stage 2 In Line Behind Its PSE's Stage 1, Drawn From
+            % Stage 1's Current PSE Geometry (No Run Tab Storm DB / Workflow Here To Pick A Stage 1 Run)
+            if obj.ml_stage == 2
+                s1_alt = obj.chess_project.stage1_alt(obj.pse_name);
+                obj.chess_project.plot_multiline(obj.pse_name, s1_alt,...
+                    obj.chess_project.get_project_field('pse_geometry', obj.pse_name, s1_alt, 'alt'), obj.alt_name, obj.PSEAxes);
+            else
+                obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
+            end
+        end
+
         % Create UI Component
         function create_ui(obj, pse_type, parent_fig)
             %% CREATE UI OBJECTS & PARENT FIGURE
@@ -138,6 +163,9 @@ classdef PSECreationUI < handle
             obj.uifig = uifigure('Visible', 'off');
             obj.uifig.Position = [100 100 575 495];
             obj.uifig.Name = [pse_type ' Creation Wizard'];
+            if obj.ml_stage > 0
+                obj.uifig.Name = sprintf('Multi-line Transect Stage %d: %s', obj.ml_stage, obj.uifig.Name);
+            end
 
             % Create GridLayout
             obj.GridLayout = uigridlayout(obj.uifig);
@@ -166,13 +194,15 @@ classdef PSECreationUI < handle
             obj.PSEAxes.ZGrid = 'on';
             obj.PSEAxes.ZMinorGrid = 'on';
 %             obj.PSEAxes.Position = [5 189 564 296];
-            axis(obj.PSEAxes, 'equal');
             obj.PSEAxes.Layout.Row = 1;
             obj.PSEAxes.Layout.Column = 1;
 
             % Create controlGridLayout
             obj.controlGridLayout = uigridlayout(obj.GridLayout);
-            obj.controlGridLayout.ColumnWidth = {75, 105, '1x', 65, '1x', 70};
+            obj.controlGridLayout.ColumnWidth = {75, 105, '1x', 0, 65, '1x', 70};
+            if obj.ml_stage > 0
+                obj.controlGridLayout.ColumnWidth{4} = 'fit';
+            end
             obj.controlGridLayout.RowHeight = {'1x'};
             obj.controlGridLayout.ColumnSpacing = 5;
             obj.controlGridLayout.Padding = [5 0 5 0];
@@ -201,19 +231,25 @@ classdef PSECreationUI < handle
             obj.AlternativeNameEditField.Layout.Row = 1;
             obj.AlternativeNameEditField.Layout.Column = 3;
 
+            % Create StageSuffixLabel (Multi-Line: Locked Name Suffix)
+            obj.StageSuffixLabel = uilabel(obj.controlGridLayout);
+            obj.StageSuffixLabel.Text = chessProject.stage_suffix(obj.ml_stage);
+            obj.StageSuffixLabel.Layout.Row = 1;
+            obj.StageSuffixLabel.Layout.Column = 4;
+
             % Create PSENameEditFieldLabel
             obj.PSENameEditFieldLabel = uilabel(obj.controlGridLayout);
 %             obj.PSENameEditFieldLabel.Position = [306 3 68 22];
             obj.PSENameEditFieldLabel.Text = 'PSE Name:';
             obj.PSENameEditFieldLabel.Layout.Row = 1;
-            obj.PSENameEditFieldLabel.Layout.Column = 4;
+            obj.PSENameEditFieldLabel.Layout.Column = 5;
 
             % Create PSENameEditField
             obj.PSENameEditField = uieditfield(obj.controlGridLayout, 'text');
             obj.PSENameEditField.Placeholder = 'Set Name';
             %             obj.PSENameEditField.Position = [380 3 93 22];
             obj.PSENameEditField.Layout.Row = 1;
-            obj.PSENameEditField.Layout.Column = 5;
+            obj.PSENameEditField.Layout.Column = 6;
 
             % Create CreatePSEButton
             obj.CreatePSEButton = uibutton(obj.controlGridLayout, 'push');
@@ -221,7 +257,7 @@ classdef PSECreationUI < handle
             obj.CreatePSEButton.Text = 'Create PSE';
             obj.CreatePSEButton.Enable = false;
             obj.CreatePSEButton.Layout.Row = 1;
-            obj.CreatePSEButton.Layout.Column = 6;
+            obj.CreatePSEButton.Layout.Column = 7;
 
             % Create NameMessageLabel
             obj.NameMessageLabel = uilabel(obj.GridLayout);
@@ -292,7 +328,7 @@ classdef PSECreationUI < handle
             obj.chess_project.set_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
             obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, obj.pse_type);
             % Plot Geometry
-            obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
+            obj.plot_pse();
         end
 
         function EditFieldValueChanged(obj, event)
@@ -317,7 +353,13 @@ classdef PSECreationUI < handle
             end
             if isempty(msg)
                 alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, '', 'pse');
-                alt_msg = chessProject.name_problem(alt_value, alt_list, '', alt_dir);
+                alt_msg = '';
+                if isempty(alt_value) && obj.ml_stage > 0 % The Suffix Alone Is Not A Name
+                    alt_msg = 'Enter a name.';
+                end
+                if isempty(alt_msg)
+                    alt_msg = chessProject.name_problem([char(alt_value) obj.StageSuffixLabel.Text], alt_list, '', alt_dir);
+                end
                 if ~isempty(alt_msg)
                     msg = ['Alternative name: ' alt_msg];
                 end
@@ -334,11 +376,11 @@ classdef PSECreationUI < handle
             obj.chess_project.set_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
             obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, obj.pse_type);
             % Plot Geometry
-            obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
+            obj.plot_pse();
         end
 
         function CreatePSEButtonPushed(obj, event)
-            % Names Re-Checked (The Disk May Have Changed), Then Applied Over The Placeholders
+            % Names Re-Checked (The Disk May Have Changed), Then Applied Over The Placeholders (Alternative: Name + Locked Suffix)
             if ~obj.check_names(obj.PSENameEditField.Value, obj.AlternativeNameEditField.Value)
                 return
             end
@@ -346,8 +388,9 @@ classdef PSECreationUI < handle
                 obj.chess_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
                 obj.pse_name = obj.PSENameEditField.Value;
             end
-            obj.chess_project.set_project_field('alternative_list', obj.AlternativeNameEditField.Value, obj.pse_name, obj.alt_name, 'alt');
-            obj.alt_name = obj.AlternativeNameEditField.Value;
+            new_alt = [obj.AlternativeNameEditField.Value obj.StageSuffixLabel.Text];
+            obj.chess_project.set_project_field('alternative_list', new_alt, obj.pse_name, obj.alt_name, 'alt');
+            obj.alt_name = new_alt;
             % Store Project Component Mapping
             obj.pse_created = 1;
             % Store UI Data
