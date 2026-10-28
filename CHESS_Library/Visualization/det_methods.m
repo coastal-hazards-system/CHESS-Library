@@ -44,8 +44,9 @@ classdef det_methods < CHESSPlotsBase
             end
             scatter(ax, T.(x_field)(ok), T.(y_field)(ok), 40, T.(c_field)(ok), 'filled', 'MarkerEdgeColor', [.3 .3 .3]);
             colormap(ax, parula);
-            cb = colorbar(ax);
-            cb.Label.String = c_lbl; cb.Label.Interpreter = 'latex'; cb.Label.FontSize = self.base_fnt;
+            colorbar(ax);
+            % Color Field Named In A Subtitle, Not The Colorbar Label: UIAxes Layout Lets Labels Longer Than The Bar Spill Out
+            subtitle(ax, ['Color: ' aux_methods.latex_escape(c_lbl)], 'Interpreter', 'latex', 'FontSize', self.base_fnt);
             ax.XScale = aux_methods.tern(x_log == 1, 'log', 'linear');
             ax.YScale = aux_methods.tern(y_log == 1, 'log', 'linear');
             aux_methods.pad_limits(ax, 'X', T.(x_field)(ok));
