@@ -1664,6 +1664,33 @@ classdef chessController < handle
             obj.save_project();
         end
 
+        function msg = copy_name_problem(obj, new_name)
+            % '' When new_name Can Name A Copy Of A PSE Of The Active Project (chessProject.name_problem: Unique Among Its PSEs,
+            % No Folder Or File Of That Name Under <project>\PSE, e.g. Left By A Removed PSE)
+            msg = chessProject.name_problem(new_name, obj.project.pse_list, '', fullfile(obj.project.path, obj.project.name, 'PSE'));
+        end
+
+        function err = copy_pse(obj, pse_name, new_name)
+            % Copy PSE pse_name Of The Active Project As new_name (chessProject.copy_pse: Alternatives, Tables, Geometry,
+            % Multi-Line Link; No Simulation Bundles). Refused During A Run Or For An Invalid Name. The Copy's First Alternative
+            % Selected, Project Saved. err: Error Text ('' On Success, Nothing Changed Otherwise)
+            err = obj.refusal(obj.project, 'Copying a PSE', 'changed');
+            if isempty(err)
+                err = obj.copy_name_problem(new_name);
+            end
+            if ~isempty(err)
+                return
+            end
+            try
+                obj.project.copy_pse(pse_name, new_name);
+            catch ME
+                err = ['Could not copy PSE "' pse_name '": ' ME.message];
+                return
+            end
+            obj.select(obj.project.name, new_name, '');
+            obj.save_project();
+        end
+
         function reselect(obj)
             % Active Selection Re-Applied By Name (Removed Items Fall Back To The First Available)
             if isempty(obj.project)

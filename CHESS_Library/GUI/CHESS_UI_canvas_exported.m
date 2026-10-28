@@ -15,6 +15,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         FloodwallMenu                 matlab.ui.container.Menu
         LowCrestedBreakwaterMenu      matlab.ui.container.Menu
         MultilineTransectMenu         matlab.ui.container.Menu
+        CopyExisitingPSEMenu          matlab.ui.container.Menu
         AlternativeMenu               matlab.ui.container.Menu
         TidesMenu                     matlab.ui.container.Menu
         RemoveProjectElementMenu      matlab.ui.container.Menu
@@ -2637,6 +2638,43 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.controller.release_lock();
             delete(app);
         end
+
+        % Menu selected function: CopyExisitingPSEMenu
+        function CopyExisitingPSEMenuSelected(app, event)
+             % Copy A PSE Of The Active Project Under A New Name: All Its Alternatives, Tables, Geometry And Multi-Line Link,
+            % Never Its Simulation Bundles (chessController.copy_pse). The Copy Goes To The End Of The PSE List And Is Selected
+            if isempty(app.controller.project)
+                return
+            end
+            title_str = 'Copy Existing PSE';
+            msg = app.controller.refusal(app.controller.project, 'Copying a PSE', 'changed');
+            if ~isempty(msg)
+                app.auxLib.alert_dlgbox(msg, title_str, 'info');
+                return
+            end
+            pseList = app.controller.project.get_project_field('pse_list', '', '', 'proj');
+            if isempty(pseList)
+                return
+            end
+            app.auxLib.dropdown_input_dlgbox('Choose PSE to copy (all alternatives; simulation results are not copied).',...
+                pseList, title_str, 'OK');
+            pse_name = app.auxLib.dialog_answer;
+            if isempty(pse_name)
+                return
+            end
+            app.auxLib.editfield_input_dlgbox(sprintf('Name of the copy of PSE "%s":', pse_name), title_str, [pse_name '_copy'],...
+                @(name) app.controller.copy_name_problem(name), 'Copy');
+            new_name = app.auxLib.dialog_answer;
+            if isempty(new_name)
+                return
+            end
+            err = app.controller.copy_pse(pse_name, new_name);
+            if ~isempty(err)
+                app.auxLib.alert_dlgbox(err, title_str, 'error');
+                return
+            end
+            app.refresh();
+        end
     end
 
     % Component initialization
@@ -2709,6 +2747,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.MultilineTransectMenu = uimenu(app.PSEMenu);
             app.MultilineTransectMenu.MenuSelectedFcn = createCallbackFcn(app, @MultilineTransectMenuSelected, true);
             app.MultilineTransectMenu.Text = 'Multi-line Transect';
+
+            % Create CopyExisitingPSEMenu
+            app.CopyExisitingPSEMenu = uimenu(app.PSEMenu);
+            app.CopyExisitingPSEMenu.MenuSelectedFcn = createCallbackFcn(app, @CopyExisitingPSEMenuSelected, true);
+            app.CopyExisitingPSEMenu.Text = 'Copy Exisiting PSE';
 
             % Create AlternativeMenu
             app.AlternativeMenu = uimenu(app.AddProjectElementMenu);

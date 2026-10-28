@@ -385,6 +385,32 @@ classdef chessProject < handle
             obj.alt_indx = [];
         end
 
+        function copy_pse(obj, pse_name, new_name)
+            % Copy Of PSE pse_name Appended As new_name (End Of The PSE List): Its Alternatives (Same Names), PSE Tables,
+            % Geometry And Multi-Line Link. Simulation Bundles Are Not Copied: Empty Registry Rows, Nothing On Disk Until A Run.
+            % The Caller Checks new_name (name_problem)
+            p = find(strcmp(pse_name, obj.pse_list), 1);
+            if isempty(p)
+                error('CHESS:copyPseMissing', 'PSE "%s" is not in project %s.', pse_name, obj.name);
+            end
+            n = numel(obj.pse_list) + 1;
+            fields = {'alternative_list', 'pse_tables', 'pse_geometry'};
+            for kk = 1:length(fields)
+                if numel(obj.(fields{kk})) >= p
+                    obj.(fields{kk}){n, 1} = obj.(fields{kk}){p};
+                end
+            end
+            obj.pse_list{n, 1} = new_name;
+            obj.sync_alt_fields();
+            mm = find(strcmp(pse_name, {obj.multiline.pse}), 1);
+            if ~isempty(mm)
+                obj.multiline(end+1) = obj.multiline(mm);
+                obj.multiline(end).pse = new_name;
+            end
+            obj.pse_indx = [];
+            obj.alt_indx = [];
+        end
+
         function n_alt = stormdb_usage(obj, db_name)
             % Number Of Alternatives With A Registry Row (sims) Of Storm Database db_name (Case-Insensitive)
             n_alt = 0;
