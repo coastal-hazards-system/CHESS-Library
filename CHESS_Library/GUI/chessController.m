@@ -27,6 +27,7 @@ classdef chessController < handle
     properties (Access = private)
         messages = struct('severity', {}, 'title', {}, 'text', {}) % Queued Messages (take_messages)
         drift = cell(0, 5) % Multi-Line Stage 1 Drift To Ask About (take_drift): {proj, pse, s1_alt, db_wf, kind}
+        runRequest = [] % Run Tab Storm DB + Workflow Of A Clicked Bundle (select_bundle), Taken Once By The Run Tab Refresh
         lcsCheck = [] % Last LCS Convergence Question (lcs_question): struct(config, q, n_req), Reused While config Is Unchanged
         oldDbWarned = {} % Storm DB Files (output_paths.storm_db) Already Warned As Older CHESS Version (Once Per Session)
     end
@@ -1784,6 +1785,28 @@ classdef chessController < handle
             end
             obj.reselect();
             obj.save_project();
+        end
+
+        function ok = select_bundle(obj, proj_name, pse_name, alt_name, label)
+            % Project Tree Bundle Node Clicked: Its Alternative Selected, The Run Tab Storm DB + Workflow Set To The Bundle's
+            % (run_request: Applied By The Run Tab Refresh Over Its Defaults And Snapshot) And Its Saved Simulation Key
+            % Re-Resolved, So The Refresh Loads It Without A Question (An Explicit Pick). ok: The Bundle Is In The Registry
+            obj.select(proj_name, pse_name, alt_name);
+            rows = obj.sim_rows(obj.project, pse_name, alt_name);
+            row = rows(strcmp(arrayfun(@chessProject.sim_label, rows, 'un', false), label));
+            ok = ~isempty(row);
+            if ~ok
+                return
+            end
+            obj.runRequest = struct('db', row(1).db, 'workflow', chessProject.workflow_number(row(1).workflow));
+            obj.set_run_selection(obj.runRequest.db, obj.runRequest.workflow);
+            obj.reset_key();
+        end
+
+        function req = take_run_request(obj)
+            % Storm DB + Workflow Requested By select_bundle ([] If None), Then Cleared
+            req = obj.runRequest;
+            obj.runRequest = [];
         end
 
         function set_snapshot(obj, values)

@@ -954,6 +954,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Snapshot Current Run Tab State (Restored If Context Is Unchanged: chessController.set_context)
             app.get_sim_state();
             new_context = app.controller.set_context();
+            req = app.controller.take_run_request(); % Clicked Simulation Bundle: Its Storm DB + Workflow Win
             % Nothing To Show Without An Alternative And A Storm DB
             dbList = [];
             if app.controller.has_active_alt()
@@ -970,7 +971,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             current_db = app.StormDBDropDown_run.Value;
             app.StormDBDropDown_run.Items = db_names;
             default_db = app.controller.project.default_db(pse_name, alt_name);
-            if new_context && ~isempty(default_db)
+            if ~isempty(req) && any(strcmp(req.db, db_names))
+                app.StormDBDropDown_run.Value = req.db;
+            elseif new_context && ~isempty(default_db)
                 app.StormDBDropDown_run.Value = default_db;
             elseif ~new_context && any(strcmp(current_db, db_names))
                 app.StormDBDropDown_run.Value = current_db;
@@ -1000,6 +1003,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 app.set_sim_state(3, '');
             else
                 app.set_sim_state(1, '');
+            end
+            if ~isempty(req) && any(strcmp(req.db, db_names)) % Over The Restored Snapshot
+                app.StormDBDropDown_run.Value = req.db;
+                app.WorkflowDropDown.Value = req.workflow;
             end
 
             % 6. Inputs Table & Run Button (Constants Table: Callers Run populate_constants_table Next)
@@ -1810,67 +1817,101 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         function update_project_tree(app)
             % Project Tree: Project > PSE > Alternative > Simulation Bundle Nodes. NodeData: type ('proj' | 'pse' | 'alt' | 'sim')
             % And name (Item Name; An Alternative's Text Adds A Multi-Line Stage Marker). Bundles From The Registry (sim_rows: One
-            % isfile Each, No Folder Scan); A Stale Multi-Line Stage 2 Bundle (sim_is_stale) Is Marked '[stale]'
-            % Clear Project Tree (And The Nodes' Right-Click Menus, Which Belong To The Figure)
-            delete(app.ProjectTree.Children);
-            delete(findall(app.UIFigure, 'Type', 'uicontextmenu', 'Tag', 'ProjectTreeNodeMenu'));
-            act_node = [];
+            % isfile Each, No Folder Scan); A Stale Multi-Line Stage 2 Bundle (sim_is_stale) Is Marked '[stale]'.
+            % Rebuilt Only When Its Content Changed (Node List Kept In The Tree's UserData); Otherwise Only The Active Node Is
+            % Highlighted, So Scrolling And Expanded / Collapsed Nodes Stay As The User Left Them. The Active Node Is Scrolled To
             [act_pse, act_alt] = app.controller.active_names();
+            % 1. Node List: {parent row (0: Tree), Text, NodeData}, Depth First (Creation Order); act_row: Active Node
+            items = cell(0, 3);
+            act_row = 0;
             for kk = 1:length(app.controller.projects)
                 wObj = app.controller.projects(kk);
-                % Create Project Node
-                proj_node = uitreenode(app.ProjectTree, 'Text', wObj.name,...
-                    'NodeData', struct('type', 'proj', 'name', wObj.name));
-                add_node_menu(proj_node);
-                if wObj == app.controller.project
-                    act_node = proj_node;
+                is_act = wObj == app.controller.project;
+                items(end+1, :) = {0, wObj.name, struct('type', 'proj', 'name', wObj.name)}; %#ok<AGROW>
+                proj_row = size(items, 1);
+                if is_act
+                    act_row = proj_row;
                 end
                 % Loop Across PSEs (Read Lists Directly, No Working Index Side Effects)
                 for jj = 1:length(wObj.pse_list)
-                    pse_node = uitreenode(proj_node, 'Text', wObj.pse_list{jj},...
-                        'NodeData', struct('type', 'pse', 'name', wObj.pse_list{jj}));
-                    add_node_menu(pse_node);
-                    if wObj == app.controller.project && strcmp(wObj.pse_list{jj}, act_pse)
-                        act_node = pse_node;
+                    pse_name = wObj.pse_list{jj};
+                    items(end+1, :) = {proj_row, pse_name, struct('type', 'pse', 'name', pse_name)}; %#ok<AGROW>
+                    pse_row = size(items, 1);
+                    if is_act && strcmp(pse_name, act_pse)
+                        act_row = pse_row;
                     end
                     s1_rows = [];
-                    if wObj.is_multiline(wObj.pse_list{jj})
-                        s1_rows = app.sim_rows(wObj, wObj.pse_list{jj}, wObj.stage1_alt(wObj.pse_list{jj}));
+                    if wObj.is_multiline(pse_name)
+                        s1_rows = app.sim_rows(wObj, pse_name, wObj.stage1_alt(pse_name));
                     end
-                    % Loop Across Alternatives
+                    % Loop Across Alternatives (Multi-Line: Stage Marker In The Text; Names Are Read From NodeData.name)
                     altList = wObj.alternative_list{jj};
                     for ii = 1:length(altList)
-                        % Multi-Line Alternatives: Stage Marker In The Text (Names Are Read From NodeData.name)
                         alt_text = altList{ii};
-                        stage = wObj.alt_stage(wObj.pse_list{jj}, altList{ii});
+                        stage = wObj.alt_stage(pse_name, altList{ii});
                         if stage > 0
                             alt_text = sprintf('%s  [multi-line stage %d]', alt_text, stage);
                         end
-                        alt_node = uitreenode(pse_node, 'Text', alt_text,...
-                            'NodeData', struct('type', 'alt', 'name', altList{ii}));
-                        add_node_menu(alt_node);
-                        if wObj == app.controller.project && strcmp(wObj.pse_list{jj}, act_pse) && strcmp(altList{ii}, act_alt)
-                            act_node = alt_node;
+                        items(end+1, :) = {pse_row, alt_text, struct('type', 'alt', 'name', altList{ii})}; %#ok<AGROW>
+                        alt_row = size(items, 1);
+                        if is_act && strcmp(pse_name, act_pse) && strcmp(altList{ii}, act_alt)
+                            act_row = alt_row;
                         end
-                        % Simulation Bundles (Storm DB | Workflow), Display Only
-                        rows = app.sim_rows(wObj, wObj.pse_list{jj}, altList{ii});
+                        % Simulation Bundles (Storm DB | Workflow): A Click Loads That Run
+                        rows = app.sim_rows(wObj, pse_name, altList{ii});
                         for ss = 1:numel(rows)
                             label = chessProject.sim_label(rows(ss));
                             sim_text = label;
                             if stage == 2 && app.controller.sim_is_stale(rows(ss), s1_rows)
                                 sim_text = [label '  [stale]'];
                             end
-                            sim_node = uitreenode(alt_node, 'Text', sim_text,...
-                                'NodeData', struct('type', 'sim', 'name', label, 'label', label));
-                            add_node_menu(sim_node);
+                            items(end+1, :) = {alt_row, sim_text, struct('type', 'sim', 'name', label, 'label', label)}; %#ok<AGROW>
                         end
                     end
                 end
             end
-            % Highlight Active Node
-            if ~isempty(act_node)
-                expand(app.ProjectTree, 'all');
+            % 2. Same Content As Shown: Keep The Nodes, Highlight Only. Else Rebuild (Old Right-Click Menus Deleted: They Belong
+            % To The Figure), All Expanded
+            nodes = tree_nodes(app.ProjectTree);
+            sig = [items(:, 1:2), cellfun(@(d) [d.type '|' d.name], items(:, 3), 'un', false)];
+            if ~(isequal(sig, app.ProjectTree.UserData) && numel(nodes) == size(items, 1))
+                delete(app.ProjectTree.Children);
+                delete(findall(app.UIFigure, 'Type', 'uicontextmenu', 'Tag', 'ProjectTreeNodeMenu'));
+                nodes = gobjects(size(items, 1), 1);
+                for rr = 1:size(items, 1)
+                    parent = app.ProjectTree;
+                    if items{rr, 1} > 0
+                        parent = nodes(items{rr, 1});
+                    end
+                    nodes(rr) = uitreenode(parent, 'Text', items{rr, 2}, 'NodeData', items{rr, 3});
+                    add_node_menu(nodes(rr));
+                end
+                app.ProjectTree.UserData = sig;
+                if act_row > 0
+                    expand(app.ProjectTree, 'all');
+                end
+            end
+            % Highlight Active Node (Its Ancestors Expanded) And Scroll It Into View
+            if act_row > 0
+                act_node = nodes(act_row);
+                p = act_node.Parent;
+                while isa(p, 'matlab.ui.container.TreeNode')
+                    expand(p);
+                    p = p.Parent;
+                end
                 app.ProjectTree.SelectedNodes = act_node;
+                try
+                    scroll(app.ProjectTree, act_node);
+                catch % Releases Without Tree Node Scrolling
+                end
+            end
+
+            function list = tree_nodes(parent)
+                % Tree Nodes Depth First (Creation Order)
+                list = gobjects(0, 1);
+                for cc = 1:numel(parent.Children)
+                    list = [list; parent.Children(cc); tree_nodes(parent.Children(cc))]; %#ok<AGROW>
+                end
             end
 
             function add_node_menu(node)
@@ -1898,6 +1939,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 node.ContextMenu = cm;
             end
         end
+
 
         function update_results_controls(app, level)
             % [NEW] Results Dropdowns Follow The Selected Plot Type (Library Method Inputs).
@@ -2073,13 +2115,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Selection changed function: ProjectTree
         function ProjectTree_SelectionChanged(app, event)
-            % Simulation Bundle Nodes Are Display Only: The Previous Selection Stays
-            if strcmp(event.SelectedNodes.NodeData.type, 'sim')
-                app.ProjectTree.SelectedNodes = event.PreviousSelectedNodes;
-                return
-            end
-            % Resolve Clicked Node To Project/PSE/Alternative Names (NodeData.name: Alternative Texts Carry A Multi-Line Stage Marker)
-            [proj_node, pse_node, alt_node] = app.get_node_family();
+            % Resolve Clicked Node To Project/PSE/Alternative Names (NodeData.name: Alternative Texts Carry A Multi-Line Stage
+            % Marker; A Simulation Bundle Node: Its Alternative)
+            [proj_node, pse_node, alt_node, active_node, active_type] = app.get_node_family();
             % Another Project: Locked First (lock_project); Open In Another Session: Notice, The Previous Selection Stays
             if ~app.lock_project(app.tree_node_project(proj_node))
                 app.ProjectTree.SelectedNodes = event.PreviousSelectedNodes;
@@ -2092,6 +2130,17 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             if ~isempty(alt_node)
                 alt_name = alt_node.NodeData.name;
+            end
+            % Simulation Bundle: Its Alternative With The Run Tab Storm DB + Workflow Of The Bundle, Loaded Without A Question
+            % (chessController.select_bundle). Not In The Registry (Gone From Disk): The Previous Selection Stays
+            if strcmp(active_type, 'sim')
+                if app.controller.select_bundle(proj_node.NodeData.name, pse_name, alt_name, active_node.NodeData.label)
+                    app.refresh(false);
+                else
+                    app.controller_done();
+                    app.ProjectTree.SelectedNodes = event.PreviousSelectedNodes;
+                end
+                return
             end
             app.controller.select(proj_node.NodeData.name, pse_name, alt_name);
             app.refresh(true);
