@@ -15,7 +15,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         FloodwallMenu                 matlab.ui.container.Menu
         LowCrestedBreakwaterMenu      matlab.ui.container.Menu
         MultilineTransectMenu         matlab.ui.container.Menu
-        CopyExisitingPSEMenu          matlab.ui.container.Menu
+        CopyExistingPSEMenu           matlab.ui.container.Menu
         AlternativeMenu               matlab.ui.container.Menu
         TidesMenu                     matlab.ui.container.Menu
         RemoveProjectElementMenu      matlab.ui.container.Menu
@@ -2639,8 +2639,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             delete(app);
         end
 
-        % Menu selected function: CopyExisitingPSEMenu
-        function CopyExisitingPSEMenuSelected(app, event)
+        % Menu selected function: CopyExistingPSEMenu
+        function CopyExistingPSEMenuSelected(app, event)
              % Copy A PSE Of The Active Project Under A New Name: All Its Alternatives, Tables, Geometry And Multi-Line Link,
             % Never Its Simulation Bundles (chessController.copy_pse). The Copy Goes To The End Of The PSE List And Is Selected
             if isempty(app.controller.project)
@@ -2748,10 +2748,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.MultilineTransectMenu.MenuSelectedFcn = createCallbackFcn(app, @MultilineTransectMenuSelected, true);
             app.MultilineTransectMenu.Text = 'Multi-line Transect';
 
-            % Create CopyExisitingPSEMenu
-            app.CopyExisitingPSEMenu = uimenu(app.PSEMenu);
-            app.CopyExisitingPSEMenu.MenuSelectedFcn = createCallbackFcn(app, @CopyExisitingPSEMenuSelected, true);
-            app.CopyExisitingPSEMenu.Text = 'Copy Exisiting PSE';
+            % Create CopyExistingPSEMenu
+            app.CopyExistingPSEMenu = uimenu(app.PSEMenu);
+            app.CopyExistingPSEMenu.MenuSelectedFcn = createCallbackFcn(app, @CopyExistingPSEMenuSelected, true);
+            app.CopyExistingPSEMenu.Text = 'Copy Existing PSE';
 
             % Create AlternativeMenu
             app.AlternativeMenu = uimenu(app.AddProjectElementMenu);
@@ -2927,9 +2927,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
             % Create Image
             app.Image = uiimage(app.ProjectPanelGrid);
+            app.Image.BackgroundColor = [0.7725 0.8706 0.9098];
             app.Image.Layout.Row = 1;
             app.Image.Layout.Column = 1;
-            app.Image.ImageSource = fullfile(pathToMLAPP, 'SS_comb_logo.png');
+            app.Image.ImageSource = fullfile(pathToMLAPP, 'CHESS_logo_NOAA_white-outline.png');
 
             % Create ConstantsTable
             app.ConstantsTable = uitable(app.ProjectPanelGrid);
@@ -3566,14 +3567,26 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         % Construct app
         function app = CHESS_UI_canvas_exported
 
-            % Create UIFigure and components
-            createComponents(app)
+            runningApp = getRunningApp(app);
 
-            % Register the app with App Designer
-            registerApp(app, app.UIFigure)
+            % Check for running singleton app
+            if isempty(runningApp)
 
-            % Execute the startup function
-            runStartupFcn(app, @startupFcn)
+                % Create UIFigure and components
+                createComponents(app)
+
+                % Register the app with App Designer
+                registerApp(app, app.UIFigure)
+
+                % Execute the startup function
+                runStartupFcn(app, @startupFcn)
+            else
+
+                % Focus the running singleton app
+                figure(runningApp.UIFigure)
+
+                app = runningApp;
+            end
 
             if nargout == 0
                 clear app
