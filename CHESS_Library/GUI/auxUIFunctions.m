@@ -273,6 +273,15 @@ classdef auxUIFunctions < handle
             obj.run_dialog(fig);
         end
 
+        function alert_dlgbox(obj, prompt, title_str, icon)
+            % Non-Blocking Alert On The set_parent Window (uialert). icon: 'info' | 'warning' | 'error' | 'success' | ''
+            if nargin < 4
+                icon = 'info';
+            end
+            obj.dialog_answer = [];
+            uialert(obj.parentFig, prompt, title_str, 'Icon', icon);
+        end
+
         function choice_dlgbox(obj, prompt, options, title_str, fig_size)
             % Modal Message With One Button Per Option; dialog_answer = Clicked Option ([] If Closed)
             % fig_size: Optional [width height] (Default: Width 440, Height Fits The Message)

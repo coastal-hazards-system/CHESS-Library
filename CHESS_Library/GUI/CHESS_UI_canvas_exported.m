@@ -132,77 +132,83 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
 
     properties (Access = private)
-        chess_projects % Loaded CHESS projects
-        wProj % Active project Handle
-        proj_indx
-        pse_indx
-        alt_indx
+        controller % chessController: Loaded Projects, Active Selection, Run Tab Inputs, Run Path (Created In startupFcn)
         auxLib
-        simState % Description
-        tableState % Description
-        stormCache % [NEW] Loaded storm Data Keyed By File (containers.Map)
-        simContext % [NEW] Project|PSE|Alternative Last Shown On CHESS Run Tab
-        resultsState % [NEW] Loaded Results (Resp, config, structure, project_forcing, storm DB) For plot_project_responses
         resultsPlotOptions % [NEW] Results Plot Options Per Plot Type (Right-Click "Plot Options...", Session Only)
         resultsMenu % [NEW] Results Axes Right-Click Menu (Created In startupFcn)
         resultsPopout % [NEW] Classic Figure Reused For Multi-Panel Results Plots
         resultsTablePopout % DET Response Table Pop-Out (uifigure From det_methods.response_table)
-        simKey % [NEW] Saved Simulation Key (Config File Of Alternative + Workflow + Run Tab Storm DB) Last Resolved By sync_saved_sim
-        declinedSimKey = '' % Saved Simulation Key Whose Load Was Declined ("Keep current inputs"): Results Tab Kept Cleared While sim_key() Equals It
-        oldDbWarned = {} % Storm DB Files (output_paths.storm_db) Already Alerted As Older CHESS Version (Once Per Session)
         plotFontSize = 12 % Base Font Of Every GUI Plot, Tab And Pop-Out (Library Rule: Title +2, Labels Base, Ticks -2)
         resultsMirror % Panel Over PSEAxes_3 (Same Grid Cell) Showing A Multi-Panel Results Plot When The Cell Is Big Enough (Created In startupFcn)
         resultsMirrorFits = [] % Fit State Of The Shown Multi-Panel Results Plot ([] If None): The Tab Resize Redraws Only When It Flips
-        runActive = false
-        projectLock = [] % Lock Of The Active Project Folder (lock_project): struct('proj', chessProject, 'lock', chessProject.acquire_lock Output), [] If None
     end
 
     methods (Access = private)
         function append_project(app, wProj)
-            % Append SS Project & Make It Active
-            app.chess_projects = [app.chess_projects; wProj];
-            app.set_active_selection(wProj.name, '', '');
-            % Keep Per-Alternative Fields Sized
-            app.project_field_ini();
-            % Refresh UI
-            app.refresh_active_view();
+            % Append SS Project & Make It Active (chessController.add_project), Then Refresh UI
+            app.controller.add_project(wProj);
+            app.refresh();
+        end
+
+        function answer = ask_question(app, q)
+            % Asks A chessController Question (Struct id, kind, title, text, items, choices, default, size) Through auxLib;
+            % Returns The Answer ([] When Closed)
+            switch q.kind
+                case {'choice', 'info'} % info: Notice With OK Only
+                    app.auxLib.choice_dlgbox(q.text, q.choices, q.title, q.size);
+            end
+            answer = app.auxLib.dialog_answer;
+        end
+
+        function controller_done(app)
+            % After A chessController Call: Its Queued Messages Shown (show_messages), Then The Multi-Line Stage 1 Drift It
+            % Found Asked (drift_question / apply_drift)
+            app.show_messages();
+            drift = app.controller.take_drift();
+            for dd = 1:size(drift, 1)
+                q = app.controller.drift_question(drift(dd, :));
+                if ~isempty(q)
+                    app.controller.apply_drift(drift(dd, :), app.ask_question(q));
+                    app.show_messages();
+                end
+            end
         end
 
         function [s1_row, msg] = apply_multiline_locks(app)
-            % Multi-Line Run Tab Rules (set_input_table, Before The Inputs Table Rows). Stage 1: Hm0t Kept Checked (Its Stage 2
-            % Forcing). Stage 2 With A Stage 1 Run Of The Run Tab Storm DB + Workflow (multiline_stage1_row: Its Registry Row):
-            % Storm Type, Data Types, SLR And Tide File (Matched By File Name) Set To That Run's And Locked (The Stage 2 Forcing
-            % Is Stage 1's). Otherwise Unlocked. s1_row / msg: multiline_stage1_row
-            [s1_row, msg] = app.multiline_stage1_row();
-            [pse_name, alt_name] = app.get_active_names();
-            if app.has_active_alt() && app.wProj.alt_stage(pse_name, alt_name) == 1
+            % Multi-Line Run Tab Rules (chessController.stage2_rules; set_input_table, Before The Inputs Table Rows) Applied To
+            % The Widgets: Responses Kept Checked (Stage 1 Hm0t), Then Storm Type, SLR, Tide File (Matched By File Name) And Data
+            % Types Set To Stage 1's Run And Locked, Or Unlocked. s1_row / msg: chessController.stage1_row
+            app.push_inputs();
+            rules = app.controller.stage2_rules();
+            app.controller_done();
+            s1_row = rules.s1_row;
+            msg = rules.msg;
+            for sym = rules.force_responses
                 nodes = app.get_tree_nodes(app.ResponsesTree);
-                node = nodes(strcmp({nodes.NodeData}, 'compute_wave_transmission'));
+                node = nodes(strcmp({nodes.NodeData}, sym{1}));
                 if isscalar(node) && isempty(app.ResponsesTree.CheckedNodes)
                     app.ResponsesTree.CheckedNodes = node;
-                elseif isscalar(node) && ~ismember('compute_wave_transmission', app.get_checked_symbols(app.ResponsesTree))
+                elseif isscalar(node) && ~ismember(sym{1}, app.get_checked_symbols(app.ResponsesTree))
                     app.ResponsesTree.CheckedNodes = [app.ResponsesTree.CheckedNodes; node];
                 end
             end
-            locked = ~isempty(s1_row);
-            if locked
-                if any(strcmp(app.StormTypeDropDown_2.Items, s1_row.storm_type))
-                    app.StormTypeDropDown_2.Value = s1_row.storm_type;
+            if rules.locked
+                if any(strcmp(app.StormTypeDropDown_2.Items, rules.storm_type))
+                    app.StormTypeDropDown_2.Value = rules.storm_type;
                 end
-                if isfield(s1_row.inherited, 'swl_slr')
-                    app.SeaLevelChangeEditField.Value = s1_row.inherited.swl_slr;
+                if ~isempty(rules.swl_slr)
+                    app.SeaLevelChangeEditField.Value = rules.swl_slr;
                 end
-                if isfield(s1_row.inherited, 'tide_file') % Row Holds The File Name; ItemsData Are Paths ('None' Kept)
+                if ~isempty(rules.tide_name) % ItemsData Are Paths ('None' Kept)
                     [~, tide_names, tide_ext] = cellfun(@fileparts, app.TidesFileDropDown.ItemsData, 'un', false);
-                    tide_k = find(strcmp(strcat(tide_names, tide_ext), s1_row.inherited.tide_file), 1);
+                    tide_k = find(strcmp(strcat(tide_names, tide_ext), rules.tide_name), 1);
                     if ~isempty(tide_k)
                         app.TidesFileDropDown.Value = app.TidesFileDropDown.ItemsData{tide_k};
                     end
                 end
-                % Data Types (Row Holds The Tree Symbols)
                 nodes = app.get_tree_nodes(app.DataTypesTree);
                 if ~isempty(nodes)
-                    nodes = nodes(ismember({nodes.NodeData}, s1_row.data_types));
+                    nodes = nodes(ismember({nodes.NodeData}, rules.data_types));
                 end
                 if isempty(nodes)
                     app.DataTypesTree.CheckedNodes = [];
@@ -211,185 +217,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
             end
             for comp = {app.StormTypeDropDown_2, app.SeaLevelChangeEditField, app.TidesFileDropDown, app.DataTypesTree}
-                comp{1}.Enable = ~locked;
+                comp{1}.Enable = ~rules.locked;
             end
         end
 
-        function backed = backup_sim_files(app, bk, level)
-            % [NEW] Back Up The Slot Before The Run Touches It (Before apply_hotstart_level Deletes Anything), By Hotstart Level:
-            %   Config: Copied. Forcing: Moved (cold | resample | reuse_sampling: Rebuilt By The Run); 'full' Reuses It As Is
-            %   (Nothing Re-Saves It), No Backup. Seed: Moved (cold | resample: Sampled Again), Copied (reuse_sampling: Read,
-            %   Then Saved Again); 'full': No Backup. backed: Files This Run Backed Up (existed = false: Not There Before The
-            %   Run, Its File Is Deleted On Failure). A Failure While Backing Up Restores What Was Done And Rethrows
-            act = struct('config', 'copy', 'forcing', 'move', 'seed', 'move');
-            switch level
-                case 'full'
-                    act.forcing = '';
-                    act.seed = '';
-                case 'reuse_sampling'
-                    act.seed = 'copy';
-            end
-            backed = struct('name', {}, 'file', {}, 'prev', {}, 'existed', {});
-            try
-                for kk = 1:numel(bk)
-                    entry = bk(kk);
-                    if isempty(act.(entry.name))
-                        continue
-                    end
-                    entry.existed = isfile(entry.file);
-                    if entry.existed && strcmp(act.(entry.name), 'copy')
-                        copyfile(entry.file, entry.prev, 'f');
-                    elseif entry.existed
-                        movefile(entry.file, entry.prev, 'f');
-                    end
-                    backed(end+1) = entry; %#ok<AGROW>
-                end
-            catch ME
-                app.restore_sim_files(backed);
-                rethrow(ME);
-            end
-        end
-
-        function [config, pseObj] = create_resp_config(app, pseObj, dbObj, for_run, plan)
-            % Run Step: Build config From Run Tab + Project + Storm DB, Then Apply Library Run Rules
-            %   for_run = false: Input Comparison Only (No Hotstart Actions, Nothing Saved)
-            %   plan: Run Start (run_hotstart_plan): plan.level 'cold' (Default) | 'full' | 'reuse_sampling', plan.old: Saved Run's config
-            if nargin < 4
-                for_run = true;
-            end
-            if nargin < 5
-                plan = struct('level', 'cold', 'old', []);
-            end
-            [pse_name, alt_name] = app.get_active_names();
-            [~, ~, ~, ~, out_files] = app.get_config_path();
-            % Library Template Defaults For storm_duration (Fresh Table) And Workflow Sections (Library Functions Read Them Regardless Of Workflow)
-            tpl = app.wProj.get_library_template(pseObj.pse_type);
-            wf_rows = [tpl.forcing(strcmp(tpl.forcing(:, 1), 'storm_duration'), :); tpl.mcs; tpl.csr; tpl.pros];
-            for rr = 1:size(wf_rows, 1)
-                config.(wf_rows{rr, 1}) = wf_rows{rr, 4};
-            end
-            % Every Library Response Switch Defaults To Off (Union Of All Templates)
-            types = {'Levee', 'Floodwall', 'Rubble Mound', 'Low Crested Breakwater'};
-            for tt = 1:length(types)
-                tpl_t = app.wProj.get_library_template(types{tt});
-                for rr = 1:size(tpl_t.responses, 1)
-                    config.(tpl_t.responses{rr, 1}) = 0;
-                end
-            end
-            % Response Parameter Defaults (e.g. compute_damaging_depth_Ks)
-            is_param = ~startsWith(tpl.responses(:, 2), 'Comput');
-            for rr = find(is_param)'
-                config.(tpl.responses{rr, 1}) = tpl.responses{rr, 4};
-            end
-            % Model Switches
-            config.workflow = app.WorkflowDropDown.Value;  % Workflow
-            config.storm_sampling = app.StormTypeDropDown_2.Value; % Storm Types To Process
-            % Data Types (Tree NodeData Holds Library Symbols)
-            dt_checked = app.get_checked_symbols(app.DataTypesTree);
-            config.use_peaks = +any(ismember({'peaks_default','create_wlp','create_whp'}, dt_checked));
-            config.use_timeseries = +ismember('use_timeseries', dt_checked);
-            config.create_wlp = +ismember('create_wlp', dt_checked);
-            config.create_whp = +ismember('create_whp', dt_checked);
-            % Project Forcing Adjustments
-            config.swl_slr = app.SeaLevelChangeEditField.Value; % SLR
-            config.tide_file = app.TidesFileDropDown.Value; % Tides
-            config.apply_random_tides = +~strcmp(config.tide_file, 'None');
-            config.apply_depth_limitation = +app.ApplyDepthLimitationCheckBox.Value; % Depth Limitation
-            config.load_project_forcing = 0; % GUI Builds Project Forcing Itself
-            config.ref_case_name = 'none';
-            % Responses (Tree NodeData Holds Library Symbols)
-            resp_checked = app.get_checked_symbols(app.ResponsesTree);
-            for rr = 1:length(resp_checked)
-                config.(resp_checked{rr}) = 1;
-            end
-            % Inputs Of Every Workflow (Visible And Hidden Rows): Config Records The Full Input State
-            app.store_table_values();
-            input_fields = fieldnames(app.tableState);
-            for rr = 1:length(input_fields)
-                config.(input_fields{rr}) = +app.tableState.(input_fields{rr});
-            end
-            % Storm DB Fields
-            config.region = dbObj.study;
-            config.sp_ID = '';
-            config.sp_ID_wave = '';
-            config.storm_db = app.StormDBDropDown_run.Value;
-            % Project Pathing
-            config.outfolder = app.wProj.path;
-            config.project_name = app.wProj.name;
-            config.struc_id = pse_name;
-            config.case_name = alt_name;
-            % Project CLs ([CL1 CL2 ...], Library Sorts & Formats)
-            cls = app.wProj.get_project_field('CLs', '', '', 'proj');
-            cls(cls==0) = [];
-            config.project_CLs = ['[' strjoin(arrayfun(@num2str, cls, 'un', false), ' ') ']'];
-            config.project_datum = app.wProj.vdatum;
-            % Constants
-            config.gravity_constant = app.pull_input_table_value(app.ConstantsTable.Data, 'Gravity Constant');
-            % Structure -> Config Bridge (Library Reads These From config, e.g. Hotstart Dependencies)
-            geo_fields = fieldnames(pseObj);
-            for rr = 1:length(geo_fields)
-                config.(geo_fields{rr}) = pseObj.(geo_fields{rr});
-            end
-            % Storm DB Details (db_info, Library storm_db_info): Nyrs_XC/Nstm_XC, TC Bias Correction, Modeling Bias & Uncertainty,
-            % storm_db_build_date (Re-Imported Storm DB: Library Hotstart Dependency, 'resample'), Offshore Elevation (Study
-            % Grid Value Wins Over The PSE Geometry Value Copied Above). After The Structure Bridge So The Grid Value Is Kept
-            config = storm_db_info('apply', CHSStormDBImportUI.get_db_info(dbObj), config);
-            % Library Run Rules (Restrictions, Dependencies, CLs, Uncertainties, out_files)
-            config = finalize_config(config);
-            % Multi-Line Transect: Stage 1 Always Computes Hm0t (Locked In The Responses Tree). Stage 2 Is Coupled To Stage 1's
-            % Run Of This Storm DB + Workflow (Library multiline_stage2_config: Forcing Inputs Inherited, Offshore End = Stage 1
-            % Toe, Stage 1 Forcing Stamp); Without That Run Only The Link Is Recorded (Run Disabled: multiline_stage1_row)
-            switch app.wProj.alt_stage(pse_name, alt_name)
-                case 1
-                    config.compute_wave_transmission = 1;
-                case 2
-                    config.multiline = struct('stage1_alt', app.wProj.stage1_alt(pse_name));
-                    if ~isempty(app.multiline_stage1_row())
-                        [config, pseObj] = multiline_stage2_config(config, pseObj);
-                    end
-            end
-            % LCS Convergence: The GUI Asks Before The Run (lcs_convergence_confirm); The Library Must Never Prompt In The Command Window
-            config.lcs_convergence_prompt = 0;
-            % GUI File Names (Per Storm DB)
-            config.out_files = out_files;
-            if ~for_run
-                return
-            end
-            % Hotstart: Library Level Actions (apply_hotstart_level). Not resolve_hotstart_state: The GUI Takes The Level From
-            % The Run Dialog (run_hotstart_plan). Coldstart: Cached Forcing And LCS Seed Deleted (Already Moved To *_prev By backup_sim_files)
-            if strcmp(plan.level, 'cold')
-                for ff = {out_files.project_forcing, lcs_sampling_seed_file(out_files.project_forcing)}
-                    if isfile(ff{1})
-                        delete(ff{1});
-                    end
-                end
-                config.hotstart_level = 'cold';
-            else
-                config = apply_hotstart_level(config, plan.old, plan.level, config.workflow == 3 && isempty(config.multiline));
-            end
-            % Save Config (Library Drivers Append To This File During The Run). RunSimulationButtonPushed Backs Up The Previous
-            % One First (backup_sim_files) And Deletes The Backup Once The Results Are Saved, Or Restores It If The Run Fails
-            out_pth = fileparts(out_files.config);
-            if ~exist(out_pth, 'dir')
-                mkdir(out_pth);
-            end
-            save(out_files.config, 'config', '-v7.3');
-        end
-
-        function elev = db_offshore_elevation(app, dbObj)
-            % [NEW] Offshore Elevation Of A Storm DB: db_info Study Grid Value (Library storm_db_bias_uncertainty). [] When
-            % The Storm DB Has None (Custom Modeling, No CHS_Dependencies, Grid Without Values): Inputs Table Value Is Used
-            elev = [];
-            if isstruct(dbObj.db_info) && isfield(dbObj.db_info, 'offshore_elevation') && ~isempty(dbObj.db_info.offshore_elevation)
-                elev = dbObj.db_info.offshore_elevation;
-            end
-        end
-
-        function fields = det_field_list(app, data)
-            % [NEW] Deterministic Results: Plottable Fields (Forcing First, Then Responses), Same Order As det_methods.available_fields
-            forcing = {'SWL', 'Hm0_offshore', 'Hm0_toe', 'Tp', 'h', 'Rc'};
-            names = setdiff(fieldnames(data.Max), {'storm_id', 'time'}, 'stable')';
-            fields = [forcing(ismember(forcing, names)), setdiff(names, forcing, 'stable')];
+        function ok = db_info_ok(app, dbObj)
+            % [NEW] Storm DB Of The Current CHESS Version (chessController.db_info_ok: Older Ones Warned Once Per Session)
+            ok = app.controller.db_info_ok(dbObj);
+            app.show_messages();
         end
 
         function extract_project_zip(app, zip_file)
@@ -412,7 +247,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 app.auxLib.error_dlgbox('Not a CHESS project archive: it must hold one project folder <name> with <name>/CHESS_project_<name>.mat.');
                 return
             end
-            if ~isempty(app.chess_projects) && any(strcmp(top, {app.chess_projects.name}))
+            if app.controller.is_loaded(top)
                 app.auxLib.error_dlgbox(['Project "' top '" is already loaded.']);
                 return
             end
@@ -447,19 +282,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
-        function [pse_name, alt_name] = get_active_names(app)
-            % [NEW] Active PSE/Alternative Names ('' When None)
-            pse_name = '';
-            alt_name = '';
-            if isempty(app.wProj) || isempty(app.pse_indx)
-                return
-            end
-            pse_name = app.wProj.pse_list{app.pse_indx};
-            if ~isempty(app.alt_indx)
-                alt_name = app.wProj.alternative_list{app.pse_indx}{app.alt_indx};
-            end
-        end
-
         function symbols = get_checked_symbols(app, tree)
             % [NEW] Library Symbols (NodeData) Of Checked Nodes
             if isempty(tree.CheckedNodes)
@@ -470,16 +292,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function [out_path, out_dir, wflow_folder, wflow_name, out_files] = get_config_path(app)
-            % Run Folder & File Names From The Library's chess_paths (Same Layout As The Library):
-            % <project>\PSE\<pse>\<alt>\<workflow folder>\<db>_<workflow>_*, Per Storm DB So Runs With Different DBs Do Not Overwrite Each Other
-            [pse_name, alt_name] = app.get_active_names();
-            paths = chess_paths(app.wProj.path, app.wProj.name, pse_name, alt_name,...
-                app.WorkflowDropDown.Value, app.StormDBDropDown_run.Value);
-            out_dir = paths.wf_dir;
-            wflow_folder = paths.wf_folder;
-            wflow_name = paths.wflow_name;
-            out_files = paths.out_files;
-            out_path = out_files.config;
+            % Run Folder & File Names Of The Run Tab Selection (chessController.config_path)
+            app.push_inputs();
+            [out_path, out_dir, wflow_folder, wflow_name, out_files] = app.controller.config_path();
         end
 
         function [proj_node, pse_node, alt_node, active_node, active_type] = get_node_family(app)
@@ -523,7 +338,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function get_sim_state(app)
-            % Snapshot Of Run Tab Controls (Component Name, Value). Inputs Table Values Live In tableState
+            % Snapshot Of Run Tab Controls (Component Name, Value; chessController.snapshot, With Its Context). Inputs Table
+            % Values Live In controller.inputs
             sim_tab = [{'StormDBDropDown_run', app.StormDBDropDown_run.Value};...
                 {'ApplyDepthLimitationCheckBox', app.ApplyDepthLimitationCheckBox.Value};...
                 {'StormTypeDropDown_2',app.StormTypeDropDown_2.Value};...
@@ -536,7 +352,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 {'DataTypeSymbols', {app.get_tree_symbols(app.DataTypesTree)}}];
             % Unwrap Cell-Wrapped Entries
             sim_tab(7:10, 2) = cellfun(@(x) x{1}, sim_tab(7:10, 2), 'un', false);
-            app.simState = sim_tab;
+            app.controller.set_snapshot(sim_tab);
         end
 
         function nodes = get_tree_nodes(app, tree)
@@ -557,11 +373,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
-        function tf = has_active_alt(app)
-            % [NEW] True When Active Project Has An Active PSE And Alternative
-            tf = ~isempty(app.wProj) && ~isempty(app.pse_indx) && ~isempty(app.alt_indx);
-        end
-
         function hide_results_mirror(app)
             % [NEW] Results Tab Back To Its Axes: Clear And Hide The Multi-Panel Mirror Panel
             delete(app.resultsMirror.Children);
@@ -570,272 +381,59 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function import_project_mat(app, mat_file)
-            % [NEW] Import A Project From Its Project File <root>\<name>\CHESS_project_<name>.mat. Project Folder Not Where It
-            % Was Saved (Moved, Copied, Extracted Archive): Stored Paths Relocated To <root>\<name> (Before append_project:
-            % refresh_active_view Reads The Storm DB Paths). Then Locked (try_project_lock: Not Lockable -> Notice, Not
-            % Imported), Its Simulation Registry Synced With Disk (chessProject.sync_sims 'sync'; Also Converts An Older
-            % Project's Storm DB Objects To Records), Saved There; Multi-Line Stage 1 Drift Asked (stage1_sync_prompts); Sync
-            % Counts In The Status Bar (None When Nothing Changed). The Previous Project Keeps Its Lock Until The Import Has
-            % Succeeded; A Failure Releases The New Lock, Drops The Project And Re-Activates The Previous Selection
-            S = load(mat_file);
-            if ~isfield(S, 'chess_project') || ~isa(S.chess_project, 'chessProject')
-                app.auxLib.error_dlgbox('Please select a valid "chessProject" class object.');
-                return
-            end
-            wProj = S.chess_project;
-            if ~isempty(app.chess_projects) && any(strcmp(wProj.name, {app.chess_projects.name}))
-                app.auxLib.error_dlgbox(['Project "' wProj.name '" is already loaded.']);
-                return
-            end
-            [new_root, folder_name] = fileparts(fileparts(mat_file));
-            if ~strcmp(folder_name, wProj.name)
-                app.auxLib.error_dlgbox(['The project file must be inside its project folder "' wProj.name '" (found in "' folder_name '").']);
-                return
-            end
-            if ~chessProject.same_path(new_root, wProj.path)
-                wProj.relocate(new_root);
-            end
-            % A CHS_Dependencies Folder Bundled In The Project (Export Project) Is Always Used
-            bundle_dir = fullfile(new_root, wProj.name, 'CHS_Dependencies');
-            if isfolder(bundle_dir)
-                wProj.chs_dependencies = bundle_dir;
-            end
-            [lock, lock_msg] = app.try_project_lock(wProj);
-            if isempty(lock)
-                app.auxLib.choice_dlgbox(lock_msg, {'OK'}, 'Project Not Opened');
-                return
-            end
-            prev_proj = '';
-            if ~isempty(app.wProj)
-                prev_proj = app.wProj.name;
-            end
-            [prev_pse, prev_alt] = app.get_active_names();
-            try
-                info = wProj.sync_sims('project', 'sync');
-                app.append_project(wProj);
-                app.save_project();
-            catch ME
-                chessProject.release_lock(lock);
-                if ~isempty(app.chess_projects)
-                    app.chess_projects = app.chess_projects(app.chess_projects ~= wProj);
-                end
-                try
-                    app.set_active_selection(prev_proj, prev_pse, prev_alt);
-                    app.refresh_active_view();
-                catch
-                end
-                app.auxLib.error_dlgbox(['Could not import project "' wProj.name '": ' ME.message]);
-                return
-            end
-            app.release_project_lock();
-            app.set_project_lock(wProj, lock);
-            if app.stage1_sync_prompts(wProj, info)
-                app.refresh_active_view();
-            end
-            note = app.sync_note(info);
-            if ~isempty(note)
-                app.simStatusBar.Value = note;
-            end
-        end
-
-        function proceed = lcs_convergence_confirm(app, pseObj, dbObj, prob_mass)
-            % [NEW] LCS Convergence Dialog, Replacing The Library's Command-Window Prompt. Same Rule As chess_lcs
-            % (lcs_reference_reuse): Effective Mode 0, Storm Types Not Reused From The Reference Case. Called Only When
-            % Life Cycles Are Sampled (Coldstart; After The Run Dialog: A Hotstart Reuses The Cached Forcing Or Sampling).
-            % Not Converged: "Set mcs_nLC To <nLC_req> And Run" | "Run Anyway" | "Cancel". Returns false On Cancel (Or Dialog Closed).
-            proceed = true;
-            config = app.create_resp_config(pseObj, dbObj, false);
-            if config.workflow ~= 3 || ~isempty(config.multiline) % Multi-Line Stage 2: Stage 1's Life Cycles, Nothing Sampled
-                return
-            end
-            reuse = lcs_reference_reuse(config);
-            if isempty(reuse.check_types)
-                return
-            end
-            checks = lcs_convergence_checks(config, prob_mass, reuse.check_types, true);
-            checks = checks(~[checks.converged]);
-            if isempty(checks)
-                return
-            end
-            n_txt = @(n) aux_methods.tern(isinf(n), sprintf('> %s', regexprep(num2str(checks(1).nLC_cap), '(\d)(?=(\d{3})+$)', '$1,')), sprintf('%d', n));
-            msg = sprintf('mcs_nLC = %d is below the number of life cycles needed for convergence (tol %g, confidence %g):',...
-                config.mcs_nLC, config.lcs_convergence_tol, config.lcs_convergence_confidence);
-            for cc = 1:numel(checks)
-                msg = sprintf('%s\n%s: lambda x N = %.2f storms per life cycle; needed: mean %d, percentiles %s -> %s.', msg,...
-                    checks(cc).stm_type, checks(cc).lamN, checks(cc).nLC_mean, n_txt(checks(cc).nLC_pct), n_txt(checks(cc).nLC_req));
-            end
-            n_req = max([checks.nLC_req]);
-            options = {'Run anyway', 'Cancel'};
-            if isfinite(n_req)
-                options = [{sprintf('Set mcs_nLC to %d and run', n_req)}, options];
-            end
-            app.auxLib.choice_dlgbox(msg, options, 'LCS Convergence Check', [620, 150 + 20*numel(checks)]);
-            answer = app.auxLib.dialog_answer;
-            if isempty(answer) || strcmp(answer, 'Cancel')
-                proceed = false;
-            elseif startsWith(answer, 'Set mcs_nLC')
-                % Write The Visible Table Row Too: set_input_table First Stores The Visible Table Into tableState
-                row = strcmp(app.WorkflowInputsTable.Data(:, 1), 'mcs_nLC');
-                app.WorkflowInputsTable.Data(row, 3) = {n_req};
-                app.tableState.mcs_nLC = n_req;
-                app.set_input_table(); % Inputs Table Shows (And The Run Reads) The New mcs_nLC
+            % [NEW] Import A Project From Its Project File (chessController.open_project: Relocated, Locked, Registry Synced,
+            % Saved; A Failure Rolls Back To The Previous Selection). Not Lockable: Notice, Not Imported. Then Refreshed, Multi-Line
+            % Stage 1 Drift Asked (queue_sync_drift), Sync Counts In The Status Bar (None When Nothing Changed)
+            out = app.controller.open_project(mat_file);
+            switch out.status
+                case 'refused'
+                    app.ask_question(out.question);
+                case 'error'
+                    if out.rolled_back % Failed After The Lock: Back To The Previous Selection
+                        try
+                            app.refresh();
+                        catch
+                        end
+                    end
+                    app.auxLib.error_dlgbox(out.text);
+                case 'opened'
+                    app.refresh();
+                    if app.controller.queue_sync_drift(app.controller.project, out.info)
+                        app.controller_done();
+                        app.refresh();
+                    end
+                    if ~isempty(out.note)
+                        app.simStatusBar.Value = out.note;
+                    end
             end
         end
 
         function [s1_row, msg, run_label] = multiline_stage1_row(app)
-            % Multi-Line Stage 2 Active: Its Stage 1's Registry Row (sim_rows: Responses File Checked, No Config Load) Of The Run
-            % Tab Storm DB + Workflow. None: [] And The Status Bar Text Naming The Run Needed (Current Data Types And Storm
-            % Type). Not A Stage 2 (Or No Storm DB): [] And ''
-            %   run_label: '<storm DB> | <workflow>' Of The Run Tab ('' Without A Storm DB Or When Not A Stage 2)
-            s1_row = [];
-            msg = '';
-            run_label = '';
-            if ~app.has_active_alt() || isempty(app.StormDBDropDown_run.Items)
-                return
-            end
-            [pse_name, alt_name] = app.get_active_names();
-            if app.wProj.alt_stage(pse_name, alt_name) ~= 2
-                return
-            end
-            s1_alt = app.wProj.stage1_alt(pse_name);
-            [~, ~, ~, wflow_name] = app.get_config_path();
-            db_name = app.StormDBDropDown_run.Value;
-            run_label = [db_name ' | ' wflow_name];
-            rows = app.sim_rows(app.wProj, pse_name, s1_alt);
-            rows = rows(strcmpi(db_name, {rows.db}) & strcmpi(wflow_name, {rows.workflow}));
-            if ~isempty(rows)
-                s1_row = rows(1);
-                return
-            end
-            dt_checked = app.get_checked_symbols(app.DataTypesTree);
-            dts = {};
-            if any(ismember({'peaks_default', 'create_wlp', 'create_whp'}, dt_checked))
-                dts{end+1} = 'Peaks';
-            end
-            if ismember('use_timeseries', dt_checked)
-                dts{end+1} = 'Timeseries';
-            end
-            msg = sprintf('Run %s/%s with %s, %s, %s first.', pse_name, s1_alt, wflow_name,...
-                strjoin([dts, {app.StormTypeDropDown_2.Value}], ', '));
-        end
-
-        function cascade = multiline_cascade_sims(app, proj, pse_name, alt_name, db_wf)
-            % Stage 2 Registry Rows (sim_rows) Coupled To alt_name (A Multi-Line Stage 1) With A Storm DB + Workflow Of db_wf
-            % (Rows {db, workflow}). cascade: Rows {stage 2 alternative, db, workflow}; None (Or Not A Stage 1): Empty
-            cascade = cell(0, 3);
-            for s2 = proj.multiline_stage2(pse_name, alt_name)'
-                rows = app.sim_rows(proj, pse_name, s2{1});
-                for rr = 1:numel(rows)
-                    if any(strcmpi(rows(rr).db, db_wf(:, 1)) & strcmpi(rows(rr).workflow, db_wf(:, 2)))
-                        cascade(end+1, :) = {s2{1}, rows(rr).db, rows(rr).workflow}; %#ok<AGROW>
-                    end
-                end
-            end
+            % Multi-Line Stage 2: Its Stage 1's Registry Row Of The Run Tab Storm DB + Workflow (chessController.stage1_row)
+            app.push_inputs();
+            [s1_row, msg, run_label] = app.controller.stage1_row();
+            app.controller_done();
         end
 
         function ok = lock_project(app, proj)
-            % One CHESS Session Per Project: Locks proj's Folder (try_project_lock) Before It Becomes Active, Then Releases The
-            % Previous Project's Lock. Already Held By This App: true. Not Lockable (Held By Another Session, Folder Missing Or
-            % Read-Only): Modal Notice With OK Only (The GUI Waits For It), false: The Caller Keeps The Previous Selection
-            ok = true;
-            if ~isempty(app.projectLock) && app.projectLock.proj == proj
-                return
+            % One CHESS Session Per Project (chessController.lock_project). Not Lockable: Modal Notice With OK Only (The GUI Waits
+            % For It), false: The Caller Keeps The Previous Selection
+            q = app.controller.lock_project(proj);
+            ok = isempty(q);
+            if ~ok
+                app.ask_question(q);
             end
-            [lock, msg] = app.try_project_lock(proj);
-            if isempty(lock)
-                ok = false;
-                app.auxLib.choice_dlgbox(msg, {'OK'}, 'Project Not Opened');
-                return
-            end
-            app.release_project_lock();
-            app.set_project_lock(proj, lock);
-        end
-
-        function [lock, msg] = try_project_lock(app, proj)
-            % chessProject.acquire_lock Of proj's Folder, Nothing Else Changed (projectLock Untouched). Refused: lock = [], msg =
-            % The Notice Text (Another Session Holds It, Or Why The Lock File Is Not Usable)
-            msg = '';
-            [lock, holder, problem] = chessProject.acquire_lock(fullfile(proj.path, proj.name));
-            if isempty(lock) && isempty(problem)
-                msg = sprintf('Project %s is open in another CHESS session (%s).', proj.name, holder);
-            elseif isempty(lock)
-                msg = sprintf('Project %s cannot be locked: %s.', proj.name, problem);
-            end
-        end
-
-        function release_project_lock(app)
-            % Releases The Active Project's Lock (lock_project), If Any: Project Switch, Project Folder Rename, App Close (Close
-            % Request; A Bypassed Close Request Is Covered By The UIFigure DeleteFcn, startupFcn). Idempotent
-            if ~isempty(app.projectLock)
-                chessProject.release_lock(app.projectLock.lock);
-                app.set_project_lock([], []);
-            end
-        end
-
-        function set_project_lock(app, proj, lock)
-            % projectLock Of The Active Project (proj [] : None), Mirrored In The UIFigure's Application Data
-            % 'chess_project_lock': The DeleteFcn (startupFcn) Releases It From There, As The App Object Can Already Be Gone
-            if isempty(proj)
-                app.projectLock = [];
-            else
-                app.projectLock = struct('proj', proj, 'lock', lock);
-            end
-            setappdata(app.UIFigure, 'chess_project_lock', lock);
-        end
-
-        function chs_data = load_chs_data(app, dbObj)
-            % [NEW] Cached Load Of Raw CHS_Data (Storm DB "_raw_files.mat"); [] If Unavailable
-            chs_data = [];
-            if ~isfield(dbObj.output_paths, 'chs_data') || ~isfile(dbObj.output_paths.chs_data)
-                return
-            end
-            key = dbObj.output_paths.chs_data;
-            if isempty(app.stormCache)
-                app.stormCache = containers.Map();
-            end
-            if ~isKey(app.stormCache, key)
-                S = load(key, 'CHS_Data');
-                app.stormCache(key) = S.CHS_Data;
-            end
-            chs_data = app.stormCache(key);
         end
 
         function load_saved_sim(app)
             % [NEW] Restore The Saved Simulation Of The Current Key: Run Tab Inputs (Saved Config) And Results
-            app.simKey = app.sim_key(); % Resolved: populateResultsTab Loads It
-            app.declinedSimKey = '';
+            app.push_inputs();
+            app.controller.use_key(); % Resolved: populateResultsTab Loads It
             app.set_sim_state(2, app.get_config_path());
             app.populate_pse_table();
             app.populate_constants_table();
             app.set_input_table();
             app.populateResultsTab();
-        end
-
-        function storm = load_storm(app, dbObj)
-            % [NEW] Cached Load Of Storm DB "storm" Variable
-            key = dbObj.output_paths.storm_db;
-            if isempty(app.stormCache)
-                app.stormCache = containers.Map();
-            end
-            if ~isKey(app.stormCache, key)
-                S = load(key, 'storm');
-                app.stormCache(key) = S.storm;
-            end
-            storm = app.stormCache(key);
-        end
-
-        function msg = loaded_sim_status(app)
-            % [NEW] Status Bar Text Of The Saved Simulation Shown
-            [~, ~, ~, wflow_name] = app.get_config_path();
-            [~, ~, run_date] = app.saved_sim();
-            msg = sprintf('Saved simulation loaded (%s_%s, run %s).', app.StormDBDropDown_run.Value, wflow_name, run_date);
-        end
-
-        function config = localize_saved_config(app, config)
-            % [NEW] Saved Run config Of A Moved Project (chessProject.relocate): A tide_file Under The Run's Project Folder
-            % (<outfolder>\<project_name>) Points Into The Active Project Folder. 'None' And Paths Elsewhere Unchanged
-            config.tide_file = chessProject.relocate_path(config.tide_file,...
-                fullfile(config.outfolder, config.project_name), fullfile(app.wProj.path, app.wProj.name));
         end
 
         function open_results_popout(app)
@@ -892,7 +490,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 target = app.PSEAxes_3;
                 base_fnt = app.plotFontSize;
             end
-            state = app.resultsState;
+            state = app.controller.results;
             row = app.results_plot_row();
             if isempty(state) || isempty(row)
                 return
@@ -945,14 +543,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 add_events = max([0, find(strcmp(aux, {'Run Sample', 'Storm Values'}), 1)]);
             end
             if any(strcmp(row.key, {'event', 'scheme'}))
-                storm = app.load_storm(state.dbObj);
+                storm = app.controller.load_storm(state.dbObj);
                 config.sp_ID = CHSStormDBImportUI.get_savepoint_id(state.dbObj); % Title (GUI Run Configs Leave sp_ID Empty)
             end
             project_forcing = state.project_forcing;
             if add_events > 0 || strcmp(row.key, 'scheme') % Events Overlay / Sampling Scheme Need Project Forcing + TC Probability Masses
-                [project_forcing, dsw] = app.results_forcing_and_dsw();
+                [project_forcing, dsw] = app.controller.results_forcing();
             end
-            chessPlot = CHESSPlots(config, state.Resp, storm, project_forcing, dsw, state.structure, base_fnt, app.wProj.unitsys);
+            chessPlot = CHESSPlots(config, state.Resp, storm, project_forcing, dsw, state.structure, base_fnt, app.controller.project.unitsys);
             try
                 switch row.key
                     case 'hc' % PROS Hazard Curve (+ Table)
@@ -971,7 +569,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                             app.PSETable_3.Data = [data.x_table, data.y_table];
                         end
                     case 'det_scatter' % Deterministic: Response vs Forcing (X: Storm ID Dropdown, Y: Field, Color: Plot Options)
-                        fields = app.det_field_list(aux_methods.pull_data(ds_query, state.Resp));
+                        fields = app.controller.det_fields(aux_methods.pull_data(ds_query, state.Resp));
                         c_field = opts.c_field;
                         if isempty(c_field) || ~any(strcmp(fields, c_field))
                             c_field = fields{max([1, find(strcmp(fields, 'Hm0_toe'), 1)])};
@@ -1010,7 +608,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         end
                         chessPlot.storm_event_viewer(target, ds_query, event_id, field, 0);
                     case 'annual' % LCS Annual Response Distribution (+ Table Of Binned Values Per Sim Year)
-                        [edges, labels] = app.results_bin_edges(chessPlot, ds_query, field, opts.bin_edges);
+                        [edges, labels] = app.controller.bin_edges(chessPlot, ds_query, field, opts.bin_edges);
                         [~, bin_data] = chessPlot.annual_response_distribution(ax, ds_query, field, edges, string(aux),...
                             opts.cb_lim, opts.grid_on, opts.cb_log);
                         if tab_mode && isempty(bin_data) % No Finite Values: Library "No Data" Axes, Empty Table
@@ -1042,7 +640,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     app.reset_results_axes();
                     title(app.PSEAxes_3, 'Plot not available for this selection');
                 end
-                uialert(app.UIFigure, me.message, ['Results Plot: ' row.label], 'Icon', 'warning');
+                app.auxLib.alert_dlgbox(me.message, ['Results Plot: ' row.label], 'warning');
             end
             % Right-Click Plot Options On The Tab Plot (And The Mirrored Multi-Panel Axes)
             if tab_mode
@@ -1060,8 +658,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 base_fnt = app.plotFontSize;
             end
             % Pull Storm DB (Cached). Storm DB Of An Older CHESS Version (No db_info): Alert, No Plot
-            dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db');
-            if ~app.storm_db_info_ok(dbObj)
+            dbObj = app.controller.project.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db');
+            if ~app.db_info_ok(dbObj)
                 cla(ax);
                 legend(ax, 'off');
                 if tab_mode
@@ -1069,12 +667,12 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
                 return
             end
-            storm = app.load_storm(dbObj);
+            storm = app.controller.load_storm(dbObj);
             ds_query = struct('storm_type', app.StormTypeDropDown.Value,...
                 'data_type', app.DataTypeDropDown.Value,...
                 'match_type', app.MatchTypeDropDown.Value);
             % Library Plot Object (Storm Database Only: No PSE, Workflow Or Results)
-            config = struct('project_datum', app.wProj.vdatum, 'apply_random_tides', 0,...
+            config = struct('project_datum', app.controller.project.vdatum, 'apply_random_tides', 0,...
                 'region', dbObj.study, 'sp_ID', CHSStormDBImportUI.get_savepoint_id(dbObj), 'struc_id', '', 'case_name', '',...
                 'r2p_u', 0, 'q_u', 0, 'dn50_u', 0, 'p1_u', 0,... % Axis Labels Only (response_library_headers)
                 'chs_swl_u_a', 0, 'chs_swl_u_r', 0, 'chs_hm0_u_a', 0, 'chs_hm0_u_r', 0);
@@ -1083,7 +681,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             config.tc_bias_corrected = db_info.tc_bias_corrected;
             config.chs_swl_b_a = db_info.chs_swl_b_a;
             config.chs_swl_b_r = db_info.chs_swl_b_r;
-            chessPlot = CHESSPlotsBase(config, [], storm, [], [], [], base_fnt, app.wProj.unitsys);
+            chessPlot = CHESSPlotsBase(config, [], storm, [], [], [], base_fnt, app.controller.project.unitsys);
             % Plot (And Tab Table) According To Data Type
             cla(ax);
             legend(ax, 'off');
@@ -1104,7 +702,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     end
                 case 'Timeseries' % Event Hydrograph: storm (Interpolated) + CHS_Data (Raw)
                     event_id = str2double(app.StormIDDropDown.Value);
-                    chessPlot.event_hydrograph_plot(ax, ds_query, event_id, y_field, app.load_chs_data(dbObj));
+                    chessPlot.event_hydrograph_plot(ax, ds_query, event_id, y_field, app.controller.load_chs_data(dbObj));
                     if tab_mode
                         hydrograph = stm_data{stm_list == event_id, 2};
                         app.StormDBTable.ColumnName = {'Event Duration [hrs]', y_lbl};
@@ -1148,15 +746,15 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function populate_inputs_table(app)
-            % Inputs Table: Pertinent Rows Only (Library Template), Values From tableState (All Workflows)
+            % Inputs Table: Pertinent Rows Only (Library Template), Values From controller.inputs (All Workflows)
             app.store_table_values();
-            [pse_name, alt_name] = app.get_active_names();
-            pse_obj = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+            [pse_name, alt_name] = app.controller.active_names();
+            pse_obj = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
             if isempty(pse_obj)
                 app.WorkflowInputsTable.Data = cell(0, 3);
                 return
             end
-            tpl = app.wProj.get_library_template(pse_obj.pse_type);
+            tpl = app.controller.project.get_library_template(pse_obj.pse_type);
             resp_checked = app.get_checked_symbols(app.ResponsesTree);
             rows = cell(0, 4);
             % Forcing: Storm Duration Always Shown (Dn50 Uses It For Timeseries Runs Too)
@@ -1181,13 +779,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 case 3 % LCS
                     rows = [rows; tpl.mcs];
                     % CSR-DPA (Library chess_csr): Rubble Mound Timeseries Runs Only; Its Settings Only While csr_call_dpa Is 1.
-                    % csr_compute_S_submerged Is Never Shown. Hidden Values Stay In tableState
+                    % csr_compute_S_submerged Is Never Shown. Hidden Values Stay In controller.inputs
                     if chessProject.get_struc_type(pse_obj.pse_type) == 3 && ismember('use_timeseries', app.get_checked_symbols(app.DataTypesTree))
                         csr = tpl.csr(~strcmp(tpl.csr(:, 1), 'csr_compute_S_submerged'), :);
                         is_call = strcmp(csr(:, 1), 'csr_call_dpa');
                         dpa_on = csr{is_call, 4};
-                        if isfield(app.tableState, 'csr_call_dpa')
-                            dpa_on = app.tableState.csr_call_dpa;
+                        if isfield(app.controller.inputs, 'csr_call_dpa')
+                            dpa_on = app.controller.inputs.csr_call_dpa;
                         end
                         if ~isequal(dpa_on, 1)
                             csr = csr(is_call, :);
@@ -1200,11 +798,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Field Label = Description [Units]
             has_units = ~strcmp(rows(:, 3), 'NA') & ~cellfun(@isempty, rows(:, 3));
             rows(has_units, 2) = strcat(rows(has_units, 2), {' '}, rows(has_units, 3));
-            % Values: tableState (Entered/Restored) Else Template Default
+            % Values: controller.inputs (Entered/Restored) Else Template Default
             tbl = [rows(:, 1:2), rows(:, 4)];
             for kk = 1:size(tbl, 1)
-                if isfield(app.tableState, tbl{kk, 1})
-                    tbl{kk, 3} = app.tableState.(tbl{kk, 1});
+                if isfield(app.controller.inputs, tbl{kk, 1})
+                    tbl{kk, 3} = app.controller.inputs.(tbl{kk, 1});
                 end
             end
             tbl(is_flag, 3) = cellfun(@(v) isequal(v, 1), tbl(is_flag, 3), 'un', false);
@@ -1215,7 +813,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Update Project Tree
             app.update_project_tree();
             % No Projects Loaded
-            if isempty(app.chess_projects)
+            if isempty(app.controller.projects)
                 app.ProjectDropDown.Items = {};
                 app.PSEDropDown.Items = {};
                 app.AlternativeDropDown.Items = {};
@@ -1225,17 +823,17 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             % Project Dropdown
-            projList = {app.chess_projects.name};
+            projList = {app.controller.projects.name};
             app.ProjectDropDown.Items = projList;
-            app.ProjectDropDown.Value = projList{app.proj_indx};
-            app.ProjectPathEditField.Value = app.wProj.get_project_field('path', '', '', 'proj');
+            app.ProjectDropDown.Value = app.controller.project.name;
+            app.ProjectPathEditField.Value = app.controller.project.get_project_field('path', '', '', 'proj');
             % PSE & Alternative Dropdowns
-            [pse_name, alt_name] = app.get_active_names();
-            pseList = app.wProj.pse_list;
+            [pse_name, alt_name] = app.controller.active_names();
+            pseList = app.controller.project.pse_list;
             app.PSEDropDown.Items = pseList;
             if ~isempty(pse_name)
                 app.PSEDropDown.Value = pse_name;
-                app.AlternativeDropDown.Items = app.wProj.alternative_list{app.pse_indx};
+                app.AlternativeDropDown.Items = app.controller.project.get_project_field('alternative_list', pse_name, '', 'pse');
             else
                 app.AlternativeDropDown.Items = {};
             end
@@ -1250,12 +848,12 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         function populate_pse_responses(app, has_timeseries)
             % Response Tree From Library Template "Structure Responses" (NodeData Holds Library Symbol)
             delete(app.ResponsesTree.Children(:));
-            [pse_name, alt_name] = app.get_active_names();
-            pse_obj = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+            [pse_name, alt_name] = app.controller.active_names();
+            pse_obj = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
             if isempty(pse_obj)
                 return
             end
-            tpl = app.wProj.get_library_template(pse_obj.pse_type);
+            tpl = app.controller.project.get_library_template(pse_obj.pse_type);
             resp_sym = tpl.responses(:, 1);
             for rr = 1:length(resp_sym)
                 % Response Switches Are Described As "Compute..."; Parameter Rows Go To Inputs Table
@@ -1267,8 +865,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     continue
                 end
                 txt = tpl.responses{rr, 2};
-                % Multi-Line Stage 1: Hm0t Is Its Stage 2 Forcing, Always On (create_resp_config; Re-Checked By set_input_table)
-                if strcmp(resp_sym{rr}, 'compute_wave_transmission') && app.wProj.alt_stage(pse_name, alt_name) == 1
+                % Multi-Line Stage 1: Hm0t Is Its Stage 2 Forcing, Always On (chessController.run_config; Re-Checked By set_input_table)
+                if strcmp(resp_sym{rr}, 'compute_wave_transmission') && app.controller.project.alt_stage(pse_name, alt_name) == 1
                     txt = [txt ' (Multi-Line Stage 1: Always On)'];
                 end
                 uitreenode(app.ResponsesTree, "Text", txt, 'NodeData', resp_sym{rr});
@@ -1276,98 +874,24 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function populate_constants_table(app)
-            % [NEW] Project Panel Constants Table (Display Only; Gravity Constant Is Read By Label): Water Density (Active PSE,
-            % As Used By Runs), Gravity (Library Value), Offshore Elevation (shown_offshore_elevation) And The Run Tab Storm
-            % DB's Bias & Uncertainty (db_info, Library storm_db_info). No Storm DB: '-'. db_info Missing Fields: Re-Import
-            gravity = 9.80665; % m/s^2, Library Value (Setup/call_input_parser.m)
-            density = {'-', NaN};
-            offshore = {'-', '-'};
-            dbObj = [];
-            % Multi-Line Transect Row; Stage 2: Offshore End From Stage 1 (Library multiline_stage2_config), Slope Row Added
-            ml_rows = {'Multi-Line Transect', '-', '-'};
-            offshore_lbl = 'Offshore Elevation (Storm DB / PSE)';
-            if app.has_active_alt()
-                [pse_name, alt_name] = app.get_active_names();
-                switch app.wProj.alt_stage(pse_name, alt_name)
-                    case 1
-                        ml_rows{3} = sprintf('Stage 1 (%d coupled)', numel(app.wProj.multiline_stage2(pse_name, alt_name)));
-                    case 2
-                        % From Stage 1's Registry Row Of The Run Tab Storm DB + Workflow (multiline_stage1_row), Never Its PSE Table
-                        s1_alt = app.wProj.stage1_alt(pse_name);
-                        s1_row = app.multiline_stage1_row();
-                        s1_note = 'Run stage 1 first';
-                        if isempty(app.StormDBDropDown_run.Items)
-                            s1_note = 'No storm DB in project';
-                        end
-                        s1_slope = s1_note;
-                        if ~isempty(s1_row)
-                            s1_slope = s1_row.structure_kt.offshore_slope;
-                        end
-                        ml_rows(1, 3) = {sprintf('Stage 2 of %s/%s', pse_name, s1_alt)};
-                        ml_rows(2, :) = {'Offshore Slope (From Stage 1)', '-', s1_slope};
-                        offshore_lbl = 'Offshore Elevation (From Stage 1 Toe)';
-                end
-                tbl = app.wProj.get_project_field('pse_tables', pse_name, alt_name, 'alt');
-                geo = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                density = {erase(tbl{strcmp(tbl(:, 1), 'water_density'), 3}, {'[', ']'}), geo.water_density};
-                if ~isempty(app.StormDBDropDown_run.Items)
-                    dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
-                end
-                unitLib = app.auxLib.update_unit_system(app.wProj.unitsys);
-                offshore = {unitLib.unitSymbols.length, app.shown_offshore_elevation(dbObj)};
-                if app.wProj.alt_stage(pse_name, alt_name) == 2 && isnan(offshore{2})
-                    offshore{2} = s1_note;
-                end
-            end
-            % Storm DB Rows. DET Runs Without Forcing Uncertainty
-            u_note = '';
-            if app.WorkflowDropDown.Value == 2
-                u_note = ' (Not Used By DET)';
-            end
-            db_rows = {['SWL Ua' u_note], 'm'; ['SWL Ur' u_note], '-'; ['Hm0 Ua' u_note], 'm'; ['Hm0 Ur' u_note], '-';...
-                ['Tp Ur (From Hm0 Ur)' u_note], '-'; 'SWL Ba (Applied To TC At DB Build)', 'm'; 'SWL Br (Applied To TC At DB Build)', '-';...
-                'TC Bias Corrected', '-'; 'B&U Source (SWL / Hm0)', '-'};
-            if isempty(dbObj)
-                db_rows(:, 3) = {'-'};
-            elseif ~storm_db_info('valid', dbObj.db_info)
-                db_rows(:, 3) = {'n/a (re-import DB)'};
-            else
-                info = dbObj.db_info;
-                yes_no = {'No', 'Yes'};
-                db_rows(:, 3) = {info.chs_swl_u_a; info.chs_swl_u_r; info.chs_hm0_u_a; info.chs_hm0_u_r;...
-                    sqrt(1 + info.chs_hm0_u_r) - 1; info.chs_swl_b_a; info.chs_swl_b_r;... % Tp Ur As In apply_uncertainty
-                    yes_no{1 + isequal(info.tc_bias_corrected, 1)}; [info.chs_swl_bu_source ' / ' info.chs_hm0_bu_source]};
-            end
-            app.ConstantsTable.Data = [{'Water Density', density{:}; 'Gravity Constant', 'm/s^2', gravity;...
-                offshore_lbl, offshore{:}}; ml_rows; db_rows];
+            % [NEW] Project Panel Constants Table (Display Only; chessController.constants): Water Density, Gravity, Offshore
+            % Elevation, Multi-Line Transect Rows And The Run Tab Storm DB's Bias & Uncertainty
+            app.push_inputs();
+            app.ConstantsTable.Data = app.controller.constants();
+            app.controller_done();
         end
 
         function populate_pse_table(app)
-            % [NEW] PSE Viewer Table: The Active Alternative's pse_tables. The offshore_elevation Row (Fallback Value) Is Shown Only
-            % When The Run Tab Storm DB Has No Study Grid Value, Or There Is No Run Tab Storm DB; Multi-Line Stage 2: Neither It Nor
-            % offshore_slope (From Stage 1). Display Only: pse_tables Keeps Them
-            if ~app.has_active_alt()
-                app.PSETable.Data = cell(0, 4);
-                return
-            end
-            [pse_name, alt_name] = app.get_active_names();
-            tbl = app.wProj.get_project_field('pse_tables', pse_name, alt_name, 'alt');
-            dbObj = [];
-            if ~isempty(app.StormDBDropDown_run.Items)
-                dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
-            end
-            if app.wProj.alt_stage(pse_name, alt_name) == 2 % Multi-Line Stage 2: Offshore End From Stage 1 (multiline_stage2_config)
-                tbl = tbl(~ismember(tbl(:, 1), {'offshore_elevation', 'offshore_slope'}), :);
-            elseif ~isempty(dbObj) && ~isempty(app.db_offshore_elevation(dbObj))
-                tbl = tbl(~strcmp(tbl(:, 1), 'offshore_elevation'), :);
-            end
-            app.PSETable.Data = tbl;
+            % [NEW] PSE Viewer Table (chessController.pse_table: Offshore Rows Shown Only Where Runs Use Them)
+            app.push_inputs();
+            app.PSETable.Data = app.controller.pse_table();
+            app.controller_done();
         end
 
         function populate_stormDB_panel(app, dbObj, db_list)
             % Load Storm (Cached). Storm DB File Missing Or Unreadable: Empty Tab With The Storm DB Listed And A Re-Import Note
             try
-                storm = app.load_storm(dbObj);
+                storm = app.controller.load_storm(dbObj);
             catch
                 app.reset_tab('db');
                 app.StormDBDropDown.Items = db_list;
@@ -1408,50 +932,17 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function populateResultsTab(app)
-            % Load Results For Active Alternative / Workflow / Storm DB (Auto-Load) + Status Line
-            app.resultsState = [];
-            if ~app.has_active_alt() || isempty(app.StormDBDropDown_run.Value)
+            % Results Of Active Alternative / Workflow / Storm DB (chessController.load_results: Only Once The Saved Simulation
+            % Key Is Resolved And Not Declined) + Status Line; Plot Types Of The Loaded Run (Library Plot Catalog)
+            app.push_inputs();
+            [loaded, msg] = app.controller.load_results();
+            app.controller_done();
+            app.simStatusBar.Value = msg;
+            if ~loaded
                 app.reset_tab('results');
-                app.set_sim_status('');
                 return
             end
-            % Switch Pending (Key Differs From The Last Resolved One): sync_saved_sim Decides Whether To Load
-            if ~isequal(app.sim_key(), app.simKey)
-                app.reset_tab('results');
-                app.set_sim_status('');
-                return
-            end
-            % Load Declined ("Keep current inputs") For This Key: Results Stay Cleared Until The Key Changes, The Run Dialog's
-            % "Load existing" Loads It Or A Run Succeeds (Internal Refreshes Do Not Load It)
-            if ~isempty(app.declinedSimKey) && isequal(app.sim_key(), app.declinedSimKey)
-                app.reset_tab('results');
-                app.set_sim_status('Current simulation already exists. Load declined.');
-                return
-            end
-            [config_file, ~, ~, ~, out_files] = app.get_config_path();
-            [has_sim, label] = app.saved_sim();
-            if ~has_sim
-                app.reset_tab('results');
-                app.set_sim_status(['No saved simulation for ' label '.']);
-                return
-            end
-            % Load Results & Run Config (Other Plot Data Is Loaded On Demand By plot_project_responses)
-            S = load(out_files.resp_data, 'Resp');
-            % Run's Structure (Saved By The Library call_project_response, With The Run's Resolved Offshore Elevation), Not The Current PSE
-            C = load(config_file, 'config', 'structure');
-            C.config = app.localize_saved_config(C.config);
-            state = struct('Resp', S.Resp, 'config', C.config, 'structure', C.structure,...
-                'project_forcing', [], 'prob_mass', [], 'out_files', out_files,...
-                'dbObj', app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db'));
-            if any(C.config.workflow == [2 3]) && isfile(out_files.project_forcing) % DET (Forcing Not Copied Into Resp) & LCS Plots Need Project Forcing
-                P = load(out_files.project_forcing, 'project_forcing');
-                state.project_forcing = P.project_forcing;
-            end
-            app.resultsState = state;
-            % Status: Saved Run Config Vs Current Run Tab Inputs
-            app.set_sim_status(app.results_status());
-            % Plot Types Available For This Run (Library Plot Catalog)
-            cat = app.results_plot_catalog();
+            cat = app.controller.plot_catalog();
             app.PlotTypeDropDown.Items = {cat.label};
             app.PlotTypeDropDown.ItemsData = {cat.key};
             app.Panel_2.Enable = true;
@@ -1460,27 +951,25 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function populateSimulationTab(app)
-            % Snapshot Current Run Tab State (Restored If Context Is Unchanged)
+            % Snapshot Current Run Tab State (Restored If Context Is Unchanged: chessController.set_context)
             app.get_sim_state();
+            new_context = app.controller.set_context();
             % Nothing To Show Without An Alternative And A Storm DB
             dbList = [];
-            if app.has_active_alt()
-                dbList = app.wProj.get_project_field('stormDB_list', '', '', 'proj');
+            if app.controller.has_active_alt()
+                dbList = app.controller.project.get_project_field('stormDB_list', '', '', 'proj');
             end
             if isempty(dbList)
                 app.reset_tab('sim');
-                app.simContext = '';
                 return
             end
-            [pse_name, alt_name] = app.get_active_names();
-            context = strjoin({app.wProj.name, pse_name, alt_name}, '|');
-            new_context = ~strcmp(context, app.simContext);
+            [pse_name, alt_name] = app.controller.active_names();
 
             % 1. Storm DB (New Context: The Alternative's Newest Simulation, chessProject.default_db; Else Keep User Choice)
             db_names = {dbList.db_name};
             current_db = app.StormDBDropDown_run.Value;
             app.StormDBDropDown_run.Items = db_names;
-            default_db = app.wProj.default_db(pse_name, alt_name);
+            default_db = app.controller.project.default_db(pse_name, alt_name);
             if new_context && ~isempty(default_db)
                 app.StormDBDropDown_run.Value = default_db;
             elseif ~new_context && any(strcmp(current_db, db_names))
@@ -1497,7 +986,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.set_dropdown_items(app.StormTypeDropDown_2, st_types);
 
             % 3. Tides (File Names Shown, Full Paths Passed To The Library As config.tide_file)
-            tide_files = app.wProj.tide_files_list(:);
+            tide_files = app.controller.project.tide_files_list(:);
             [~, tide_names, tide_ext] = cellfun(@fileparts, tide_files, 'un', false);
             app.TidesFileDropDown.Items = [{'None'}; strcat(tide_names, tide_ext)];
             app.TidesFileDropDown.ItemsData = [{'None'}; tide_files];
@@ -1512,88 +1001,55 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             else
                 app.set_sim_state(1, '');
             end
-            app.simContext = context;
 
             % 6. Inputs Table & Run Button (Constants Table: Callers Run populate_constants_table Next)
             app.set_input_table();
         end
 
-        function project_field_ini(app)
-            % This function ensures all chess_project fields dimensions stay
-            % in sync. Needs to be called once a PSE/Alternative is created
-            if ~isempty(app.wProj)
-                app.wProj.sync_alt_fields();
-            end
-        end % End Function
-
-        function [offshore_elevation, elevation_source] = pse_popout_offshore_elevation(app)
-            % [NEW] Offshore Elevation For The PSE Pop-Out Text Box: Study Grid Value Of The Storm DB Selected On The Run Tab
-            % (Defaults To The Alternative's Last-Run DB), Else The PSE Geometry Value. None -> [] (chessProject.plot_geometry
-            % Keeps The PSE Value, Else The Library Shows 'n/a').
-            offshore_elevation = [];
-            elevation_source = '';
-            if isempty(app.wProj) || isempty(app.wProj.stormDB_list) || isempty(app.StormDBDropDown_run.Items)
-                return
-            end
-            db_name = app.StormDBDropDown_run.Value;
-            dbObj = app.wProj.get_project_field('stormDB_list', db_name, '', 'db');
-            if isempty(dbObj)
-                return
-            end
-            % Multi-Line Stage 2: The Plot Starts With Stage 1 (plot_pse_geometry), The Text Box Is Stage 1's Offshore End As
-            % Its Runs Resolve It (Storm DB Grid, Else Stage 1's PSE Value). No Stage 1 Run (multiline_stage1_row): Stage 2
-            % Plotted Alone, No Text Box
-            [pse_name, alt_name] = app.get_active_names();
-            if app.wProj.alt_stage(pse_name, alt_name) == 2
-                if isempty(app.multiline_stage1_row())
-                    return
-                end
-                alt_name = app.wProj.stage1_alt(pse_name);
-            end
-            [offshore_elevation, elevation_source] = app.shown_offshore_elevation(dbObj, alt_name);
-            if strcmp(elevation_source, 'Storm DB grid')
-                elevation_source = ['Storm DB: ' db_name];
-            elseif isnan(offshore_elevation)
-                offshore_elevation = [];
-            end
-        end
-
         function plot_pse_geometry(app, ax, base_fnt, keep_text_box)
             % Active Alternative's Transect Into ax (chessProject.plot_geometry). keep_text_box: Pop-Out Text Box (Offshore End:
-            % pse_popout_offshore_elevation). Multi-Line Stage 2: In Line Behind Stage 1 As Run For The Run Tab Storm DB +
+            % chessController.popout_offshore_elevation). Multi-Line Stage 2: In Line Behind Stage 1 As Run For The Run Tab Storm DB +
             % Workflow (multiline_stage1_row: Stage 1's PSE Geometry With That Run's Kt Geometry, Row structure_kt); No Such Run:
             % Stage 2 Alone With A Note
-            [pse_name, alt_name] = app.get_active_names();
+            [pse_name, alt_name] = app.controller.active_names();
             [offshore_elevation, elevation_source] = deal([], '');
             if keep_text_box
-                [offshore_elevation, elevation_source] = app.pse_popout_offshore_elevation();
+                app.push_inputs();
+                [offshore_elevation, elevation_source] = app.controller.popout_offshore_elevation();
+                app.controller_done();
             end
             stage1 = [];
-            if app.wProj.alt_stage(pse_name, alt_name) == 2
+            if app.controller.project.alt_stage(pse_name, alt_name) == 2
                 [s1_row, ~, run_label] = app.multiline_stage1_row();
                 if isempty(run_label)
                     stage1 = 'Stage 1 not shown: no Run tab storm DB';
                 elseif isempty(s1_row)
                     stage1 = ['Stage 1 not run for ' run_label];
                 else
-                    stage1 = app.wProj.get_project_field('pse_geometry', pse_name, app.wProj.stage1_alt(pse_name), 'alt');
+                    stage1 = app.controller.project.get_project_field('pse_geometry', pse_name, app.controller.project.stage1_alt(pse_name), 'alt');
                     for fld = fieldnames(s1_row.structure_kt)'
                         stage1.(fld{1}) = s1_row.structure_kt.(fld{1});
                     end
                 end
             end
-            app.wProj.plot_geometry(pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source, stage1);
+            app.controller.project.plot_geometry(pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source, stage1);
         end
 
-        function replot_multiline_stage2(app)
-            % Run Tab Storm DB / Workflow Changed: A Multi-Line Stage 2 Plot Shows Stage 1's Run Of The New Pair
-            if ~app.has_active_alt()
-                return
+        function push_inputs(app)
+            % Run Tab Widgets -> chessController (selection.db / workflow, inputs: Controls And Visible Inputs Table Rows; Hidden
+            % Rows Keep Their Stored Values). Called Before Every Controller Call That Reads Them: The Controller Never Reads Widgets
+            db_name = '';
+            if ~isempty(app.StormDBDropDown_run.Items)
+                db_name = app.StormDBDropDown_run.Value;
             end
-            [pse_name, alt_name] = app.get_active_names();
-            if app.wProj.alt_stage(pse_name, alt_name) == 2
-                app.plot_pse_geometry(app.PSEAxes, app.plotFontSize, false);
-            end
+            app.controller.set_run_selection(db_name, app.WorkflowDropDown.Value);
+            app.controller.set_input('storm_sampling', app.StormTypeDropDown_2.Value);
+            app.controller.set_input('data_types', app.get_checked_symbols(app.DataTypesTree));
+            app.controller.set_input('swl_slr', app.SeaLevelChangeEditField.Value);
+            app.controller.set_input('tide_file', app.TidesFileDropDown.Value);
+            app.controller.set_input('apply_depth_limitation', app.ApplyDepthLimitationCheckBox.Value);
+            app.controller.set_input('responses', app.get_checked_symbols(app.ResponsesTree));
+            app.store_table_values();
         end
 
         function value = pull_input_table_value(app, table_data, field_to_get)
@@ -1605,99 +1061,36 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
-        function refresh_active_view(app, user_switch)
-            % [NEW] Single Refresh Pipeline: Project Panel & Tree -> PSE Tab -> Storm DB Tab -> Run Tab -> Results Tab -> Saved Simulation.
-            %   user_switch = true: Tree / Project / PSE / Alternative Selection By The User (May Ask To Load A Saved Simulation)
-            if nargin < 2
-                user_switch = false;
-            end
-            app.populate_project_panel();
-            % Storm DB Viewer (The Alternative's Newest Simulation, chessProject.default_db; Else First)
-            dbList = [];
-            if ~isempty(app.wProj)
-                dbList = app.wProj.get_project_field('stormDB_list', '', '', 'proj');
-            end
-            if isempty(dbList)
-                app.reset_tab('db');
-            else
-                db_indx = [];
-                if app.has_active_alt()
-                    [pse_name, alt_name] = app.get_active_names();
-                    db_indx = find(strcmp(app.wProj.default_db(pse_name, alt_name), {dbList.db_name}), 1);
-                end
-                if isempty(db_indx)
-                    db_indx = 1;
-                end
-                app.populate_stormDB_panel(dbList(db_indx), {dbList.db_name});
-            end
-            % CHESS Run & Results Viewer. PSE Viewer After The Run Tab (A Multi-Line Stage 2 Plot Follows Its Storm DB + Workflow)
-            app.populateSimulationTab();
-            if app.has_active_alt()
-                app.plot_pse_geometry(app.PSEAxes, app.plotFontSize, false);
-            else
-                app.reset_tab('pse');
-            end
-            app.populate_pse_table();
-            app.populate_constants_table();
-            app.populateResultsTab();
-            % Saved Simulation Of A New Alternative / Workflow / Storm DB (Dialog Only On A User Switch)
-            app.sync_saved_sim(user_switch);
-        end
-
         function rebuild_sims(app, proj)
-            % Project Tree Right-Click "Rebuild simulations from disk": The Active Project's Registry Rebuilt From Every Bundle On
-            % Disk (chessProject.sync_sims 'full'), Saved, Multi-Line Stage 1 Drift Asked (stage1_sync_prompts), Refreshed;
-            % Counts Reported. Only The Active Project (The One This Session Holds The Lock Of)
+            % Project Tree Right-Click "Rebuild simulations from disk" (chessController.rebuild_sims: Only The Active Project,
+            % Never During A Run): Multi-Line Stage 1 Drift Asked, Refreshed; Counts Reported
             title_str = 'Rebuild Simulations From Disk';
-            if app.runActive
-                uialert(app.UIFigure, 'Rebuilding is not available while a run is in progress.', title_str, 'Icon', 'info');
+            out = app.controller.rebuild_sims(proj);
+            if ~out.done
+                app.auxLib.alert_dlgbox(out.text, title_str, 'info');
                 return
             end
-            if isempty(app.wProj) || proj ~= app.wProj
-                uialert(app.UIFigure, sprintf('Select project "%s" first: only the active project can be rebuilt.', proj.name),...
-                    title_str, 'Icon', 'info');
-                return
-            end
-            info = proj.sync_sims('project', 'full');
-            app.save_project(proj);
-            app.stage1_sync_prompts(proj, info);
-            % Saved Simulation Key Re-Resolved, Loaded Results Dropped; Refresh (Tree Included)
-            app.simKey = [];
-            app.declinedSimKey = '';
-            app.resultsState = [];
-            [act_pse, act_alt] = app.get_active_names();
-            app.set_active_selection(proj.name, act_pse, act_alt);
-            app.refresh_active_view();
-            msg = sprintf('Simulations rebuilt from disk: %d added, %d refreshed, %d dropped.', info.added, info.refreshed, info.dropped);
-            if info.skipped > 0
-                msg = sprintf('%s\n%d simulation(s) skipped: their config file could not be read.', msg, info.skipped);
-            end
-            uialert(app.UIFigure, msg, title_str, 'Icon', 'info');
+            app.controller_done();
+            app.refresh();
+            app.auxLib.alert_dlgbox(out.text, title_str, 'info');
         end
 
         function remove_alt_sims(app, proj, pse_name, alt_name, sim_label)
-            % Delete Simulation Bundles (Registry Rows, sim_rows: Run Files Of One Storm DB + Workflow) Of An Alternative Of proj.
-            % sim_label '': Dialog (Alternatives Of pse_name, Starting On alt_name; Its Bundles, One Or More), Else That Bundle
-            % After A Confirmation. A Multi-Line Stage 1 Bundle Takes The Stage 2 Bundles Of The Same Storm DB + Workflow With
-            % It. Files And Rows Go Through chessProject.delete_sim (delete_sim_rows). Only The Active Project (Locked)
+            % Delete Simulation Bundles Of An Alternative Of proj (chessController.remove_sims; Only The Active Project, Never
+            % During A Run). sim_label '': Dialog (Alternatives Of pse_name, Starting On alt_name; Its Bundles, One Or More),
+            % Else That Bundle After A Confirmation. A Multi-Line Stage 1 Bundle Takes Its Stage 2 Bundles (Asked)
             title_str = 'Remove Alternative Simulation';
-            if app.runActive
-                uialert(app.UIFigure, 'Removing is not available while a run is in progress.', title_str, 'Icon', 'info');
+            msg = app.controller.refusal(proj, 'Removing', 'changed');
+            if ~isempty(msg)
+                app.auxLib.alert_dlgbox(msg, title_str, 'info');
                 return
             end
-            if isempty(app.wProj) || proj ~= app.wProj
-                uialert(app.UIFigure, sprintf('Select project "%s" first: only the active project can be changed.', proj.name),...
-                    title_str, 'Icon', 'info');
-                return
-            end
-            % Dialog Lists: Rows Without Repair (No Save Or Drift Prompt From Inside The Dialog); The Chosen Alternative Is
-            % Repaired Once The Dialog Has Closed (app.sim_rows Below)
-            labels_of = @(a) arrayfun(@chessProject.sim_label, proj.sim_rows(pse_name, a, false), 'un', false);
+            % Dialog Lists: Rows Without Repair (No Save Or Drift Question From Inside The Dialog)
             if isempty(sim_label)
                 alts = proj.alternative_list{strcmp(proj.pse_list, pse_name)};
                 app.auxLib.dropdown_list_dlgbox(sprintf(['Delete simulations of PSE "%s" with all their run files. Choose the ',...
                     'alternative, then one or more simulations (storm DB | workflow; Ctrl+click selects several).'], pse_name),...
-                    title_str, 'Alternative:', alts, alt_name, labels_of, 'Delete');
+                    title_str, 'Alternative:', alts, alt_name, @(a) app.controller.sim_labels(proj, pse_name, a), 'Delete');
                 answer = app.auxLib.dialog_answer;
                 if isempty(answer)
                     return
@@ -1712,56 +1105,81 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
                 labels = {sim_label};
             end
-            rows = app.sim_rows(proj, pse_name, alt_name);
-            rows = rows(ismember(arrayfun(@chessProject.sim_label, rows, 'un', false), labels));
-            if isempty(rows)
-                return
+            out = app.controller.remove_sims(proj, pse_name, alt_name, labels);
+            app.controller_done();
+            if strcmp(out.status, 'ask')
+                out = app.controller.remove_sims(proj, pse_name, alt_name, labels, struct(out.question.id, {app.ask_question(out.question)}));
             end
-            del = [repmat({alt_name}, numel(rows), 1), {rows.db}', {rows.workflow}'];
-            % Multi-Line Stage 1: Stage 2 Bundles Of The Same Storm DB + Workflow Use Its Results
-            cascade = app.multiline_cascade_sims(proj, pse_name, alt_name, del(:, 2:3));
-            if ~isempty(cascade)
-                lines = strcat({['  ' char(8226) ' ']}, cascade(:, 1), {': '}, cascade(:, 2), {' | '}, cascade(:, 3));
-                app.auxLib.choice_dlgbox(sprintf(['"%s" is the first stage of a multi-line transect. These second-stage ',...
-                    'simulations use its results and are deleted too:\n%s'], alt_name, strjoin(lines, newline)),...
-                    {'Delete', 'Cancel'}, title_str, 560);
-                if ~strcmp(app.auxLib.dialog_answer, 'Delete')
-                    return
-                end
-                del = [del; cascade];
-            end
-            failed = app.delete_sim_rows(proj, pse_name, del);
-            % Saved Simulation Key Re-Resolved, Loaded Results Dropped; Refresh (Tree Included) & Save
-            app.simKey = [];
-            app.declinedSimKey = '';
-            app.resultsState = [];
-            [act_pse, act_alt] = app.get_active_names();
-            app.set_active_selection(app.wProj.name, act_pse, act_alt);
-            app.refresh_active_view();
-            app.save_project(proj);
-            if ~isempty(failed)
-                uialert(app.UIFigure, sprintf(['Deleted, but these files could not be deleted (a file may be open in another ',...
-                    'program):\n%s\nClose it and remove the simulation again.'], strjoin(failed, newline)), title_str, 'Icon', 'warning');
+            if strcmp(out.status, 'done')
+                msgs = app.controller.take_messages();
+                app.refresh();
+                app.show_messages(msgs);
             end
         end
 
-        function failed = delete_sim_rows(app, proj, pse_name, rows)
-            % Deletes Simulation Bundles Of PSE pse_name (Rows {alternative, db, workflow}): Files And Registry Row
-            % (chessProject.delete_sim). failed: Files Not Deleted
-            failed = cell(0, 1);
-            for dd = 1:size(rows, 1)
-                failed = [failed; proj.delete_sim(pse_name, rows{dd, :})]; %#ok<AGROW>
+        function refresh(app, ask)
+            % [NEW] Flagged Refresh: The Views The Controller Marked Stale (chessController.take_changed, VIEWS Order) Redrawn:
+            % Project Panel & Tree -> Storm DB Tab -> Run Tab Controls (Or Inputs Table Only) -> PSE Tab (After The Run Tab:
+            % A Multi-Line Stage 2 Plot Follows Its Storm DB + Workflow) -> Constants -> Results Tab, Then Its Saved Simulation
+            % (Dialog Only When ask: A User Switch). Flags Raised While Redrawing Are Dropped (Drawn In This Pass)
+            if nargin < 2
+                ask = false;
             end
+            views = app.controller.take_changed();
+            has = @(v) any(strcmp(views, v));
+            if has('project_panel')
+                app.populate_project_panel(); % Tree Included
+            elseif has('tree')
+                app.update_project_tree();
+            end
+            if has('stormdb') % Storm DB Viewer: The Alternative's Newest Simulation (chessProject.default_db), Else First
+                dbList = [];
+                if ~isempty(app.controller.project)
+                    dbList = app.controller.project.get_project_field('stormDB_list', '', '', 'proj');
+                end
+                if isempty(dbList)
+                    app.reset_tab('db');
+                else
+                    db_indx = [];
+                    if app.controller.has_active_alt()
+                        [pse_name, alt_name] = app.controller.active_names();
+                        db_indx = find(strcmp(app.controller.project.default_db(pse_name, alt_name), {dbList.db_name}), 1);
+                    end
+                    if isempty(db_indx)
+                        db_indx = 1;
+                    end
+                    app.populate_stormDB_panel(dbList(db_indx), {dbList.db_name});
+                end
+            end
+            if has('run_controls')
+                app.populateSimulationTab();
+            elseif has('inputs_table')
+                app.set_input_table();
+            end
+            if has('pse')
+                if app.controller.has_active_alt()
+                    app.plot_pse_geometry(app.PSEAxes, app.plotFontSize, false);
+                else
+                    app.reset_tab('pse');
+                end
+                app.populate_pse_table();
+            end
+            if has('constants')
+                app.populate_constants_table();
+            end
+            if has('results')
+                app.populateResultsTab();
+                app.sync_saved_sim(ask);
+            elseif has('status') && ~isempty(app.controller.results)
+                app.push_inputs();
+                app.set_sim_status(app.controller.results_status());
+            end
+            app.controller.take_changed();
         end
 
         function rename_tree_node(app, node)
-            % Project Tree Right-Click "Rename...": Project, PSE Or Alternative Of node (chessProject.rename: Folder, Stored Paths,
-            % Saved Run Configs). Session State Holding The Old Paths/Names Follows The Rename, So The View Stays As It Was.
-            % Only The Active Project (Locked By This Session)
-            if app.runActive
-                uialert(app.UIFigure, 'Rename is not available while a run is in progress.', 'Rename', 'Icon', 'info');
-                return
-            end
+            % Project Tree Right-Click "Rename...": Project, PSE Or Alternative Of node (chessController.rename). Only The Active
+            % Project (Locked By This Session), Never During A Run. The View Stays As It Was, Under The New Name
             level = node.NodeData.type;
             [pse_name, alt_name] = deal('');
             switch level
@@ -1775,11 +1193,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     pse_name = node.Parent.NodeData.name;
                     alt_name = node.NodeData.name;
             end
-            proj_names = {app.chess_projects.name};
-            proj = app.chess_projects(strcmp(proj_names, proj_node.NodeData.name));
-            if isempty(app.wProj) || proj ~= app.wProj % Only The Project This Session Holds The Lock Of
-                uialert(app.UIFigure, sprintf('Select project "%s" first: only the active project can be renamed.', proj.name),...
-                    'Rename', 'Icon', 'info');
+            proj_names = {app.controller.projects.name};
+            proj = app.controller.projects(strcmp(proj_names, proj_node.NodeData.name));
+            msg = app.controller.refusal(proj, 'Rename', 'renamed');
+            if ~isempty(msg)
+                app.auxLib.alert_dlgbox(msg, 'Rename', 'info');
                 return
             end
             current = node.NodeData.name;
@@ -1812,78 +1230,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if isempty(new_name)
                 return
             end
-            % Active Selection And Run Tab Context Before The Rename (Kept, Under The New Name)
-            act_proj = app.wProj.name;
-            [act_pse, act_alt] = app.get_active_names();
-            ctx_before = strjoin({act_proj, act_pse, act_alt}, '|');
-            % The Active Project's Lock File Is Open Inside Its Folder: Released For The Folder Move, Taken Again After (Not
-            % Taken: Warning, The Project Stays Open Without A Lock; Selecting It Again Retries)
-            relock = strcmp(level, 'proj') && ~isempty(app.projectLock) && app.projectLock.proj == proj;
-            if relock
-                app.release_project_lock();
+            out = app.controller.rename(proj, level, new_name, pse_name, alt_name, siblings);
+            msgs = app.controller.take_messages();
+            if strcmp(out.status, 'error')
+                app.auxLib.error_dlgbox(out.text);
+            else
+                app.refresh();
             end
-            rename_err = [];
-            try
-                info = proj.rename(level, new_name, pse_name, alt_name, siblings);
-            catch rename_err
-            end
-            lock_warn = '';
-            if relock
-                [lock, lock_msg] = app.try_project_lock(proj);
-                if isempty(lock)
-                    lock_warn = sprintf(['%s\nThe project is open without a lock: another CHESS session could open and change ',...
-                        'it too. Select the project again to retry.'], lock_msg);
-                else
-                    app.set_project_lock(proj, lock);
-                end
-            end
-            if ~isempty(rename_err)
-                app.auxLib.error_dlgbox(['Could not rename "' current '": ' rename_err.message]);
-                if ~isempty(lock_warn)
-                    uialert(app.UIFigure, lock_warn, 'Project Not Locked', 'Icon', 'warning');
-                end
-                return
-            end
-            is_active = proj == app.wProj;
-            switch level
-                case 'proj'
-                    if is_active
-                        act_proj = new_name;
-                    end
-                case 'pse'
-                    if is_active && strcmp(act_pse, current)
-                        act_pse = new_name;
-                    end
-                case 'alt'
-                    if is_active && strcmp(act_pse, pse_name) && strcmp(act_alt, current)
-                        act_alt = new_name;
-                    end
-            end
-            if strcmp(app.simContext, ctx_before)
-                app.simContext = strjoin({act_proj, act_pse, act_alt}, '|');
-            end
-            % Paths Under The Moved Folder: Cached storm/CHS_Data Dropped (Reloaded From The New Paths); Saved Simulation Keys
-            % (get_config_path) And Older-DB Alerts Remapped; Loaded Results Reloaded By refresh_active_view
-            remap = @(p) chessProject.relocate_path(p, info.old_dir, info.new_dir);
-            keys = app.stormCache.keys();
-            moved = keys(~strcmp(keys, cellfun(remap, keys, 'un', false)));
-            if ~isempty(moved)
-                remove(app.stormCache, moved);
-            end
-            app.simKey = remap(app.simKey);
-            app.declinedSimKey = remap(app.declinedSimKey);
-            app.oldDbWarned = cellfun(remap, app.oldDbWarned, 'un', false);
-            app.resultsState = [];
-            app.save_project(proj);
-            app.set_active_selection(act_proj, act_pse, act_alt);
-            app.refresh_active_view();
-            if ~isempty(info.failed)
-                lock_warn = strtrim(sprintf('%s\n\n%s', sprintf('Renamed to "%s", but these files could not be updated:\n%s',...
-                    new_name, strjoin(info.failed, newline)), lock_warn));
-            end
-            if ~isempty(lock_warn)
-                uialert(app.UIFigure, lock_warn, 'Rename', 'Icon', 'warning');
-            end
+            app.show_messages(msgs);
 
             function msg = name_check(v)
                 msg = chessProject.name_problem(v, siblings, current, parent_dir);
@@ -1960,117 +1314,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
-        function restore_leftover_backups(app, bk)
-            % [NEW] *_prev Files At Run Start: The Last Run Never Finished (e.g. MATLAB Closed), Put The Previous Run Back First
-            for kk = 1:numel(bk)
-                if isfile(bk(kk).prev)
-                    movefile(bk(kk).prev, bk(kk).file, 'f');
-                end
-            end
-        end
-
-        function failed = restore_sim_files(app, backed)
-            % [NEW] Failed Run: Put Back What This Run Backed Up (*_prev Moved Over Whatever The Run Left) And Delete The Files
-            % It Created Where There Were None. Best Effort: failed Lists What Could Not Be Restored
-            failed = {};
-            for kk = 1:numel(backed)
-                try
-                    if backed(kk).existed
-                        if isfile(backed(kk).prev)
-                            movefile(backed(kk).prev, backed(kk).file, 'f');
-                        end
-                    elseif isfile(backed(kk).file)
-                        delete(backed(kk).file);
-                    end
-                catch ME
-                    failed{end+1} = sprintf('%s (%s)', backed(kk).file, ME.message); %#ok<AGROW>
-                end
-            end
-        end
-
-        function [lbl, items, on] = results_aux_items(app, key, data, ds_query)
-            % [NEW] Storm ID Dropdown Per Plot Type: Event ID, Life Cycle Or A Plot Option
-            lbl = 'Storm ID:';
-            items = {'-'};
-            on = false;
-            lc_items = @(n) [{'All'}, arrayfun(@num2str, 1:n, 'un', false)];
-            switch key
-                case 'hc' % No Numeric Run Sample (CC Is Derived, FB POT Is A Note): Nothing To Overlay (pros_methods.hc_plot Gate)
-                    lbl = 'Add Events:';
-                    sel = data(strcmp({data.var}, app.FieldToPlotDropDown_results.Value));
-                    if strcmp(ds_query.storm_type, 'CC') || isempty(sel) || ~isnumeric(sel(1).POT)
-                        items = {'Off'};
-                    else
-                        items = {'Off', 'Run Sample', 'Storm Values'};
-                        on = true;
-                    end
-                case 'det_scatter' % X Axis (Color: Right-Click Plot Options)
-                    lbl = 'X Axis:';
-                    items = app.det_field_list(data);
-                    on = true;
-                case 'det_table' % Timeseries: Storm Whose Hydrographs Are Shown | Peaks: All Storms
-                    if strcmp(ds_query.data_type, 'Timeseries')
-                        items = arrayfun(@num2str, data.storm_id, 'un', false);
-                        on = true;
-                    else
-                        items = {'All'};
-                    end
-                case 'event' % Timeseries: One Event | Peaks: All Events
-                    if strcmp(ds_query.data_type, 'Timeseries')
-                        stm_data = aux_methods.pull_data(ds_query, app.load_storm(app.resultsState.dbObj));
-                        items = arrayfun(@num2str, cell2mat(stm_data(:, 1)), 'un', false);
-                        on = true;
-                    else
-                        items = {'All'};
-                    end
-                case 'annual'
-                    lbl = 'Normalize:';
-                    items = {'percent', 'count'};
-                    on = true;
-                case 'armor' % Life Cycle Selection Applies To S_* Damage Series Only
-                    lbl = 'Life Cycle:';
-                    field = app.FieldToPlotDropDown_results.Value;
-                    items = {'All'};
-                    if startsWith(field, 'S_') && isfield(data, 'S') && isfield(data.S, field)
-                        items = lc_items(numel(data.S.(field)));
-                        on = true;
-                    end
-                case 'sampling'
-                    lbl = 'Life Cycle:';
-                    items = lc_items(numel(aux_methods.pull_data(ds_query, app.resultsState.project_forcing)));
-                    on = true;
-                case 'submergence'
-                    lbl = 'X Scale:';
-                    items = {'Linear', 'Log'};
-                    on = true;
-            end
-        end
-
-        function [edges, labels] = results_bin_edges(app, chessPlot, ds_query, field, edges)
-            % [NEW] Annual Distribution Bin Edges (Plot Option Or Library Estimate) & Results Table Column Labels.
-            % No Finite Response Values: No Edges, No Labels (The Library Plot Shows "No finite response values to plot")
-            if isempty(edges)
-                data = aux_methods.pull_data(ds_query, app.resultsState.Resp);
-                if isfield(data, field)
-                    resp_vector = data.(field);
-                else
-                    resp_vector = data.S.(field);
-                end
-                if ~any(cellfun(@(x) any(isfinite(x(:))), resp_vector))
-                    labels = {};
-                    return
-                end
-                [~, ~, ~, ~, ~, ~, x_log] = response_library_headers(app.resultsState.config, field);
-                edges = chessPlot.generate_bin_guess(resp_vector, 5, x_log);
-            end
-            edges = edges(:)';
-            % Library Binning Uses [-Inf, edges, edges(end)+1, Inf]
-            final_edges = [-Inf, edges, edges(end)+1, Inf];
-            labels = arrayfun(@(a, b) sprintf('%g to %g', a, b), final_edges(1:end-1), final_edges(2:end), 'un', false);
-            labels{1} = sprintf('< %g', edges(1));
-            labels{end} = sprintf('>= %g', final_edges(end-1));
-        end
-
         function results_control_changed(app, src)
             % [NEW] Results Dropdown Changed (Assigned In startupFcn): Refresh Dependent Dropdowns, Then Redraw.
             % Multi-Panel Plots Open (Or Refresh) The Results Pop-Out Automatically.
@@ -2086,71 +1329,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if ~isempty(row) && row.multi_panel
                 app.open_results_popout();
             end
-        end
-
-        function dts = results_data_types(app, row)
-            % [NEW] Data Types In The Loaded Results That A Plot Type Supports
-            Resp = app.resultsState.Resp;
-            dts = intersect(row.data_types, fieldnames(Resp), 'stable');
-            if row.needs_s % Armor Damage Plots: Results Must Include Damage (S)
-                has_s = cellfun(@(dt) any(structfun(@(mt) any(structfun(@(st) isstruct(st) && isfield(st, 'S'), mt)), Resp.(dt))), dts);
-                dts = dts(has_s);
-            end
-        end
-
-        function [lbl, items] = results_field_items(app, key, data)
-            % [NEW] Field To Plot Items Per Plot Type (Library Method Field Lists)
-            lbl = 'Field To Plot:';
-            s_fields = {};
-            if isstruct(data) && isfield(data, 'S')
-                s_fields = fieldnames(data(1).S)';
-            end
-            s_series = intersect({'S_seaside_no_repairs', 'S_seaside_with_repairs', 'S_leeside_no_repairs', 'S_leeside_with_repairs'}, s_fields, 'stable');
-            switch key
-                case 'hc'
-                    items = {data.var};
-                case {'det_scatter', 'det_compare'} % Deterministic: Forcing & Responses (Y Axis / Compared Field)
-                    if strcmp(key, 'det_scatter')
-                        lbl = 'Y Axis:';
-                    end
-                    items = app.det_field_list(data);
-                case 'det_table' % Columns Are Picked In The Table Pop-Out
-                    items = {};
-                case 'event' % Responses The Event Viewer Recomputes For This Structure Type (And The Run Computed)
-                    if isfield(data, 'var')
-                        run_fields = {data.var};
-                    else
-                        run_fields = fieldnames(data)';
-                    end
-                    items = intersect(app.results_response_list('event'), run_fields, 'stable');
-                case 'annual'
-                    items = intersect(app.results_response_list('annual'), [fieldnames(data)', s_fields], 'stable');
-                case 'armor'
-                    items = [intersect({'Smax', 'LSmax'}, s_fields, 'stable'), s_series];
-                case {'damaging', 'dashboard'}
-                    items = s_series;
-                case 'final'
-                    items = intersect({'S_seaside_no_repairs', 'S_leeside_no_repairs'}, s_fields, 'stable');
-                case 'submergence' % Field To Plot Relabeled As An Option
-                    lbl = 'Normalize:';
-                    items = {'percent', 'count'};
-                otherwise % Event Sampling: No Field
-                    items = {};
-            end
-        end
-
-        function [project_forcing, dsw] = results_forcing_and_dsw(app)
-            % [NEW] Project Forcing & Storm DB Probability Masses For The Loaded Results (Loaded Once, Kept In resultsState)
-            if isempty(app.resultsState.project_forcing) && isfile(app.resultsState.out_files.project_forcing)
-                P = load(app.resultsState.out_files.project_forcing, 'project_forcing');
-                app.resultsState.project_forcing = P.project_forcing;
-            end
-            if isempty(app.resultsState.prob_mass)
-                S = load(app.resultsState.dbObj.output_paths.storm_db, 'prob_mass');
-                app.resultsState.prob_mass = S.prob_mass;
-            end
-            project_forcing = app.resultsState.project_forcing;
-            dsw = app.resultsState.prob_mass;
         end
 
         function fits = results_mirror_fits(app, row)
@@ -2179,38 +1357,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
-        function cat = results_plot_catalog(app)
-            % [NEW] Results Plot Types -> CHESS-Library Plot Methods (One Row Per Plot), Filtered For The Loaded Run.
-            %   key | label | workflows | data types | needs S (armor damage) | rubble mound only | multi-panel (pop-out only) | plot options
-            rows = {
-                'hc',          'Hazard Curve',                    [1 4],   {'Peaks','Timeseries'}, false, false, false, {}
-                'det_scatter', 'Response vs Forcing',             2,       {'Peaks','Timeseries'}, false, false, false, {'c_field'}
-                'det_table',   'Response Table',                  2,       {'Peaks','Timeseries'}, false, false, true,  {}
-                'det_compare', 'Peaks vs Timeseries',             2,       {'Peaks'},              false, false, false, {}
-                'event',       'Storm Event Viewer',              [1 2 3 4], {'Peaks','Timeseries'}, false, false, true,  {}
-                'annual',      'Annual Response Distribution',    3,       {'Peaks','Timeseries'}, false, false, false, {'bin_edges','cb_lim','grid_on','cb_log'}
-                'armor',       'Slope Armor Damage',              3,       {'Timeseries'},         true,  true,  false, {}
-                'sampling',    'Event Sampling Distribution',     3,       {'Peaks','Timeseries'}, false, false, false, {}
-                'damaging',    'Damaging Instances Distribution', 3,       {'Peaks','Timeseries'}, true,  false, false, {}
-                'submergence', 'PSE Submergence Distribution',    3,       {'Timeseries'},         false, false, false, {'cb_lim','cb_log'}
-                'final',       'Final Damage State',              3,       {'Timeseries'},         true,  false, false, {}
-                'dashboard',   'Mound Damage Dashboard',          3,       {'Timeseries'},         true,  true,  true,  {'bin_edges','cb_lim'}
-                'scheme',      'Sampling Scheme Dashboard',       3,       {'Peaks','Timeseries'}, false, false, true,  {}};
-            cat = cell2struct(rows, {'key','label','workflows','data_types','needs_s','rubble_mound','multi_panel','options'}, 2);
-            state = app.resultsState;
-            if isempty(state)
-                return
-            end
-            keep = false(size(cat));
-            for cc = 1:numel(cat)
-                cat(cc).data_types = app.results_data_types(cat(cc));
-                keep(cc) = ismember(state.config.workflow, cat(cc).workflows) && ~isempty(cat(cc).data_types) &&...
-                    (~cat(cc).rubble_mound || state.structure.struc_type == 3) &&...
-                    (~strcmp(cat(cc).key, 'det_compare') || isfield(state.Resp, 'Timeseries')); % Needs Peaks & Timeseries
-            end
-            cat = cat(keep);
-        end
-
         function results_plot_options_dialog(app)
             % [NEW] Right-Click "Plot Options...": Library Plot Arguments Not Covered By The Dropdowns (Session Only)
             row = app.results_plot_row();
@@ -2218,7 +1364,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             if isempty(row.options)
-                uialert(app.UIFigure, ['"' row.label '" has no plot options.'], 'Plot Options', 'Icon', 'info');
+                app.auxLib.alert_dlgbox(['"' row.label '" has no plot options.'], 'Plot Options', 'info');
                 return
             end
             opts = app.get_results_options(row.key);
@@ -2247,7 +1393,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         lbl = 'Color By:';
                         ds_query = struct('storm_type', app.StormTypeDropDown_results.Value,...
                             'data_type', app.DataTypeDropDown_results.Value, 'match_type', app.MatchTypeDropDown_results.Value);
-                        c_items = app.det_field_list(aux_methods.pull_data(ds_query, app.resultsState.Resp));
+                        c_items = app.controller.det_fields(aux_methods.pull_data(ds_query, app.controller.results.Resp));
                         c = uidropdown(gl, 'Items', c_items);
                         if any(strcmp(c_items, opts.c_field))
                             c.Value = opts.c_field;
@@ -2320,64 +1466,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         function row = results_plot_row(app)
             % [NEW] Catalog Row Of The Selected Plot Type ([] If None)
             row = [];
-            if isempty(app.resultsState) || isempty(app.PlotTypeDropDown.Items)
+            if isempty(app.controller.results) || isempty(app.PlotTypeDropDown.Items)
                 return
             end
-            cat = app.results_plot_catalog();
+            cat = app.controller.plot_catalog();
             row = cat(strcmp({cat.key}, app.PlotTypeDropDown.Value));
-        end
-
-        function fields = results_response_list(app, list_name)
-            % [NEW] Response Names Accepted By Library Plot Methods (Mirror Of Their Argument Validation)
-            %   'annual': lcs_methods.annual_response_distribution | 'event': CHESSPlotsBase.storm_event_viewer (Per Structure Type)
-            switch list_name
-                case 'annual'
-                    fields = {'Hm0t', 'R2p', 'R2p_SWL', 'Dn50', 'Dn50_LCBW', 'Dn50_Lee', 'p1', 'q', 'q_overflow', 'q_wave_ot',...
-                        'Q_vol', 'Q_vol_overflow', 'Q_vol_wave_ot', 'DamDepthElev', 'DamDepth', 'p2dyn', 'p2sta', 'p2total',...
-                        'p3dyn', 'p3sta', 'p3total', 'pu', 'X_low', 'X_up', 'X_c_surge', 'Bx', 'theta_low', 'theta_up',...
-                        'theta_center', 'Bjet', 'Vjet', 'Fjet', 'S_seaside_with_repairs', 'S_seaside_no_repairs',...
-                        'S_leeside_no_repairs', 'S_leeside_with_repairs'};
-                case 'event'
-                    overtopping = {'q', 'q_overflow', 'q_wave_ot', 'Q_vol', 'Q_vol_overflow', 'Q_vol_wave_ot', 'DamDepthElev', 'DamDepth'};
-                    switch app.resultsState.structure.struc_type
-                        case 1
-                            fields = [{'Hm0t', 'R2p', 'R2p_SWL'}, overtopping];
-                        case 2
-                            fields = [{'p1'}, overtopping, {'p2dyn', 'p2sta', 'p2total', 'p3dyn', 'p3sta', 'p3total', 'pu',...
-                                'X_low', 'X_up', 'X_c_surge', 'Bx', 'theta_low', 'theta_up', 'theta_center', 'Bjet', 'Vjet', 'Fjet'}];
-                        case 3
-                            fields = [{'Hm0t', 'R2p', 'R2p_SWL', 'Dn50', 'Dn50_LCBW', 'Dn50_Lee'}, overtopping];
-                        otherwise
-                            fields = [{'Hm0t', 'R2p', 'R2p_SWL', 'Dn50_LCBW'}, overtopping];
-                    end
-            end
-        end
-
-        function msg = results_status(app)
-            % [NEW] Status Bar Text: Do The Loaded Results Match The Active PSE Geometry And The Current Run Tab Inputs? (No Side Effects)
-            msg = '';
-            try
-                [pse_name, alt_name] = app.get_active_names();
-                pseObj = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
-                config_now = app.create_resp_config(pseObj, dbObj, false);
-                saved_config = app.resultsState.config;
-                % Geometry: PSE Geometry Fields (Bridged Into config; offshore_elevation As Resolved, Storm DB Grid Wins)
-                geo_fields = fieldnames(pseObj);
-                [geo_changed, geo_fld] = any_field_changed(config_now, saved_config, geo_fields);
-                % Run Tab Inputs: Every Other Field (sim_inputs_changed Compares The Fields Of config_now)
-                [inp_changed, inp_fld] = app.sim_inputs_changed(saved_config, rmfield(config_now, geo_fields));
-                if geo_changed && inp_changed
-                    msg = ['PSE geometry differs from the loaded results (' geo_fld '); Run tab inputs also changed (' inp_fld '). Press Run to update.'];
-                elseif geo_changed
-                    msg = ['PSE geometry differs from the loaded results (' geo_fld '). Press Run to update.'];
-                elseif inp_changed
-                    msg = ['Run tab inputs changed since the loaded results (' inp_fld '). Press Run to update.'];
-                else
-                    msg = app.loaded_sim_status();
-                end
-            catch
-            end
         end
 
         function results_tab_resized(app)
@@ -2392,129 +1485,58 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
-        function plan = run_hotstart_plan(app, config, old)
-            % [NEW] Run With A Saved Simulation: Library Hotstart Level (hotstart_plan) Of The Current Inputs (config, Not For Run)
-            % Against The Saved Run (old). GUI Inputs The Library Lists Do Not Cover (DB Uncertainties, Region)
-            % Count As 'resample'. plan.available: Hotstart Offered (Not 'resample', Needed Cached Forcing/Seed Present). plan.text: Dialog Line
-            plan = struct('level', 'resample', 'reason', '', 'available', false, 'text', '', 'old', old);
-            if ~isfield(old, 'forcing_stamp') % Complete Forcing Of The Saved Run (Library call_chess_boundary_conditions)
-                plan.text = 'Hotstart not available: the saved run has no complete forcing.';
+        function run_simulation(app, plan)
+            % Run A chessController.plan_run Plan (execute_run) With An App-Scoped Progress Dialog (Locks The CHESS Window
+            % Only), Then Show The Results Of The Current Key. The Inputs Table Shows An mcs_nLC Set By The LCS Convergence
+            % Question First. Failed: The Error Dialog Only (Slot Restored By The Controller). Done: Tree, Results Tab,
+            % Status Bar (How The Forcing Was Obtained), Then One Warning If The Project Update Failed
+            if ismember('inputs_table', app.controller.take_changed())
+                tbl = app.WorkflowInputsTable.Data;
+                for kk = 1:size(tbl, 1)
+                    if isfield(app.controller.inputs, tbl{kk, 1})
+                        tbl{kk, 3} = app.controller.inputs.(tbl{kk, 1});
+                    end
+                end
+                app.WorkflowInputsTable.Data = tbl;
+                app.set_input_table();
+            end
+            prog = [];
+            res = app.controller.execute_run(plan, @progress);
+            if ~isempty(prog) && isvalid(prog)
+                close(prog);
+            end
+            msgs = app.controller.take_messages();
+            if strcmp(res.status, 'failed')
+                app.show_messages(msgs);
                 return
             end
-            is_lcs = config.workflow == 3 && isempty(config.multiline); % Multi-Line Stage 2 Samples Nothing (Stage 1's Life Cycles)
-            why_not = '';
-            gui_deps = {'region', 'chs_swl_u_a', 'chs_swl_u_r', 'chs_hm0_u_a', 'chs_hm0_u_r'};
-            [changed, plan.reason] = any_field_changed(config, old, gui_deps);
-            if ~changed
-                [plan.level, plan.reason, why_not] = hotstart_plan(config, old, is_lcs);
-            end
-            if ~isempty(why_not)
-                plan.text = sprintf('Hotstart not available: ''%s'' changed, but %s.', plan.reason, why_not);
-            elseif strcmp(plan.level, 'resample')
-                plan.text = sprintf('Hotstart not available: ''%s'' changed.', plan.reason);
-            elseif strcmp(plan.level, 'full') && ~isfile(config.out_files.project_forcing)
-                plan.text = 'Hotstart not available: the cached forcing is missing.';
-            else
-                plan.available = true;
-                if strcmp(plan.level, 'reuse_sampling') && is_lcs
-                    plan.text = sprintf('Hotstart keeps the sampled life cycles; forcing rebuilt because ''%s'' changed.', plan.reason);
-                elseif strcmp(plan.level, 'reuse_sampling')
-                    plan.text = sprintf('Hotstart rebuilds the forcing because ''%s'' changed.', plan.reason);
-                elseif app.sim_inputs_changed(old, config)
-                    plan.text = 'Hotstart reuses the cached forcing.';
-                else
-                    plan.text = 'Inputs are identical; a hotstart reproduces the saved results.';
+            if ismember('tree', app.controller.take_changed()) % New Simulation Bundle Node
+                try
+                    app.update_project_tree();
+                catch
                 end
             end
-        end
+            app.push_inputs();
+            app.controller.use_key();
+            app.populateResultsTab();
+            app.set_sim_status(res.status_text);
+            app.TabGroup.SelectedTab = app.ResultsViewerTab;
+            app.show_messages(msgs);
 
-        function run_progress(app, prog, step, message, labels)
-            % [NEW] Library call_chess_boundary_conditions progress_fcn: Steps 0-4 (Cache, Build, Uncertainty, Adjust, Save) ->
-            % Bar Value And labels{step + 1}. Uncertainty And Adjust Alternate Per Dataset: The Bar Never Moves Back. The Library
-            % Message Still Goes To The Command Window
-            disp(message);
-            bar_val = [1 1 2 3 3.5]/5;
-            set(prog, 'Value', max(prog.Value, bar_val(step + 1)), 'Message', labels{step + 1});
-        end
-
-        function [choice, plan] = run_start_choice(app, pseObj, dbObj)
-            % [NEW] Run With A Saved Simulation Of The Current Key: "Hotstart" (Hidden When Not Available) | "Coldstart" |
-            % "Load existing" | "Cancel" ('Cancel' Also When The Dialog Is Closed)
-            config = app.create_resp_config(pseObj, dbObj, false);
-            S = load(config.out_files.config, 'config');
-            S.config = app.localize_saved_config(S.config); % Saved tide_file In This Project Folder: Not A Change (Hotstart Dependency)
-            plan = app.run_hotstart_plan(config, S.config);
-            [~, label, run_date] = app.saved_sim();
-            options = {'Hotstart', 'Coldstart', 'Load existing', 'Cancel'};
-            if ~plan.available
-                options = options(2:end);
-            end
-            app.auxLib.choice_dlgbox(sprintf('A simulation for %s already exists (run %s).\n%s', label, run_date, plan.text),...
-                options, 'Existing Simulation', [560 170]);
-            choice = app.auxLib.dialog_answer;
-            if isempty(choice)
-                choice = 'Cancel';
-            end
-        end
-
-        function save_project(app, chess_project)
-            % Save out Project state (Default: The Active Project)
-            if nargin < 2
-                if isempty(app.proj_indx)
-                    return
+            function progress(value, message)
+                % Bar Created At The First Step, Never Moves Back
+                if isempty(prog)
+                    prog = uiprogressdlg(app.UIFigure, 'Title', 'CHESS Simulation Progress', 'Message', message, 'Value', value);
+                elseif isvalid(prog)
+                    set(prog, 'Value', max(prog.Value, value), 'Message', message);
                 end
-                chess_project = app.chess_projects(app.proj_indx); %#ok<ADPROP,*ADPROPLC>
             end
-            save(fullfile(chess_project.path, chess_project.name, ['CHESS_project_' chess_project.name '.mat']), 'chess_project', '-v7.3'); %#ok<ADPROP>
         end
 
         function [tf, label, run_date] = saved_sim(app)
-            % [NEW] Saved Simulation For The Current Key (Config + Responses Files), "<alt> / <workflow> / <DB>", Run Date
-            [config_file, ~, ~, wflow_name, out_files] = app.get_config_path();
-            [~, alt_name] = app.get_active_names();
-            tf = isfile(config_file) && isfile(out_files.resp_data);
-            label = sprintf('%s / %s / %s', alt_name, wflow_name, app.StormDBDropDown_run.Value);
-            run_date = '';
-            if tf
-                run_date = char(datetime(dir(out_files.resp_data).datenum, 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm'));
-            end
-        end
-
-        function set_active_selection(app, proj_name, pse_name, alt_name)
-            % [NEW] Single Place That Resolves The Active Project/PSE/Alternative.
-            % Unknown Or Empty Names Fall Back To The First Available Entry.
-            app.wProj = [];
-            app.proj_indx = [];
-            app.pse_indx = [];
-            app.alt_indx = [];
-            if isempty(app.chess_projects)
-                return
-            end
-            app.proj_indx = find(strcmp(proj_name, {app.chess_projects.name}), 1);
-            if isempty(app.proj_indx)
-                app.proj_indx = 1;
-            end
-            app.wProj = app.chess_projects(app.proj_indx);
-            % PSE
-            pseList = app.wProj.pse_list;
-            if isempty(pseList)
-                return
-            end
-            if ~any(strcmp(pse_name, pseList))
-                pse_name = pseList{1};
-            end
-            app.wProj.set_working_pse(pse_name);
-            app.pse_indx = app.wProj.pse_indx;
-            % Alternative
-            altList = app.wProj.alternative_list{app.pse_indx};
-            if isempty(altList)
-                return
-            end
-            if ~any(strcmp(alt_name, altList))
-                alt_name = altList{1};
-            end
-            app.wProj.set_working_alt(pse_name, alt_name);
-            app.alt_indx = app.wProj.alt_indx;
+            % [NEW] Saved Simulation Of The Run Tab Selection (chessController.saved_sim)
+            app.push_inputs();
+            [tf, label, run_date] = app.controller.saved_sim();
         end
 
         function set_dropdown_items(app, dd, items)
@@ -2541,7 +1563,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     row = strcmp(app.WorkflowInputsTable.Data(:, 1), fld{1});
                     if any(row)
                         app.WorkflowInputsTable.Data{row, 3} = s1_row.inherited.(fld{1});
-                        app.tableState.(fld{1}) = s1_row.inherited.(fld{1});
+                        app.controller.set_input(fld{1}, s1_row.inherited.(fld{1}));
                     end
                 end
             end
@@ -2550,33 +1572,29 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if app.WorkflowDropDown.Value == 3
                 has_inputs = any(strcmp(app.WorkflowInputsTable.Data(:, 1), 'mcs_nLC'));
             end
-            db_msg = app.stormdb_missing_note();
+            app.push_inputs();
+            db_msg = app.controller.stormdb_note();
             app.RunSimulationButton.Enable = has_inputs && ~isempty(app.ResponsesTree.CheckedNodes) &&...
                 ~isempty(app.DataTypesTree.CheckedNodes) && isempty(ml_msg) && isempty(db_msg);
             app.get_sim_state();
             % Status Bar Follows Run Tab Edits (set_sim_status Shows A Missing Storm DB File Or Stage 1 Run First)
             if ~isempty(ml_msg) || ~isempty(db_msg)
                 app.set_sim_status('');
-            elseif ~isempty(app.resultsState)
-                app.set_sim_status(app.results_status());
+            elseif ~isempty(app.controller.results)
+                app.set_sim_status(app.controller.results_status());
             end
         end
 
-        function set_run_active(app, tf)
-            % [NEW] Run In Progress Flag (RunSimulationButtonPushed Clears It On Every Exit Through onCleanup)
-            app.runActive = tf;
-        end
-
         function set_sim_state(app, opMode, config_file)
-            % opMode: 1 - Snapshot (simState), 2 - Saved Config, 3 - Keep Current Inputs In A New Context (Snapshot Mapped To
-            % The Active PSE's Library Template). Inputs Table Values Live In tableState (All Workflows), Table Shows The Pertinent Rows
-            [pse_name, alt_name] = app.get_active_names();
+            % opMode: 1 - Snapshot (chessController.snapshot), 2 - Saved Config, 3 - Keep Current Inputs In A New Context (Snapshot Mapped To
+            % The Active PSE's Library Template). Inputs Table Values Live In controller.inputs (All Workflows), Table Shows The Pertinent Rows
+            [pse_name, alt_name] = app.controller.active_names();
             switch opMode
-                case 1 % Snapshot (tableState Kept As Is)
+                case 1 % Snapshot (controller.inputs Kept As Is)
                     restore_snapshot({});
                 case 2 % With Config
                     S = load(config_file, 'config');
-                    config = app.localize_saved_config(S.config);
+                    config = app.controller.localize_saved_config(S.config);
                     set_value(app.StormDBDropDown_run, config.storm_db);
                     set_value(app.StormTypeDropDown_2, config.storm_sampling);
                     set_value(app.TidesFileDropDown, config.tide_file);
@@ -2593,22 +1611,22 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     if config.use_timeseries == 1, dt = [dt, {'use_timeseries'}]; end
                     set_checked(app.DataTypesTree, dt);
                     % Inputs Of Every Workflow From Config
-                    pse_geo = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                    tpl = app.wProj.get_library_template(pse_geo.pse_type);
+                    pse_geo = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+                    tpl = app.controller.project.get_library_template(pse_geo.pse_type);
                     is_param = ~startsWith(tpl.responses(:, 2), 'Comput');
                     inputs = [{'storm_duration'}; tpl.responses(is_param, 1); tpl.mcs(:, 1); tpl.csr(:, 1); tpl.pros(:, 1)];
-                    app.tableState = struct();
+                    app.controller.clear_table_inputs();
                     app.WorkflowInputsTable.Data = cell(0, 3); % Else populate_inputs_table Stores The Visible (Previous) Values Over The Config's
                     for kk = 1:length(inputs)
                         if isfield(config, inputs{kk})
-                            app.tableState.(inputs{kk}) = config.(inputs{kk});
+                            app.controller.set_input(inputs{kk}, config.(inputs{kk}));
                         end
                     end
                 case 3 % Keep Current Inputs: Snapshot Values Where The Template Has The Response/Row (PSE Type Can Differ),
                     % Template Defaults Only For Responses, Data Types And Rows The Previous State Lacked
                     restore_snapshot({'StormDBDropDown_run'}); % New Context: Storm DB Already Chosen (populateSimulationTab)
-                    pse_geo = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                    tpl = app.wProj.get_library_template(pse_geo.pse_type);
+                    pse_geo = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+                    tpl = app.controller.project.get_library_template(pse_geo.pse_type);
                     on = tpl.responses(cellfun(@(x) isequal(x, 1), tpl.responses(:, 4)), 1);
                     set_checked(app.ResponsesTree, [app.get_checked_symbols(app.ResponsesTree), setdiff(on(:)', snapshot_value('ResponseSymbols'))]);
                     gen = tpl.general;
@@ -2623,18 +1641,15 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     app.store_table_values();
                     is_param = ~startsWith(tpl.responses(:, 2), 'Comput');
                     inputs = [{'storm_duration'}; tpl.responses(is_param, 1); tpl.mcs(:, 1); tpl.csr(:, 1); tpl.pros(:, 1)];
-                    drop = setdiff(fieldnames(app.tableState), inputs);
-                    if ~isempty(drop)
-                        app.tableState = rmfield(app.tableState, drop);
-                    end
+                    app.controller.drop_inputs(setdiff(app.controller.table_fields(), inputs));
                     app.WorkflowInputsTable.Data = cell(0, 3);
             end
             % Rebuild Inputs Table For Restored Checks & Workflow
             app.populate_inputs_table();
 
             function restore_snapshot(skip)
-                % Run Tab Controls From simState (Component Name, Value), Except skip
-                winState = app.simState;
+                % Run Tab Controls From The Snapshot (Component Name, Value), Except skip
+                winState = app.controller.snapshot.values;
                 for ii = 1:size(winState, 1)
                     switch winState{ii, 1}
                         case [{'ResponseSymbols', 'DataTypeSymbols'}, skip]
@@ -2648,10 +1663,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
             end
             function v = snapshot_value(name)
-                % simState Entry ({} If Absent)
+                % Snapshot Entry ({} If Absent)
                 v = {};
-                if ~isempty(app.simState) && any(strcmp(app.simState(:, 1), name))
-                    v = app.simState{strcmp(app.simState(:, 1), name), 2};
+                snap = app.controller.snapshot.values;
+                if ~isempty(snap) && any(strcmp(snap(:, 1), name))
+                    v = snap{strcmp(snap(:, 1), name), 2};
                 end
             end
 
@@ -2687,16 +1703,28 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function set_sim_status(app, msg)
-            % [NEW] Run Tab Status Bar (Display Only). Run Tab Storm DB Without A layout (stormdb_missing_note), Else Multi-Line
-            % Stage 2 Without A Matching Stage 1 Run: That Message Instead
-            [~, ml_msg] = app.multiline_stage1_row();
-            db_msg = app.stormdb_missing_note();
-            if ~isempty(db_msg)
-                msg = db_msg;
-            elseif ~isempty(ml_msg)
-                msg = ml_msg;
+            % [NEW] Run Tab Status Bar (Display Only): msg, Or Why The Run Tab Cannot Run (chessController.status)
+            app.push_inputs();
+            app.simStatusBar.Value = app.controller.status(msg);
+            app.controller_done();
+        end
+
+        function show_messages(app, msgs)
+            % chessController Messages (Default: The Queued Ones), In Order: 'error' -> Error Dialog, 'warning' / 'info' -> Alert
+            % (auxLib), 'status' -> Run Tab Status Bar
+            if nargin < 2
+                msgs = app.controller.take_messages();
             end
-            app.simStatusBar.Value = msg;
+            for mm = 1:numel(msgs)
+                switch msgs(mm).severity
+                    case 'error'
+                        app.auxLib.error_dlgbox(msgs(mm).text);
+                    case 'status'
+                        app.simStatusBar.Value = msgs(mm).text;
+                    otherwise
+                        app.auxLib.alert_dlgbox(msgs(mm).text, msgs(mm).title, msgs(mm).severity);
+                end
+            end
         end
 
         function show_popout_note(app, row)
@@ -2714,247 +1742,43 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 'FontSize', app.plotFontSize, 'Color', [0.45 0.45 0.45], 'ContextMenu', app.resultsMenu);
         end
 
-        function [elev, source] = shown_offshore_elevation(app, dbObj, alt_name)
-            % [NEW] Offshore Elevation Shown On The Run Tab And In The PSE Pop-Out: Storm DB Study Grid Value (Wins, As In
-            % create_resp_config), Else The Active PSE's Geometry Value (Fallback Entered At PSE Creation), Else NaN. dbObj
-            % Empty (No Run Tab Storm DB): The PSE Value. alt_name: Alternative Of The Active PSE (Default: The Active One);
-            % The Active Multi-Line Stage 2: Its Stage 1's Toe In Stage 1's Saved Run Of The Run Tab Storm DB + Workflow (Library
-            % multiline_stage2_config; multiline_stage1_row: Row structure_kt), NaN Without That Run
-            [pse_name, act_alt] = app.get_active_names();
-            if nargin < 3
-                alt_name = act_alt;
-            end
-            if app.wProj.alt_stage(pse_name, alt_name) == 2
-                s1_row = app.multiline_stage1_row();
-                elev = NaN;
-                if ~isempty(s1_row)
-                    elev = s1_row.structure_kt.toe_elevation;
-                end
-                source = 'stage 1 toe';
-                return
-            end
-            elev = [];
-            if ~isempty(dbObj)
-                elev = app.db_offshore_elevation(dbObj);
-            end
-            source = 'Storm DB grid';
-            if isempty(elev)
-                elev = NaN;
-                source = '';
-                pse_geo = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                if isstruct(pse_geo) && isfield(pse_geo, 'offshore_elevation') && ~isempty(pse_geo.offshore_elevation)
-                    elev = pse_geo.offshore_elevation;
-                    source = 'PSE geometry';
-                end
-            end
-        end
-
-        function bk = sim_backup_paths(app, out_files)
-            % [NEW] Run Files Of A Slot A Run Overwrites (Saved Config, Project Forcing, LCS Sampling Seed) And Their Backups
-            % While The Run Lasts (Same Folder: <file>_prev.mat). bk(k).name: 'config' | 'forcing' | 'seed'
-            files = {out_files.config, out_files.project_forcing, lcs_sampling_seed_file(out_files.project_forcing)};
-            prev = cellfun(@(f) [f(1:end-4) '_prev.mat'], files, 'un', false);
-            bk = struct('name', {'config', 'forcing', 'seed'}, 'file', files, 'prev', prev);
-        end
-
-        function [changed, fld] = sim_inputs_changed(app, saved_config, config_now)
-            % [NEW] Current Run Tab Inputs Vs A Saved Run's config (Library any_field_changed, No Side Effects)
-            if nargin < 3
-                [pse_name, alt_name] = app.get_active_names();
-                pseObj = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
-                config_now = app.create_resp_config(pseObj, dbObj, false);
-            end
-            % outfolder: Project Location (Moves With An Imported/Relocated Project), Not A Run Input
-            ignore = {'out_files', 'in_files', 'outfolder'};
-            [changed, fld] = any_field_changed(config_now, saved_config, setdiff(fieldnames(config_now), ignore));
-        end
-
-        function tf = sim_is_stale(app, row, s1_rows)
-            % Multi-Line Stage 2 Registry Row Stale: No Stage 1 Row (s1_rows) Of Its Storm DB + Workflow, Or Its stage1_stamp Is
-            % Not That Row's forcing_stamp (Kept With Keep At A Stage 1 Drift Prompt; Offered Again Only By The Next Stage 1 Run
-            % That Rebuilds Its Forcing Or Changes Its Kt Geometry, RunSimulationButtonPushed)
-            s1 = s1_rows(strcmpi(row.db, {s1_rows.db}) & strcmpi(row.workflow, {s1_rows.workflow}));
-            tf = isempty(s1) || ~strcmp(row.stage1_stamp, s1(1).forcing_stamp);
-        end
-
         function rows = sim_rows(app, proj, pse_name, alt_name)
-            % Registry Rows Of An Alternative Of proj (chessProject.sim_rows: One isfile Per Row). Active Project: A Missing
-            % Responses File Drops Its Row And Re-Syncs That Alternative Only; The Project Is Saved, The Status Bar Says So, And
-            % A Dropped Multi-Line Stage 1 Bundle Asks About Its Stage 2 Rows (stage1_drift 'removed'), As Does One The Re-Sync
-            % Reloaded With Another forcing_stamp / structure_kt ('changed'). Other Loaded Projects (Not Locked By This
-            % Session): Missing Rows Only Left Out
-            is_active = ~isempty(app.wProj) && proj == app.wProj;
-            [rows, dropped, changed] = proj.sim_rows(pse_name, alt_name, is_active);
-            if isempty(dropped)
-                return
-            end
-            app.save_project(proj);
-            app.simStatusBar.Value = sprintf('Results no longer on disk, removed from the project: %s/%s %s.', pse_name, alt_name,...
-                strjoin(arrayfun(@chessProject.sim_label, dropped, 'un', false), ', '));
-            if proj.alt_stage(pse_name, alt_name) == 1
-                app.stage1_drift(proj, pse_name, alt_name, [{dropped.db}', {dropped.workflow}'], 'removed');
-                if ~isempty(changed)
-                    app.stage1_drift(proj, pse_name, alt_name, changed(:, 3:4), 'changed');
-                end
-            end
+            % Registry Rows Of An Alternative Of proj (chessController.sim_rows: Repairs The Active Project's Registry), Then
+            % Its Status Note And Multi-Line Stage 1 Drift Questions (controller_done)
+            rows = app.controller.sim_rows(proj, pse_name, alt_name);
+            app.controller_done();
         end
 
         function key = sim_key(app)
-            % [NEW] Saved Simulation Key: Config File Of Alternative + Workflow + Run Tab Storm DB ('' Without Both)
-            key = '';
-            if app.has_active_alt() && ~isempty(app.StormDBDropDown_run.Items)
-                key = app.get_config_path();
-            end
-        end
-
-        function stage1_drift(app, proj, pse_name, s1_alt, db_wf, kind)
-            % Multi-Line Stage 1 Bundles (Rows {db, workflow} Of db_wf) Removed ('removed') Or Changed ('changed') Outside CHESS:
-            % Their Stage 2 Rows Of The Same Storm DB + Workflow (multiline_cascade_sims) Listed With Delete / Keep (Default).
-            % Delete: delete_sim_rows, Those Alternatives Re-Synced, Project Saved. Keep: Files And Rows Stay (Stale: Marked In
-            % The Tree, Offered Again By The Next Stage 1 Run)
-            cascade = app.multiline_cascade_sims(proj, pse_name, s1_alt, db_wf);
-            if isempty(cascade)
-                return
-            end
-            pairs = strjoin(unique(strcat(db_wf(:, 1), {' | '}, db_wf(:, 2))), ', ');
-            lines = strjoin(strcat({['  ' char(8226) ' ']}, cascade(:, 1), {': '}, cascade(:, 2), {' | '}, cascade(:, 3)), newline);
-            if strcmp(kind, 'removed')
-                msg = sprintf('Stage 1 results for %s (%s/%s) were removed outside CHESS. These stage 2 results depend on them:\n%s',...
-                    pairs, pse_name, s1_alt, lines);
-            else
-                msg = sprintf('Stage 1 results for %s (%s/%s) changed outside CHESS; these stage 2 results are stale:\n%s',...
-                    pairs, pse_name, s1_alt, lines);
-            end
-            app.auxLib.choice_dlgbox(msg, {'Delete', 'Keep'}, 'Multi-Line Stage 1 Results', 560); % Last Button = Default: Keep
-            if ~strcmp(app.auxLib.dialog_answer, 'Delete')
-                return
-            end
-            failed = app.delete_sim_rows(proj, pse_name, cascade);
-            for aa = unique(cascade(:, 1))'
-                proj.sync_sims({pse_name, aa{1}}, 'sync');
-            end
-            app.save_project(proj);
-            if ~isempty(failed)
-                uialert(app.UIFigure, sprintf(['These second-stage files could not be deleted (a file may be open in another ',...
-                    'program):\n%s\nClose it and remove those simulations.'], strjoin(failed, newline)),...
-                    'Multi-Line Stage 1 Results', 'Icon', 'warning');
-            end
-        end
-
-        function asked = stage1_sync_prompts(app, proj, info)
-            % After A Registry Sync (chessProject.sync_sims info): stage1_drift Per Multi-Line Stage 1 Alternative Whose Bundles
-            % Were Dropped ('removed') Or Reloaded With Another forcing_stamp / structure_kt ('changed'). asked: Any Bundle Listed
-            asked = false;
-            lists = {info.stage1_dropped, 'removed'; info.stage1_changed, 'changed'};
-            for ll = 1:size(lists, 1)
-                rows = lists{ll, 1};
-                if isempty(rows)
-                    continue
-                end
-                asked = true;
-                [~, first, grp] = unique(strcat(rows(:, 1), '|', rows(:, 2)), 'stable');
-                for gg = 1:numel(first)
-                    app.stage1_drift(proj, rows{first(gg), 1}, rows{first(gg), 2}, rows(grp == gg, 3:4), lists{ll, 2});
-                end
-            end
+            % [NEW] Saved Simulation Key Of The Run Tab Selection (chessController.sim_key)
+            app.push_inputs();
+            key = app.controller.sim_key();
         end
 
         function store_table_values(app)
-            % [NEW] Save Visible Inputs Table Values Into tableState
-            if ~isstruct(app.tableState)
-                app.tableState = struct();
-            end
+            % [NEW] Save Visible Inputs Table Values Into controller.inputs
             tbl = app.WorkflowInputsTable.Data;
             for kk = 1:size(tbl, 1)
-                app.tableState.(tbl{kk, 1}) = tbl{kk, 3};
-            end
-        end
-
-        function ok = storm_db_info_ok(app, dbObj)
-            % [NEW] Storm DB Has Its db_info (Library storm_db_info 'valid'); Imported With An Older CHESS Version: Alert (Must
-            % Be Re-Imported) Once Per Storm DB Per Session, Callers Still Block Silently Afterwards. The Run Path Keeps Its Own
-            % Error (CHSStormDBImportUI.get_db_info In create_resp_config, Run-Failed Dialog)
-            ok = storm_db_info('valid', dbObj.db_info);
-            if ~ok && ~any(strcmp(app.oldDbWarned, dbObj.output_paths.storm_db))
-                app.oldDbWarned{end+1} = dbObj.output_paths.storm_db;
-                uialert(app.UIFigure, 'This storm database was built with an older CHESS version and must be re-imported.',...
-                    ['Storm DB: ' dbObj.db_name], 'Icon', 'warning');
-            end
-        end
-
-        function msg = stormdb_missing_note(app)
-            % Run Tab Storm DB Record Without A layout (Its Storm DB File Was Missing Or Unreadable; chessProject.sync_sims
-            % Retries It): Status Text Asking For A Re-Import; '' Otherwise
-            msg = '';
-            if ~app.has_active_alt() || isempty(app.wProj.stormDB_list)
-                return
-            end
-            recs = app.wProj.stormDB_list;
-            k = find(strcmp({recs.db_name}, app.StormDBDropDown_run.Value), 1);
-            if ~isempty(k) && isempty(recs(k).layout)
-                msg = sprintf('Storm DB %s: file missing or unreadable, re-import it.', recs(k).db_name);
+                app.controller.set_input(tbl{kk, 1}, tbl{kk, 3});
             end
         end
 
         function sync_saved_sim(app, ask)
-            % [NEW] After A Switch Of Alternative / Workflow / Run Tab Storm DB (Key Changed), A Saved Simulation Of The New Key Is
-            % Loaded Silently When The Current Inputs Match It, Or Without ask (Internal Refresh). Otherwise ask:
-            % "Load" | "Keep current inputs" (Or Closed: Inputs Kept, Results Tab Cleared). No Saved Simulation: Inputs Kept.
-            % Run Tab Storm DB Of An Older CHESS Version (No db_info, Inputs Cannot Be Compared): Alert, Then Ask As Changed Inputs.
-            % The Callers' populateResultsTab Loads Nothing While The Key Differs, So Results Appear Only Once Resolved Here.
-            % A Declined Load Is Remembered (declinedSimKey) Until The Key Changes: Switching Back Asks Again
-            key = app.sim_key();
-            if isequal(key, app.simKey)
-                return
+            % [NEW] After A Switch Of Alternative / Workflow / Run Tab Storm DB: The Saved Simulation Of The New Key Loaded,
+            % Asked About (ask: "Load" | "Keep current inputs") Or Declined (chessController.sync_saved). The Callers'
+            % populateResultsTab Loads Nothing While The Key Differs, So Results Appear Only Once Resolved Here
+            app.push_inputs();
+            out = app.controller.sync_saved(ask);
+            app.controller_done();
+            if strcmp(out.status, 'ask')
+                out = app.controller.sync_saved(ask, struct('load_saved', {app.ask_question(out.question)}));
+                app.controller_done();
             end
-            app.simKey = key;
-            app.declinedSimKey = '';
-            if isempty(key)
-                return
-            end
-            [has_sim, label] = app.saved_sim();
-            if ~has_sim
-                app.set_sim_status(['No saved simulation for ' label '.']);
-                return
-            end
-            S = load(key, 'config');
-            S.config = app.localize_saved_config(S.config);
-            load_it = ~ask;
-            if ask
-                dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
-                load_it = app.storm_db_info_ok(dbObj) && ~app.sim_inputs_changed(S.config);
-            end
-            if ~load_it
-                app.auxLib.choice_dlgbox(['A simulation for ' label ' already exists. Load it?'], {'Load', 'Keep current inputs'},...
-                    'Saved Simulation Found');
-                load_it = isequal(app.auxLib.dialog_answer, 'Load');
-            end
-            if load_it
-                app.load_saved_sim();
-            else
-                app.declinedSimKey = key;
-                app.resultsState = [];
-                app.reset_tab('results');
-                app.set_sim_status('Current simulation already exists. Load declined.');
-            end
-        end
-
-        function note = sync_note(app, info)
-            % Status Bar Text Of A Registry Sync (chessProject.sync_sims info); '' When Nothing Changed
-            parts = {};
-            if info.added + info.refreshed + info.dropped > 0
-                parts{end+1} = sprintf('%d added, %d refreshed, %d dropped', info.added, info.refreshed, info.dropped);
-            end
-            if info.converted > 0
-                parts{end+1} = sprintf('%d storm DB record(s) converted', info.converted);
-            end
-            if info.skipped > 0
-                parts{end+1} = sprintf('%d skipped (config file could not be read)', info.skipped);
-            end
-            note = '';
-            if ~isempty(parts)
-                note = ['Simulations synced from disk: ' strjoin(parts, '; ') '.'];
+            switch out.status
+                case 'load'
+                    app.load_saved_sim();
+                case 'declined'
+                    app.reset_tab('results');
             end
         end
 
@@ -2963,7 +1787,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             while ~strcmp(node.NodeData.type, 'proj')
                 node = node.Parent;
             end
-            proj = app.chess_projects(strcmp({app.chess_projects.name}, node.NodeData.name));
+            proj = app.controller.projects(strcmp({app.controller.projects.name}, node.NodeData.name));
         end
 
         function tree_show_level(app, level)
@@ -2991,13 +1815,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             delete(app.ProjectTree.Children);
             delete(findall(app.UIFigure, 'Type', 'uicontextmenu', 'Tag', 'ProjectTreeNodeMenu'));
             act_node = [];
-            for kk = 1:length(app.chess_projects)
-                wObj = app.chess_projects(kk);
+            [act_pse, act_alt] = app.controller.active_names();
+            for kk = 1:length(app.controller.projects)
+                wObj = app.controller.projects(kk);
                 % Create Project Node
                 proj_node = uitreenode(app.ProjectTree, 'Text', wObj.name,...
                     'NodeData', struct('type', 'proj', 'name', wObj.name));
                 add_node_menu(proj_node);
-                if kk == app.proj_indx
+                if wObj == app.controller.project
                     act_node = proj_node;
                 end
                 % Loop Across PSEs (Read Lists Directly, No Working Index Side Effects)
@@ -3005,7 +1830,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     pse_node = uitreenode(proj_node, 'Text', wObj.pse_list{jj},...
                         'NodeData', struct('type', 'pse', 'name', wObj.pse_list{jj}));
                     add_node_menu(pse_node);
-                    if kk == app.proj_indx && isequal(jj, app.pse_indx)
+                    if wObj == app.controller.project && strcmp(wObj.pse_list{jj}, act_pse)
                         act_node = pse_node;
                     end
                     s1_rows = [];
@@ -3024,7 +1849,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         alt_node = uitreenode(pse_node, 'Text', alt_text,...
                             'NodeData', struct('type', 'alt', 'name', altList{ii}));
                         add_node_menu(alt_node);
-                        if kk == app.proj_indx && isequal(jj, app.pse_indx) && isequal(ii, app.alt_indx)
+                        if wObj == app.controller.project && strcmp(wObj.pse_list{jj}, act_pse) && strcmp(altList{ii}, act_alt)
                             act_node = alt_node;
                         end
                         % Simulation Bundles (Storm DB | Workflow), Display Only
@@ -3032,7 +1857,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         for ss = 1:numel(rows)
                             label = chessProject.sim_label(rows(ss));
                             sim_text = label;
-                            if stage == 2 && app.sim_is_stale(rows(ss), s1_rows)
+                            if stage == 2 && app.controller.sim_is_stale(rows(ss), s1_rows)
                                 sim_text = [label '  [stale]'];
                             end
                             sim_node = uitreenode(alt_node, 'Text', sim_text,...
@@ -3082,7 +1907,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if isempty(row)
                 return
             end
-            Resp = app.resultsState.Resp;
+            Resp = app.controller.results.Resp;
             lvl = find(strcmp(level, {'plot', 'data', 'match', 'storm', 'field'}));
             if lvl <= 1
                 app.set_dropdown_items(app.DataTypeDropDown_results, row.data_types);
@@ -3095,7 +1920,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if lvl <= 3
                 st_list = fieldnames(Resp.(dt).(mt))';
                 if strcmp(row.key, 'event') % Event Viewer Reads The Storm DB (XC/TC Only; CC Is Derived): Its Record's layout
-                    lay = app.resultsState.dbObj.layout;
+                    lay = app.controller.results.dbObj.layout;
                     if isempty(lay) % Storm DB File Missing Or Unreadable: No Event To Show
                         st_list = {};
                     else
@@ -3119,19 +1944,20 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             ds_query = struct('storm_type', st, 'data_type', dt, 'match_type', mt);
             % Field To Plot
             if lvl <= 4
-                [f_lbl, f_items] = app.results_field_items(row.key, data);
+                [f_lbl, f_items] = app.controller.field_items(row.key, data);
                 app.FieldToPlotDropDown_2Label.Text = f_lbl;
                 app.set_dropdown_items(app.FieldToPlotDropDown_results, f_items);
                 app.FieldToPlotDropDown_results.Enable = ~isempty(f_items);
             end
             % Storm ID Dropdown (Event, Life Cycle Or Option)
-            [a_lbl, a_items, a_on] = app.results_aux_items(row.key, data, ds_query);
+            [a_lbl, a_items, a_on] = app.controller.aux_items(row.key, data, ds_query, app.FieldToPlotDropDown_results.Value);
             app.StormIDDropDown_2Label.Text = a_lbl;
             app.set_dropdown_items(app.StormIDDropDown_results, a_items);
             app.StormIDDropDown_results.Enable = a_on;
         end
 
     end
+
 
 
     % Callbacks that handle component events
@@ -3148,10 +1974,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             app.UIFigure.Tag = 'CHESS_UI';
-            % Project Lock Released However The Window Goes (delete(app), close all force, Figure Deleted: No Close Request).
-            % Read From The Figure (set_project_lock), Not The App: Deleting The Figure Deletes The App First. Set After The
-            % Single-Instance Check: That Path Never Takes A Lock
-            app.UIFigure.DeleteFcn = @(fig, ~) chessProject.release_lock(getappdata(fig, 'chess_project_lock'));
             % Initialize Aux Library Class
             app.auxLib = auxUIFunctions();
             app.auxLib.set_parent(app.UIFigure); % auxLib Dialogs Open Centered On The CHESS Window
@@ -3163,8 +1985,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             else
                 addpath(genpath(lib_dir));
             end
-            app.stormCache = containers.Map();
-            app.tableState = struct();
+            app.controller = chessController();
             % Constants Table (Columns Sized To Their Text; No Project Yet: '-' Rows)
             app.ConstantsTable.ColumnWidth = {'fit', 'fit', 'fit'};
             app.populate_constants_table();
@@ -3184,15 +2005,15 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.ResultsViewerTab.AutoResizeChildren = 'off';
             app.ResultsViewerTab.SizeChangedFcn = @(~, ~) app.results_tab_resized();
             % Empty State
-            app.refresh_active_view();
+            app.refresh();
         end
 
         % Menu selected function: CreateNewProjectMenu
         function CreateNewProjectMenuSelected(app, event)
             % Call Project Creation UI (Loaded Project Names: A New Project Cannot Take One)
             proj_names = {};
-            if ~isempty(app.chess_projects)
-                proj_names = {app.chess_projects.name};
+            if ~isempty(app.controller.projects)
+                proj_names = {app.controller.projects.name};
             end
             obj = ProjectCreationUI(app.UIFigure, proj_names);
             % Wait For UI Figure To Close
@@ -3201,10 +2022,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if obj.project_created && app.lock_project(obj.chess_project)
                 app.append_project(obj.chess_project);
                 % Save Project State
-                app.save_project();
+                app.controller.save_project();
                 % Long Project Folder Path (Windows 260-Character Limit): Warn, Project Kept
                 if ~isempty(obj.path_warning)
-                    uialert(app.UIFigure, obj.path_warning, 'Long Project Path', 'Icon', 'warning');
+                    app.auxLib.alert_dlgbox(obj.path_warning, 'Long Project Path', 'warning');
                 end
             end
         end
@@ -3230,18 +2051,18 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: ExportProjectMenu
         function ExportProjectMenuSelected(app, event)
-            if isempty(app.wProj)
+            if isempty(app.controller.project)
                 return
             end
             % Wait For User To Define Export Location And Name
-            [file, fPath] = uiputfile({'.zip'}, 'Export CHESS Project', ['CHESS_project_'  app.wProj.name '_archive.zip']);
+            [file, fPath] = uiputfile({'.zip'}, 'Export CHESS Project', ['CHESS_project_'  app.controller.project.name '_archive.zip']);
             % Export Project
             if ~all(file == 0)
                 % Save out Project state
-                app.save_project();
+                app.controller.save_project();
                 % Create Project Archive: <name>/ + The Region's CHS_Dependencies Files (chessProject.export_archive)
                 try
-                    note = app.wProj.export_archive(fullfile(fPath, file));
+                    note = app.controller.project.export_archive(fullfile(fPath, file));
                 catch ME
                     app.auxLib.error_dlgbox(['Could not export the project: ' ME.message]);
                     return
@@ -3272,34 +2093,29 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if ~isempty(alt_node)
                 alt_name = alt_node.NodeData.name;
             end
-            app.set_active_selection(proj_node.NodeData.name, pse_name, alt_name);
-            app.refresh_active_view(true);
+            app.controller.select(proj_node.NodeData.name, pse_name, alt_name);
+            app.refresh(true);
         end
 
         % Menu selected function: FloodwallMenu, LeveeMenu, 
         % ...and 2 other components
         function PSECreationMenuSelected(app, event)
-            if isempty(app.wProj)
+            if isempty(app.controller.project)
                 return
             end
-            % Call PSE Creation UI
-            obj = PSECreationUI(event.Source.Text, app.wProj, '', app.UIFigure);
+            % Call PSE Creation UI; Created: Selected And Saved, Else The In-Progress PSE Removed (chessController.finish_element)
+            obj = PSECreationUI(event.Source.Text, app.controller.project, '', app.UIFigure);
             uiwait(obj.uifig);
+            app.controller.finish_element(obj.pse_created, obj.pse_name, obj.alt_name, 'pse');
             if obj.pse_created
-                app.set_active_selection(app.wProj.name, obj.pse_name, obj.alt_name);
-                app.project_field_ini();
-                app.refresh_active_view();
-                app.save_project();
-            else % Remove In-Progress PSE (Keeps All Per-PSE Fields Aligned)
-                app.wProj.remove_pse(obj.pse_name);
-                app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
+                app.refresh();
             end
         end
 
         % Menu selected function: AlternativeMenu
         function AlternativeMenuSelected(app, event)
             % Get PSE List For Active Project
-            pseList = app.wProj.get_project_field('pse_list', '', '', 'proj');
+            pseList = app.controller.project.get_project_field('pse_list', '', '', 'proj');
             % Ask User For PSE Template
             app.auxLib.dropdown_input_dlgbox('Choose PSE to use as template for alternative.', pseList, 'Add New Alternative To Project PSE', 'OK');
             pse_name = app.auxLib.dialog_answer;
@@ -3307,53 +2123,48 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             % Multi-Line PSEs Hold Only Multi-Line Alternatives: Stage 2 Alternatives Come From The Multi-Line Transect Menu
-            if app.wProj.is_multiline(pse_name)
-                uialert(app.UIFigure, sprintf(['PSE "%s" is a multi-line transect. Add a second-stage alternative with ',...
-                    'Add Project Element > PSE > Multi-line Transect.'], pse_name), 'Add New Alternative To Project PSE', 'Icon', 'info');
+            if app.controller.project.is_multiline(pse_name)
+                app.auxLib.alert_dlgbox(sprintf(['PSE "%s" is a multi-line transect. Add a second-stage alternative with ',...
+                    'Add Project Element > PSE > Multi-line Transect.'], pse_name), 'Add New Alternative To Project PSE', 'info');
                 return
             end
             % PSE Type: The Active Alternative's When The Chosen PSE Is The Active One, Else The First Alternative's
-            pse_geo = app.wProj.get_project_field('pse_geometry', pse_name, '', 'pse');
+            pse_geo = app.controller.project.get_project_field('pse_geometry', pse_name, '', 'pse');
             pse_type = pse_geo{1}.pse_type;
-            [act_pse, act_alt] = app.get_active_names();
+            [act_pse, act_alt] = app.controller.active_names();
             if strcmp(act_pse, pse_name) && ~isempty(act_alt)
-                act_geo = app.wProj.get_project_field('pse_geometry', pse_name, act_alt, 'alt');
+                act_geo = app.controller.project.get_project_field('pse_geometry', pse_name, act_alt, 'alt');
                 pse_type = act_geo.pse_type;
             end
-            % Call PSE Creation UI
-            obj = PSECreationUI(pse_type, app.wProj, pse_name, app.UIFigure);
+            % Call PSE Creation UI; Created: Selected And Saved, Else The In-Progress Alternative Removed
+            obj = PSECreationUI(pse_type, app.controller.project, pse_name, app.UIFigure);
             uiwait(obj.uifig);
+            app.controller.finish_element(obj.pse_created, obj.pse_name, obj.alt_name, 'alt');
             if obj.pse_created
-                app.set_active_selection(app.wProj.name, obj.pse_name, obj.alt_name);
-                app.project_field_ini();
-                app.refresh_active_view();
-                app.save_project();
-            else % Remove In-Progress Alternative
-                app.wProj.remove_alternative(obj.pse_name, obj.alt_name);
-                app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
+                app.refresh();
             end
         end
 
         % Menu selected function: RemoveAlternativeMenu, RemovePSEMenu, 
         % ...and 1 other component
         function RemoveProjectElem(app, event)
-            if isempty(app.wProj)
+            if isempty(app.controller.project)
                 return
             end
             % Not While A Run Writes Into The Project Folders
-            if app.runActive
-                uialert(app.UIFigure, 'Removing is not available while a run is in progress.', 'Project Management: Remove', 'Icon', 'info');
+            if app.controller.runActive
+                app.auxLib.alert_dlgbox('Removing is not available while a run is in progress.', 'Project Management: Remove', 'info');
                 return
             end
-            % PSE / Alternative: Confirmed, Then Its Folder Deleted (chessProject.delete_folder: Nothing Changes If That Fails)
-            leftover = '';
+            % PSE / Alternative: Confirmed, Then Its Folder Deleted; Tide File: Dropped (chessController.remove_element)
+            proj = app.controller.project;
             switch event.Source.Text
                 case 'PSE'
-                    choices = app.wProj.get_project_field('pse_list', '', '', 'proj');
+                    choices = proj.get_project_field('pse_list', '', '', 'proj');
                     if isempty(choices)
                         return
                     end
-                    app.auxLib.dropdown_input_dlgbox(['Remove PSE from project ' app.wProj.name '.'], choices, 'Project Management: Remove');
+                    app.auxLib.dropdown_input_dlgbox(['Remove PSE from project ' proj.name '.'], choices, 'Project Management: Remove');
                     pse_name = app.auxLib.dialog_answer;
                     if isempty(pse_name)
                         return
@@ -3363,15 +2174,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     if ~app.auxLib.dialog_answer
                         return
                     end
-                    try
-                        leftover = app.wProj.remove_pse(pse_name, true);
-                    catch ME
-                        app.auxLib.error_dlgbox(['Could not remove PSE "' pse_name '": ' ME.message]);
-                        return
-                    end
-                    app.resultsState = [];
+                    err = app.controller.remove_element('pse', pse_name, '');
                 case 'Alternative'
-                    choices = app.wProj.get_project_field('pse_list', '', '', 'proj');
+                    choices = proj.get_project_field('pse_list', '', '', 'proj');
                     if isempty(choices)
                         return
                     end
@@ -3380,78 +2185,61 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     if isempty(pse_name)
                         return
                     end
-                    choices = app.wProj.get_project_field('alternative_list', pse_name, '', 'pse');
+                    choices = proj.get_project_field('alternative_list', pse_name, '', 'pse');
                     app.auxLib.dropdown_input_dlgbox(['Remove alternative from PSE ' pse_name '.'], choices, 'Project Management: Remove');
                     alt_name = app.auxLib.dialog_answer;
                     if isempty(alt_name)
                         return
                     end
-                    % Last Alternative Or Multi-Line Stage 1: The PSE Goes With It (chessProject.remove_alternative)
-                    if app.wProj.alt_stage(pse_name, alt_name) == 1
-                        prompt = sprintf(['"%s" is the first stage of multi-line PSE "%s": its second stages use its results.\n',...
-                            'Removing it deletes the WHOLE multi-line PSE "%s" (all its alternatives and run results, files ',...
-                            'included). Remove PSE "%s"?'], alt_name, pse_name, pse_name, pse_name);
-                    elseif numel(choices) == 1
-                        prompt = sprintf(['"%s" is the last alternative of PSE "%s", so the PSE is removed too.\n',...
-                            'Remove PSE "%s" and delete its folder (all alternatives and run results)?'], alt_name, pse_name, pse_name);
-                    else
-                        prompt = sprintf('Remove alternative "%s" of PSE "%s" and delete its folder (all run results)?', alt_name, pse_name);
-                    end
-                    app.auxLib.confirmation_dlgbox(prompt, 'Remove', 'Remove Alternative');
+                    app.auxLib.confirmation_dlgbox(app.controller.remove_alt_prompt(pse_name, alt_name), 'Remove', 'Remove Alternative');
                     if ~app.auxLib.dialog_answer
                         return
                     end
-                    try
-                        leftover = app.wProj.remove_alternative(pse_name, alt_name, true);
-                    catch ME
-                        app.auxLib.error_dlgbox(['Could not remove alternative "' alt_name '": ' ME.message]);
-                        return
-                    end
-                    app.resultsState = [];
+                    err = app.controller.remove_element('alt', pse_name, alt_name);
                 case 'Tides'
-                    tide_files = app.wProj.get_project_field('tide_files_list', '', '', 'proj');
+                    tide_files = proj.get_project_field('tide_files_list', '', '', 'proj');
                     if isempty(tide_files)
                         return
                     end
                     [~, tide_names, tide_ext] = cellfun(@fileparts, tide_files, 'un', false); % Show File Names
-                    choices = strcat(tide_names, tide_ext);
-                    app.auxLib.dropdown_input_dlgbox(['Remove tide file from project ' app.wProj.name '.'], choices, 'Project Management: Remove');
+                    app.auxLib.dropdown_input_dlgbox(['Remove tide file from project ' proj.name '.'], strcat(tide_names, tide_ext),...
+                        'Project Management: Remove');
                     if isempty(app.auxLib.dialog_answer)
                         return
                     end
-                    app.wProj.tide_files_list(strcmp(choices, app.auxLib.dialog_answer)) = [];
+                    err = app.controller.remove_element('tide', '', app.auxLib.dialog_answer);
             end
-            % Reselect & Refresh
-            app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
-            app.refresh_active_view();
-            app.save_project();
-            if ~isempty(leftover)
-                uialert(app.UIFigure, sprintf('Removed, but this folder could not be fully deleted (a file inside may be open):\n%s\nDelete it manually.',...
-                    leftover), 'Project Management: Remove', 'Icon', 'warning');
+            if ~isempty(err)
+                app.auxLib.error_dlgbox(err);
+                return
             end
+            % Refresh, Then A Folder Not Fully Deleted
+            msgs = app.controller.take_messages();
+            app.refresh();
+            app.show_messages(msgs);
         end
 
         % Value changed function: ProjectDropDown
         function ProjectDropDownValueChanged(app, event)
             % Project Locked First (lock_project); Open In Another Session: Notice, The Previous Project Stays Active
-            if ~app.lock_project(app.chess_projects(strcmp({app.chess_projects.name}, app.ProjectDropDown.Value)))
+            if ~app.lock_project(app.controller.projects(strcmp({app.controller.projects.name}, app.ProjectDropDown.Value)))
                 app.populate_project_panel();
                 return
             end
-            app.set_active_selection(app.ProjectDropDown.Value, '', '');
-            app.refresh_active_view(true);
+            app.controller.select(app.ProjectDropDown.Value, '', '');
+            app.refresh(true);
         end
 
         % Value changed function: PSEDropDown
         function PSEDropDownValueChanged(app, event)
-            app.set_active_selection(app.ProjectDropDown.Value, app.PSEDropDown.Value, '');
-            app.refresh_active_view(true);
+            app.controller.select(app.ProjectDropDown.Value, app.PSEDropDown.Value, '');
+            app.refresh(true);
         end
 
         % Value changed function: AlternativeDropDown
         function AlternativeDropDownValueChanged(app, event)
-            app.set_active_selection(app.ProjectDropDown.Value, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
-            app.refresh_active_view(true);
+            app.controller.select(app.ProjectDropDown.Value, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
+            app.refresh(true);
         end
 
         % Button pushed function: Button_5, ExtrudeTableButton, 
@@ -3486,23 +2274,23 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             tab = ancestor(event.Source, 'matlab.ui.container.Tab'); % Button Sits In A Nested Grid, Not On The Tab
             % Nothing To Plot -> Inform User (No Empty Figure)
             if isequal(tab, app.PSEViewerTab)
-                ready = app.has_active_alt();
+                ready = app.controller.has_active_alt();
             elseif isequal(tab, app.StormDBViewerTab)
                 ready = ~isempty(app.StormDBDropDown.Items);
             elseif isequal(tab, app.ResultsViewerTab)
-                ready = ~isempty(app.resultsState) && ~strcmp(app.StormTypeDropDown_results.Value, '-');
+                ready = ~isempty(app.controller.results) && ~strcmp(app.StormTypeDropDown_results.Value, '-');
             else
                 ready = false;
             end
             if ~ready
-                uialert(app.UIFigure, 'There is nothing to plot on this tab yet.', 'Nothing To Plot', 'Icon', 'info');
+                app.auxLib.alert_dlgbox('There is nothing to plot on this tab yet.', 'Nothing To Plot', 'info');
                 return
             end
             % Tab Plot Method In A Stand-Alone Classic Figure
             if isequal(tab, app.PSEViewerTab) % PSE Geometry (With Offshore Slope/Elevation Text Box)
                 app.plot_pse_geometry(axes('Parent', figure()), base_fnt, true);
             elseif isequal(tab, app.StormDBViewerTab) % Peaks: Data Space | Timeseries: Event Hydrograph
-                if app.storm_db_info_ok(app.wProj.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db'))
+                if app.db_info_ok(app.controller.project.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db'))
                     app.plot_storm_db(axes('Parent', figure()), base_fnt);
                 end
             else % Results: Selected Plot Type (Multi-Panel Plots Reuse The Results Pop-Out)
@@ -3518,71 +2306,30 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Menu selected function: ImportCHSStudyHDF5Menu
         function CHSDatabaseMenu(app, event)
-            if isempty(app.wProj)
+            if isempty(app.controller.project)
                 return
             end
             % Initialize CHS Library (The Project's CHS_Dependencies And Region: The Wizard Keeps Them). The Project's Storm DB
             % Names And Their Usage (Alternatives, Run Files): A Clash Is An Overwrite, Confirmed In The Wizard At Import
-            paths = chess_paths(app.wProj.path, app.wProj.name);
-            db_list = {app.wProj.stormDB_list.db_name};
-            wizard = CHSStormDBImportUI(app.wProj.chs_dependencies, paths.event_db_dir,...
-                app.pull_input_table_value(app.ConstantsTable.Data, 'Gravity Constant'), app.wProj.vdatum, app.wProj.unitsys,...
-                app.UIFigure, app.wProj.project_region(), db_list,...
-                @(name) [app.wProj.stormdb_usage(name), numel(app.wProj.stormdb_run_files(name))]);
+            proj = app.controller.project;
+            paths = chess_paths(proj.path, proj.name);
+            wizard = CHSStormDBImportUI(proj.chs_dependencies, paths.event_db_dir,...
+                chessController.GRAVITY, proj.vdatum, proj.unitsys, app.UIFigure, proj.project_region(), {proj.stormDB_list.db_name},...
+                @(name) [proj.stormdb_usage(name), numel(proj.stormdb_run_files(name))]);
             % Call import Wizard (A New Wizard Every Time; The Project Keeps Only Its Record, CHSStormDBImportUI.to_record)
             wizard.create_ui();
             uiwait(wizard.figUI); % Wait for uifigure to close
             if ~wizard.db_created
                 return
             end
+            % Record Into The Project (chessController.add_stormdb: Overwrite, CHS_Dependencies, Save)
             dbObj = wizard.to_record();
-            indx = find(strcmpi(dbObj.db_name, db_list), 1);
-            if wizard.overwrite_flag && ~isempty(indx)
-                % Overwrite Of A Project Storm DB (Index Kept): Its Run Files And Registry Rows Deleted (Old Results Would
-                % Otherwise Show As Saved); Session State Of The Old DB Dropped
-                old = app.wProj.stormDB_list(indx);
-                failed = {};
-                for ff = app.wProj.stormdb_run_files(old.db_name)'
-                    delete(ff{1});
-                    if isfile(ff{1})
-                        failed{end+1} = ff{1}; %#ok<AGROW>
-                    end
-                end
-                app.wProj.drop_db_sims(old.db_name);
-                app.wProj.stormDB_list(indx) = dbObj;
-                db_files = {dbObj.output_paths.storm_db, fullfile(paths.event_db_dir, [dbObj.db_name '_raw_files.mat'])};
-                if isstruct(old.output_paths)
-                    db_files = [db_files, struct2cell(old.output_paths)'];
-                end
-                keys = app.stormCache.keys();
-                stale = keys(ismember(lower(keys), lower(db_files)));
-                if ~isempty(stale)
-                    remove(app.stormCache, stale);
-                end
-                app.oldDbWarned = app.oldDbWarned(~ismember(lower(app.oldDbWarned), lower(db_files)));
-                app.simKey = [];
-                app.declinedSimKey = '';
-                app.resultsState = [];
-                if ~isempty(failed)
-                    uialert(app.UIFigure, sprintf('Storm DB "%s" overwritten, but these run files could not be deleted:\n%s',...
-                        dbObj.db_name, strjoin(failed, newline)), 'Storm DB Overwrite', 'Icon', 'warning');
-                end
-            else
-                app.wProj.add_project_field('stormDB_list', dbObj, '', '', 'pse');
-            end
-            % Project CHS_Dependencies: Set By The First CHS (Non-Custom) Storm DB, Or Re-Pointed When The Stored Folder Is No
-            % Longer Valid; Cleared When An Overwrite Left No CHS Storm DB
-            region = app.wProj.project_region();
-            if isempty(region)
-                app.wProj.chs_dependencies = '';
-            elseif ~strcmp(dbObj.study, 'Custom_Modeling') && ~isempty(chessProject.chs_dependencies_problem(app.wProj.chs_dependencies, region))
-                app.wProj.chs_dependencies = dbObj.source_paths.chs_dependencies_path;
-            end
+            app.controller.add_stormdb(dbObj, wizard.overwrite_flag, paths.event_db_dir);
+            msgs = app.controller.take_messages();
             % Refresh UI & Show New DB On Storm DB Viewer
-            app.refresh_active_view();
-            app.populate_stormDB_panel(dbObj, {app.wProj.get_project_field('stormDB_list','','','proj').db_name});
-            % Save out Project state
-            app.save_project();
+            app.refresh();
+            app.populate_stormDB_panel(dbObj, {proj.stormDB_list.db_name});
+            app.show_messages(msgs);
         end
 
         % Value changed function: FieldToPlotDropDown, MatchTypeDropDown, 
@@ -3600,7 +2347,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         % Value changed function: StormDBDropDown
         function StormDBDropDown_dbValueChanged(app, event)
             %  Repopulate Storm DB Viewer Cascade For Selected DB
-            dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db');
+            dbObj = app.controller.project.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db');
             app.populate_stormDB_panel(dbObj, app.StormDBDropDown.Items);
         end
 
@@ -3616,240 +2363,53 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
 
         % Value changed function: WorkflowDropDown
         function WorkflowDropDownValueChanged(app, event)
-            % Inputs Table Rows Depend On Workflow; Results Are Per Workflow (Saved Simulation Of This Workflow: sync_saved_sim).
-            % Constants Table: Uncertainty Rows Marked Unused By DET. Multi-Line Stage 2: Plot Of Stage 1's Run Of This Workflow
-            app.set_input_table();
-            app.replot_multiline_stage2();
-            app.populate_constants_table();
-            app.populateResultsTab();
-            app.sync_saved_sim(true);
+            % Inputs Table Rows Depend On Workflow; Results Are Per Workflow (Saved Simulation Of This Workflow Asked). Constants
+            % Table: Uncertainty Rows Marked Unused By DET. Multi-Line Stage 2: Plot Of Stage 1's Run Of This Workflow
+            app.controller.touch({'inputs_table', 'pse', 'constants', 'results'});
+            app.refresh(true);
         end
 
         % Button pushed function: RunSimulationButton
         function RunSimulationButtonPushed(app, event)
-            % Run In Progress Until This Callback Exits (Project Tree Rename Refused; It Could Run At A Queued-Event Point)
-            app.set_run_active(true);
-            run_flag = onCleanup(@() app.set_run_active(false));
-            prog = []; % App-Scoped Progress Dialog: Locks The CHESS Window Only (Other MATLAB Windows Stay Usable)
-            % Slot Files This Run Backed Up (backup_sim_files): Restored If The Run Fails, Dropped Once The Results Are Saved
-            backed = [];
-            % Multi-Line Stage 1 Re-Run: Coupled Stage 2 Bundles Deleted Once It Succeeds (Rows {stage 2 alternative, db, workflow})
-            cascade = cell(0, 3);
-            % Results Saved (Backups Dropped): A Later Error Is A Project Update Failure, Not A Failed Run (Results Still Shown)
-            results_saved = false;
-            row_added = false; % Registry Row Of This Bundle In The Project (upsert_sim)
-            res_str = 'The results';
-            update_msg = '';
-            failed = cell(0, 1); % Stage 2 Files Not Deleted
-            try
-                % Backups Left By A Run That Never Finished: Previous Run Back First
-                [~, ~, ~, wflow_name, out_files] = app.get_config_path();
-                bk = app.sim_backup_paths(out_files);
-                app.restore_leftover_backups(bk);
-                [pse_name, alt_name] = app.get_active_names();
-                %%%% ------- 1. Pull Simulation Inputs ---------
-                dbObj = app.wProj.get_project_field('stormDB_list', app.StormDBDropDown_run.Value, '', 'db');
-                pseObj = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                % Every Run Needs An Offshore Elevation (Storm DB Study Grid, Else The PSE Geometry): Checked Before Any Dialog Or
-                % Backup, So A Failed Check Touches Nothing (Library check_offshore_elevation, Error Shown In The Run-Failed Dialog)
-                check_offshore_elevation(app.create_resp_config(pseObj, dbObj, false));
-                % Saved Simulation For This Alternative / Workflow / Storm DB: Run Dialog First. No Saved Simulation: Coldstart
-                plan = struct('level', 'cold', 'reason', '', 'old', []);
-                if app.saved_sim()
-                    [choice, plan] = app.run_start_choice(pseObj, dbObj);
-                    switch choice
-                        case 'Coldstart'
-                            plan.level = 'cold';
-                        case 'Load existing'
-                            app.load_saved_sim();
-                            return
-                        case 'Cancel'
-                            return
-                    end
-                end
-                % Multi-Line Stage 1 Run With Stage 2 Registry Rows Of This Storm DB + Workflow (Stale Ones Included): They Get
-                % Their Forcing From It. Asked When That Input Changes: Stage 1 Forcing Rebuilt (No Stage 1 Row, Or Any Level But
-                % 'full') Or, At 'full', Its Kt Geometry Differs From Its Row's structure_kt (Library multiline_stage2_config
-                % stage1_structure). Confirmed Here (Plan Known, No File Touched Yet), Deleted Only After The Run Succeeds (A Failed
-                % Run Restores Stage 1's Files)
-                if app.wProj.alt_stage(pse_name, alt_name) == 1
-                    res_str = 'Stage 1 results';
-                    db_wf = {app.StormDBDropDown_run.Value, wflow_name};
-                    cascade = app.multiline_cascade_sims(app.wProj, pse_name, alt_name, db_wf);
-                    why = '';
-                    if ~isempty(cascade)
-                        s1_rows = app.sim_rows(app.wProj, pse_name, alt_name);
-                        s1_row = s1_rows(strcmpi(db_wf{1}, {s1_rows.db}) & strcmpi(db_wf{2}, {s1_rows.workflow}));
-                        if isempty(s1_row) || ~strcmp(plan.level, 'full')
-                            why = 'Stage 1 forcing will be rebuilt.';
-                        else
-                            kt = fieldnames(s1_row(1).structure_kt)';
-                            if ~all(cellfun(@(f) isfield(pseObj, f) && isequaln(s1_row(1).structure_kt.(f), pseObj.(f)), kt))
-                                why = 'Stage 1 crest, crest width, seaside slope, offshore slope or toe changed (stage 2 waves / offshore end).';
-                            end
-                        end
-                    end
-                    if isempty(why)
-                        cascade = cell(0, 3);
-                    else
-                        lines = strcat({['  ' char(8226) ' ']}, cascade(:, 1), {' | '}, cascade(:, 2), {' | '}, cascade(:, 3));
-                        app.auxLib.choice_dlgbox(sprintf(['"%s" is the first stage of multi-line PSE "%s". These second-stage ',...
-                            'simulations get their forcing from its %s run and are deleted once this run succeeds:\n%s\n%s'],...
-                            alt_name, pse_name, strjoin(db_wf, ' | '), strjoin(lines, newline), why), {'Continue', 'Cancel'},...
-                            'Run Multi-Line Stage 1', 560); % Last Button = Default (Enter): Cancel
-                        if ~strcmp(app.auxLib.dialog_answer, 'Continue')
-                            return
-                        end
-                    end
-                end
-                S = load(dbObj.output_paths.storm_db, 'storm', 'prob_mass');
-                % LCS, Full Poisson Sampling: Convergence Dialog (May Update mcs_nLC) Before The Config Is Built, Only When
-                % Life Cycles Are Sampled (A Hotstart Reuses The Cached Forcing Or This Case's Sampling)
-                if app.WorkflowDropDown.Value == 3 && strcmp(plan.level, 'cold') && ~app.lcs_convergence_confirm(pseObj, dbObj, S.prob_mass)
-                    return
-                end
-                backed = app.backup_sim_files(bk, plan.level);
-                [config, pseObj] = create_resp_config(app, pseObj, dbObj, true, plan); % Includes Hotstart Actions
-
-                %%%% ------ 2-4. Project Forcing (Library call_chess_boundary_conditions: Build, Uncertainty, Adjustments, One Save)
-                step_str = 'Creating Replicates';
-                unc_str = 'Applying Uncertainty';
-                adj_str = 'Adjust Project Forcing';
-                if ~isempty(config.multiline) % Multi-Line Stage 2: Stage 1's Forcing, Transmitted (Library apply_stage1_transmission)
-                    step_str = 'Transmitting Stage 1 Waves';
-                    unc_str = 'Uncertainty From Stage 1';
-                    adj_str = 'Adjustments From Stage 1';
-                elseif config.workflow == 3
-                    step_str = 'Creating Life Cycles';
-                elseif config.workflow == 2 % Deterministic: Storms As Recorded, No Uncertainty
-                    step_str = 'Formatting Storms';
-                    unc_str = 'No Uncertainty (Deterministic)';
-                end
-                prog = uiprogressdlg(app.UIFigure, 'Title', 'CHESS Simulation Progress', 'Message', step_str, 'Value', 1/5);
-                bar_msg = {'Loading Project Forcing', step_str, unc_str, adj_str, 'Saving Project Forcing'}; % Library Steps 0-4
-                [project_forcing, config] = call_chess_boundary_conditions(config, S.storm, S.prob_mass, pseObj,...
-                    @(step, msg) app.run_progress(prog, step, msg, bar_msg));
-
-                %%%% ---- 5. Run CHESS Simulation
-                set(prog, 'Value', 4/5, 'Message', 'Computing Project Responses');
-                call_project_response(config, project_forcing, pseObj);
-                % Results Saved (Written Once, At The End Of call_project_response): Previous Run's Files No Longer Needed
-                for kk = 1:numel(backed)
-                    if backed(kk).existed && isfile(backed(kk).prev)
-                        delete(backed(kk).prev);
-                    end
-                end
-                backed = [];
-                results_saved = true;
-                % Multi-Line Stage 1 Run Done: The Confirmed Stage 2 Bundles Deleted, Files And Registry Rows (Saved In Step 6).
-                % First Statement After results_saved, So It Has Run (Once, Never Repeated By The Catch) Whenever A Later Step Fails
-                if ~isempty(cascade)
-                    failed = app.delete_sim_rows(app.wProj, pse_name, cascade);
-                end
-
-                %%%% ---- 6. Store Outputs On Project
-                set(prog, 'Value', 4.99/5, 'Message', 'Saving Outputs');
-                app.wProj.upsert_sim(pse_name, alt_name, chessProject.sim_row_from_config(config, pseObj,...
-                    dir(config.out_files.resp_data).datenum)); % Registry Row Of This Bundle
-                row_added = true;
-                app.save_project();
-                app.update_project_tree(); % New Simulation Bundle Node
-                set(prog, 'Value', 1, 'Message', 'Done');
-                close(prog);
-            catch ME
-                if ~isempty(prog) && isvalid(prog)
-                    close(prog);
-                end
-                if ~results_saved
-                    % Failed Before The Results Were Saved: Slot Back To The Previous Run (Config, Forcing, LCS Seed Matching The
-                    % Results On Disk). Best Effort: A Restore Failure Is Reported With, Not Instead Of, The Run Error
-                    failed = app.restore_sim_files(backed);
-                    msg = ['CHESS run failed: ' ME.message];
-                    if ~isempty(failed)
-                        msg = [msg newline newline 'Previous run files not restored: ' strjoin(failed, '; ')];
-                    end
-                    app.auxLib.error_dlgbox(msg);
-                    return
-                end
-                % Results Saved, Project Update Failed (Stage 2 Delete, Registry Row, Save Or Tree): The Registry Row Retried Once
-                % When It Was Not Added (Failed Again: The Next Import Sync Or Rebuild Adds It From Disk), Then The Save Retried
-                % Once (Failed Again: The Row Is In Memory Only Until The Project Is Saved), Warning Below, Results Shown
-                update_msg = sprintf('%s were saved, but updating the project failed: %s', res_str, ME.message);
-                if ~row_added
-                    try
-                        app.wProj.upsert_sim(pse_name, alt_name, chessProject.sim_row_from_config(config, pseObj,...
-                            dir(config.out_files.resp_data).datenum));
-                    catch
-                        update_msg = [update_msg newline newline 'The simulation is not in the project list: use "Rebuild ',...
-                            'simulations from disk" on the project.'];
-                    end
-                end
-                try
-                    app.save_project();
-                catch
-                    update_msg = [update_msg newline newline 'The project is not saved: save it before closing.'];
-                end
-                try
-                    app.update_project_tree();
-                catch
-                end
+            % Run In Progress Until This Callback Exits (chessController.run_guard: Project Tree Rename / Remove Refused; They
+            % Could Run At A Queued-Event Point). Questions Of The Run Start (plan_run) Asked Here, Then The Run (run_simulation)
+            run_flag = app.controller.run_guard(); %#ok<NASGU>
+            app.push_inputs();
+            app.controller.take_changed(); % Only The Flags Of This Run Are Read Below
+            answers = struct();
+            out = app.controller.plan_run(answers);
+            app.controller_done();
+            while strcmp(out.status, 'ask')
+                answers.(out.question.id) = app.ask_question(out.question);
+                out = app.controller.plan_run(answers);
+                app.controller_done();
             end
-            % Show Results (Of The Current Key); Status Bar: How The Forcing Was Obtained
-            app.simKey = app.sim_key();
-            app.declinedSimKey = '';
-            app.populateResultsTab();
-            switch plan.level
-                case 'full'
-                    app.set_sim_status('Hotstart (full): reused cached forcing.');
-                case 'reuse_sampling'
-                    if config.workflow == 3
-                        app.set_sim_status(['Hotstart: same life cycles, forcing rebuilt (' plan.reason ').']);
-                    else
-                        app.set_sim_status(['Hotstart: forcing rebuilt (' plan.reason ').']);
-                    end
-                otherwise
-                    app.set_sim_status('Coldstart: forcing regenerated.');
-            end
-            app.TabGroup.SelectedTab = app.ResultsViewerTab;
-            % One Warning: Project Update Failure And/Or Stage 2 Files Not Deleted
-            if ~isempty(update_msg) || ~isempty(failed)
-                alert_msg = update_msg;
-                if ~isempty(failed)
-                    del_str = 'Stage 1 run done, but these';
-                    if ~isempty(update_msg)
-                        alert_msg = [alert_msg newline newline];
-                        del_str = 'These';
-                    end
-                    alert_msg = [alert_msg sprintf(['%s second-stage files could not be deleted (a file may be open in another ',...
-                        'program):\n%s\nClose it and remove those simulations.'], del_str, strjoin(failed, newline))];
-                end
-                title_str = 'CHESS Run';
-                if ~isempty(cascade)
-                    title_str = 'Run Multi-Line Stage 1';
-                end
-                uialert(app.UIFigure, alert_msg, title_str, 'Icon', 'warning');
+            switch out.status
+                case 'load'
+                    app.load_saved_sim();
+                case 'run'
+                    app.run_simulation(out.plan);
             end
         end
 
         % Callback function: DataTypesTree, ResponsesTree
         function TreeCheckedNodesChanged(app, event)
             % Light Update: Inputs Table Rows & Run Button
-            app.set_input_table();
+            app.controller.touch({'inputs_table'});
+            app.refresh();
         end
 
         % Value changed function: ApplyDepthLimitationCheckBox, 
         % ...and 4 other components
         function StormDBDropDown_runValueChanged(app, event)
-            % Storm DB Change Rebuilds Data Types; Other Controls Only Need A Light Update
+            % Storm DB Change Rebuilds The Run Tab Controls (Data Types), Its Multi-Line Stage 2 Plot (Stage 1's Run Of This
+            % Storm DB), Constants And Results (Saved Simulation Of This Storm DB Asked); Other Controls Only The Inputs Table
             if event.Source == app.StormDBDropDown_run
-                app.populateSimulationTab();
-                app.replot_multiline_stage2(); % Stage 1's Run Of This Storm DB
-                app.populate_pse_table();
-                app.populate_constants_table();
-                app.populateResultsTab();
-                app.sync_saved_sim(true); % Saved Simulation Of This Storm DB
-            elseif app.has_active_alt() % Without An Active Alternative There Are No Inputs To Refresh
-                app.set_input_table();
+                app.controller.touch({'run_controls', 'pse', 'constants', 'results'});
+                app.refresh(true);
+            elseif app.controller.has_active_alt() % Without An Active Alternative There Are No Inputs To Refresh
+                app.controller.touch({'inputs_table'});
+                app.refresh();
             end
         end
 
@@ -3865,137 +2425,71 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             symbol = app.WorkflowInputsTable.Data{row, 1};
             val = event.NewData;
             % Multi-Line Stage 2: Inputs Of Stage 1's Forcing Come From Its Run (Library multiline_inherited_fields)
-            [pse_name, alt_name] = app.get_active_names();
-            if app.wProj.alt_stage(pse_name, alt_name) == 2 && ismember(symbol, multiline_inherited_fields())
+            [pse_name, alt_name] = app.controller.active_names();
+            if app.controller.project.alt_stage(pse_name, alt_name) == 2 && ismember(symbol, multiline_inherited_fields())
                 app.WorkflowInputsTable.Data{row, col} = event.PreviousData;
-                uialert(app.UIFigure, sprintf('Multi-line stage 2: %s is taken from the stage 1 run (%s/%s).', symbol, pse_name,...
-                    app.wProj.stage1_alt(pse_name)), 'Inputs: From Stage 1', 'Icon', 'info');
+                app.auxLib.alert_dlgbox(sprintf('Multi-line stage 2: %s is taken from the stage 1 run (%s/%s).', symbol, pse_name,...
+                    app.controller.project.stage1_alt(pse_name)), 'Inputs: From Stage 1', 'info');
                 return
             end
             if strcmp(symbol, 'csr_apply_structure_repair') && ~(isnumeric(val) && isscalar(val) && ismember(val, 0:3))
                 app.WorkflowInputsTable.Data{row, col} = event.PreviousData;
-                uialert(app.UIFigure, 'Structure Repair must be 0 (None), 1 (Above SLS), 2 (Above ULS) or 3 (Above SLS Or ULS).',...
-                    'Inputs: Invalid Value', 'Icon', 'warning');
+                app.auxLib.alert_dlgbox('Structure Repair must be 0 (None), 1 (Above SLS), 2 (Above ULS) or 3 (Above SLS Or ULS).',...
+                    'Inputs: Invalid Value', 'warning');
                 return
             end
-            app.tableState.(symbol) = val;
+            app.controller.set_input(symbol, val);
             % DPA Settings Rows Follow csr_call_dpa
             if strcmp(symbol, 'csr_call_dpa')
-                app.set_input_table();
+                app.controller.touch({'inputs_table'});
+                app.refresh();
             end
         end
 
         % Menu selected function: RemoveStormDatabaseMenu
         function RemoveStormDatabaseMenuSelected(app, event)
-            % Remove A Storm Database From The Active Project. Tied To Simulations (Registry Rows, chessProject.stormdb_tied_sims):
-            % Deleted With Its Files And Those Bundles' Run Files. Otherwise: Remove (Files Kept) Or Remove & Delete Files
-            if isempty(app.wProj) || isempty(app.wProj.stormDB_list)
+            % Remove A Storm Database From The Active Project (chessController.stormdb_removal / remove_stormdb). Tied To
+            % Simulations: Deleted With Its Files And Those Bundles' Run Files. Otherwise: Remove (Files Kept) Or Remove & Delete Files
+            if isempty(app.controller.project) || isempty(app.controller.project.stormDB_list)
                 return
             end
             % Not While A Run Writes Into The Project Folders
-            if app.runActive
-                uialert(app.UIFigure, 'Removing is not available while a run is in progress.', 'Storm Database Management: Remove', 'Icon', 'info');
+            if app.controller.runActive
+                app.auxLib.alert_dlgbox('Removing is not available while a run is in progress.', 'Storm Database Management: Remove', 'info');
                 return
             end
-            app.auxLib.dropdown_input_dlgbox(['Remove storm database from project ' app.wProj.name '.'],...
-                {app.wProj.stormDB_list.db_name}, 'Storm Database Management: Remove', 'Remove');
+            app.auxLib.dropdown_input_dlgbox(['Remove storm database from project ' app.controller.project.name '.'],...
+                {app.controller.project.stormDB_list.db_name}, 'Storm Database Management: Remove', 'Remove');
             db_name = app.auxLib.dialog_answer;
             if isempty(db_name)
                 return
             end
-            % Storm DB Files (storm/prob_mass + Raw CHS_Data, If Any)
-            dbObj = app.wProj.get_project_field('stormDB_list', db_name, '', 'db');
-            db_files = {};
-            for ff = {'storm_db', 'chs_data'}
-                if isfield(dbObj.output_paths, ff{1}) && isfile(dbObj.output_paths.(ff{1}))
-                    db_files{end+1} = dbObj.output_paths.(ff{1}); %#ok<AGROW>
-                end
+            plan = app.controller.stormdb_removal(db_name);
+            answer = app.ask_question(plan.question);
+            if isempty(answer) || strcmp(answer, 'Cancel') % Cancel Or Window Closed
+                return
             end
-            tied = app.wProj.stormdb_tied_sims(db_name);
-            if ~isempty(tied)
-                % Tied Simulations: Only Delete (Results Of A Removed Storm DB Could Not Be Shown Or Rerun)
-                n_max = 15;
-                lines = strcat({['  ' char(8226) ' ']}, tied);
-                if numel(lines) > n_max
-                    lines = [lines(1:n_max-1); {sprintf('  %sand %d more', char(8230), numel(tied) - n_max + 1)}];
-                end
-                msg = sprintf('Storm DB "%s" is tied to the following simulations:\n%s\n\nDeleting the storm DB will remove these alternatives'' simulation results.',...
-                    db_name, strjoin(lines, newline));
-                app.auxLib.choice_dlgbox(msg, {'Delete', 'Cancel'}, 'Remove Storm Database', 560); % Last Button = Default (Enter): Cancel
-                answer = app.auxLib.dialog_answer;
-                if ~strcmp(answer, 'Delete') % Cancel Or Window Closed
-                    return
-                end
-            else
-                msg = sprintf('Remove storm database "%s"?', db_name);
-                options = {'Remove', 'Cancel'};
-                if ~isempty(db_files)
-                    msg = sprintf('%s\n"Remove" keeps its files in Event_Database; "Remove & Delete Files" deletes them.', msg);
-                    options = {'Remove', 'Remove & Delete Files', 'Cancel'};
-                end
-                app.auxLib.choice_dlgbox(msg, options, 'Remove Storm Database');
-                answer = app.auxLib.dialog_answer;
-                if isempty(answer) || strcmp(answer, 'Cancel') % Cancel Or Window Closed
-                    return
-                end
-            end
-            % Drop Cached storm / CHS_Data Of This Database
-            keys = app.stormCache.keys();
-            stale = keys(ismember(lower(keys), lower(db_files)));
-            if ~isempty(stale)
-                remove(app.stormCache, stale);
-            end
-            failed = {};
-            switch answer
-                case 'Delete'
-                    % Run Files Of Its Simulations And The Storm DB Files Deleted; Session State Of The DB Dropped
-                    run_files = app.wProj.stormdb_run_files(db_name);
-                    app.wProj.remove_stormdb(db_name);
-                    for ff = [run_files; db_files']'
-                        delete(ff{1});
-                        if isfile(ff{1})
-                            failed{end+1} = ff{1}; %#ok<AGROW>
-                        end
-                    end
-                    app.oldDbWarned = app.oldDbWarned(~ismember(lower(app.oldDbWarned), lower(db_files)));
-                    app.simKey = [];
-                    app.declinedSimKey = '';
-                    app.resultsState = [];
-                case 'Remove & Delete Files'
-                    app.wProj.remove_stormdb(db_name);
-                    cellfun(@delete, db_files);
-                otherwise
-                    app.wProj.remove_stormdb(db_name);
-            end
-            % Last CHS (Non-Custom) Storm DB Removed: The Project Has No Region, Its CHS_Dependencies Is Free Again
-            if isempty(app.wProj.project_region())
-                app.wProj.chs_dependencies = '';
-            end
-            % Refresh & Save
-            app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
-            app.refresh_active_view();
-            app.save_project();
-            if ~isempty(failed)
-                uialert(app.UIFigure, sprintf('Storm DB "%s" removed, but these files could not be deleted:\n%s',...
-                    db_name, strjoin(failed, newline)), 'Remove Storm Database', 'Icon', 'warning');
-            end
+            app.controller.remove_stormdb(plan, answer);
+            msgs = app.controller.take_messages();
+            app.refresh();
+            app.show_messages(msgs);
         end
 
         % Menu selected function: TidesMenu
         function TidesMenuSelected(app, event)
             % Download A NOAA Tidal Prediction File Into The Project (Tides UI), Then Refresh The Run Tab
-            if isempty(app.wProj)
+            if isempty(app.controller.project)
                 return
             end
-            tidesUI = NOAATidesPredictionsUI(app.wProj, app.UIFigure);
+            tidesUI = NOAATidesPredictionsUI(app.controller.project, app.UIFigure);
             try % Wait Until The Tides UI Closes (It Closes Itself After A Successful Download)
                 waitfor(tidesUI.UIFigure);
             catch % Already Closed
             end
             % Refresh & Save
-            app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
-            app.refresh_active_view();
-            app.save_project();
+            app.controller.select(app.controller.project.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
+            app.refresh();
+            app.controller.save_project();
         end
 
         % Cell edit callback: PSETable
@@ -4003,62 +2497,62 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % [NEW] PSE Viewer: Edit A Value Of The Active PSE/Alternative (Rows Are Added/Removed In The PSE Creation Dialog Only)
             row = event.Indices(1);
             col = event.Indices(2);
-            if col ~= 4 || ~app.has_active_alt()
+            if col ~= 4 || ~app.controller.has_active_alt()
                 app.PSETable.Data{row, col} = event.PreviousData;
                 return
             end
             val = event.NewData;
             if ~(isnumeric(val) && isscalar(val) && isreal(val) && isfinite(val))
                 app.PSETable.Data{row, col} = event.PreviousData;
-                uialert(app.UIFigure, sprintf('%s must be a finite number.', app.PSETable.Data{row, 2}),...
-                    'PSE Viewer: Invalid Value', 'Icon', 'warning');
+                app.auxLib.alert_dlgbox(sprintf('%s must be a finite number.', app.PSETable.Data{row, 2}),...
+                    'PSE Viewer: Invalid Value', 'warning');
                 return
             end
-            [pse_name, alt_name] = app.get_active_names();
-            old_tbl = app.wProj.get_project_field('pse_tables', pse_name, alt_name, 'alt');
-            geo = app.wProj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+            [pse_name, alt_name] = app.controller.active_names();
+            old_tbl = app.controller.project.get_project_field('pse_tables', pse_name, alt_name, 'alt');
+            geo = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
             % Rebuild The Geometry (Library Rules); A Library Error Restores The Previous Table (pse_geometry Is Only Set On Success)
             symbol = app.PSETable.Data{row, 1};
             new_tbl = old_tbl;
             new_tbl{strcmp(old_tbl(:, 1), symbol), 4} = val;
-            app.wProj.set_project_field('pse_tables', new_tbl, pse_name, alt_name, 'alt');
+            app.controller.project.set_project_field('pse_tables', new_tbl, pse_name, alt_name, 'alt');
             try
-                app.wProj.create_geometry(pse_name, alt_name, geo.pse_type);
+                app.controller.project.create_geometry(pse_name, alt_name, geo.pse_type);
             catch ME
                 app.PSETable.Data{row, col} = event.PreviousData;
-                app.wProj.set_project_field('pse_tables', old_tbl, pse_name, alt_name, 'alt');
-                uialert(app.UIFigure, ['Could not rebuild the PSE geometry: ' ME.message], 'PSE Viewer: Invalid Value');
+                app.controller.project.set_project_field('pse_tables', old_tbl, pse_name, alt_name, 'alt');
+                app.auxLib.alert_dlgbox(['Could not rebuild the PSE geometry: ' ME.message], 'PSE Viewer: Invalid Value', 'error');
                 return
             end
-            app.plot_pse_geometry(app.PSEAxes, app.plotFontSize, false);
-            app.save_project();
-            % Constants Table (Water Density, Resolved Offshore Elevation) And Status Bar (PSE Geometry Vs Loaded Results). Same Key: No sync_saved_sim
-            app.populate_constants_table();
-            if ~isempty(app.resultsState)
-                app.set_sim_status(app.results_status());
-            end
+            app.controller.save_project();
+            % PSE Tab, Constants Table (Water Density, Resolved Offshore Elevation) And Status Bar (PSE Geometry Vs Loaded
+            % Results). Same Key: No Saved Simulation Question
+            app.controller.touch({'pse', 'constants', 'status'});
+            app.refresh();
+
         end
 
         % Menu selected function: RemoveAlternativeSimulationMenu
         function RemoveAlternativeSimulationMenuSelected(app, event)
             % Delete Simulations (Storm DB | Workflow Run Files) Of An Alternative Of The Active PSE (remove_alt_sims Dialog)
-            if ~app.has_active_alt()
+            if ~app.controller.has_active_alt()
                 return
             end
-            [pse_name, alt_name] = app.get_active_names();
-            app.remove_alt_sims(app.wProj, pse_name, alt_name, '');
+            [pse_name, alt_name] = app.controller.active_names();
+            app.remove_alt_sims(app.controller.project, pse_name, alt_name, '');
+
         end
 
         % Menu selected function: MultilineTransectMenu
         function MultilineTransectMenuSelected(app, event)
             % Multi-Line Transect: A New Multi-Line PSE (Its '<name>_stage_1' Rubble Mound) Or A '<name>_stage_2' Alternative
             % (Any PSE Type) Of An Existing One, Through The PSE Creation Wizard (Locked Suffix). The Multi-Line Link
-            % (chessProject.link_multiline) Is Written Only Once The Wizard Created The Alternative
-            if isempty(app.wProj)
+            % (chessProject.link_multiline, chessController.finish_element) Is Written Only Once The Wizard Created The Alternative
+            if isempty(app.controller.project)
                 return
             end
             new_item = 'New multi-line PSE';
-            app.auxLib.dropdown_input_dlgbox('Choose multi-line transect first stage PSE', [{new_item}, app.wProj.multiline_pses()],...
+            app.auxLib.dropdown_input_dlgbox('Choose multi-line transect first stage PSE', [{new_item}, app.controller.project.multiline_pses()],...
                 'Choose multi-line transect first stage PSE', 'OK');
             choice = app.auxLib.dialog_answer;
             if isempty(choice)
@@ -4066,14 +2560,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             if strcmp(choice, new_item)
                 % Stage 1: Always A New Rubble Mound
-                obj = PSECreationUI(app.RubbleMoundMenu.Text, app.wProj, '', app.UIFigure, 1);
+                obj = PSECreationUI(app.RubbleMoundMenu.Text, app.controller.project, '', app.UIFigure, 1);
                 uiwait(obj.uifig);
-                if ~obj.pse_created
-                    app.wProj.remove_pse(obj.pse_name);
-                    app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
-                    return
-                end
-                app.wProj.link_multiline(obj.pse_name, obj.alt_name, 1);
+                app.controller.finish_element(obj.pse_created, obj.pse_name, obj.alt_name, 'pse', 1);
             else
                 % Stage 2: PSE Type Picked From The Add PSE Menu Labels
                 types = {app.LeveeMenu.Text, app.RubbleMoundMenu.Text, app.FloodwallMenu.Text, app.LowCrestedBreakwaterMenu.Text};
@@ -4083,25 +2572,20 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 if isempty(pse_type)
                     return
                 end
-                obj = PSECreationUI(pse_type, app.wProj, choice, app.UIFigure, 2);
+                obj = PSECreationUI(pse_type, app.controller.project, choice, app.UIFigure, 2);
                 uiwait(obj.uifig);
-                if ~obj.pse_created
-                    app.wProj.remove_alternative(obj.pse_name, obj.alt_name);
-                    app.set_active_selection(app.wProj.name, app.PSEDropDown.Value, app.AlternativeDropDown.Value);
-                    return
-                end
-                app.wProj.link_multiline(obj.pse_name, obj.alt_name, 2);
+                app.controller.finish_element(obj.pse_created, obj.pse_name, obj.alt_name, 'alt', 2);
             end
-            app.set_active_selection(app.wProj.name, obj.pse_name, obj.alt_name);
-            app.project_field_ini();
-            app.refresh_active_view();
-            app.save_project();
+            if obj.pse_created
+                app.refresh();
+            end
+
         end
 
         % Close request function: UIFigure
         function UIFigureCloseRequest(app, event)
             % Active Project's Lock Released (Another Session Can Open It), Then The App Closes
-            app.release_project_lock();
+            app.controller.release_lock();
             delete(app);
         end
     end
