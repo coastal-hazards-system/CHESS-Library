@@ -35,15 +35,26 @@ classdef det_methods < CHESSPlotsBase
             self.check_fields(T, {x_field, y_field, c_field});
             [x_lbl, ~, x_log] = self.field_info(x_field);
             [y_lbl, ~, y_log] = self.field_info(y_field);
-            c_lbl = self.field_info(c_field);
+            [c_lbl, ~, c_log] = self.field_info(c_field);
             ax = aux_methods.initiate_axes(ax, x_lbl, y_lbl, self.title_str(ds_query), self.base_fnt);
-            ok = ~isnan(T.(x_field)) & ~isnan(T.(y_field)) & ~isnan(T.(c_field));
+            valid = ~isnan(T.(x_field)) & ~isnan(T.(y_field)) & ~isnan(T.(c_field));
+            % Log-Scaled Fields (e.g. q): Non-Positive Values Cannot Be Drawn; Still Counted As Valid, Reported As Hidden
+            flds = {x_field, y_field, c_field};
+            f_log = unique(flds([x_log y_log c_log] == 1), 'stable');
+            ok = valid;
+            for k = 1:numel(f_log), ok = ok & T.(f_log{k}) > 0; end
+            f_hid = f_log(cellfun(@(f) any(valid & T.(f) <= 0), f_log));
+            cnt = sprintf('%d of %d storms', sum(valid), height(T));
+            if any(valid & ~ok)
+                cnt = sprintf('%s (%d hidden, %s %s 0)', cnt, sum(valid & ~ok), strjoin(f_hid, ', '), char(8804));
+            end
             if ~any(ok)
                 aux_methods.display_no_data(ax, self.base_fnt);
                 return
             end
             scatter(ax, T.(x_field)(ok), T.(y_field)(ok), 40, T.(c_field)(ok), 'filled', 'MarkerEdgeColor', [.3 .3 .3]);
             colormap(ax, parula);
+            ax.ColorScale = aux_methods.tern(c_log == 1, 'log', 'linear');
             colorbar(ax);
             % Color Field Named In A Subtitle, Not The Colorbar Label: UIAxes Layout Lets Labels Longer Than The Bar Spill Out
             subtitle(ax, ['Color: ' aux_methods.latex_escape(c_lbl)], 'Interpreter', 'latex', 'FontSize', self.base_fnt);
@@ -51,7 +62,7 @@ classdef det_methods < CHESSPlotsBase
             ax.YScale = aux_methods.tern(y_log == 1, 'log', 'linear');
             aux_methods.pad_limits(ax, 'X', T.(x_field)(ok));
             aux_methods.pad_limits(ax, 'Y', T.(y_field)(ok));
-            text(ax, 0.02, 0.97, sprintf('%d of %d storms', sum(ok), height(T)), 'Units', 'normalized', ...
+            text(ax, 0.02, 0.97, cnt, 'Units', 'normalized', 'Interpreter', 'none', ...
                 'VerticalAlignment', 'top', 'FontSize', self.base_fnt - 2);
         end
 
