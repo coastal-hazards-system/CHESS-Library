@@ -36,6 +36,7 @@ classdef chessController < handle
         % Refresh Order: The PSE Tab After The Run Tab (A Multi-Line Stage 2 Plot Follows Its Storm DB + Workflow)
         VIEWS = {'tree', 'project_panel', 'stormdb', 'run_controls', 'inputs_table', 'pse', 'constants', 'results', 'status'}
         CONTROL_INPUTS = {'storm_sampling', 'data_types', 'swl_slr', 'tide_file', 'apply_depth_limitation', 'responses'}
+        FORCING_INPUTS = {'storm_duration', 'compute_storm_duration'} % Template Forcing Rows In The Inputs Table (Every PSE Type)
         GRAVITY = 9.80665 % m/s^2, Library Value (Setup/call_input_parser.m)
     end
 
@@ -239,14 +240,14 @@ classdef chessController < handle
             pseObj = proj.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
             dbObj = proj.get_project_field('stormDB_list', obj.selection.db, '', 'db');
             [~, ~, ~, ~, out_files] = obj.config_path();
-            % Library Template Defaults For storm_duration (Fresh Table) And Workflow Sections (Library Functions Read Them Regardless Of Workflow)
+            % Library Template Defaults For The Forcing Rows (Fresh Table) And Workflow Sections (Library Functions Read Them Regardless Of Workflow)
             tpl = proj.get_library_template(pseObj.pse_type);
-            wf_rows = [tpl.forcing(strcmp(tpl.forcing(:, 1), 'storm_duration'), :); tpl.mcs; tpl.csr; tpl.pros];
+            wf_rows = [tpl.forcing(ismember(tpl.forcing(:, 1), obj.FORCING_INPUTS), :); tpl.mcs; tpl.csr; tpl.pros];
             for rr = 1:size(wf_rows, 1)
                 config.(wf_rows{rr, 1}) = wf_rows{rr, 4};
             end
             % Every Library Response Switch Defaults To Off (Union Of All Templates)
-            types = {'Levee', 'Floodwall', 'Rubble Mound', 'Low Crested Breakwater'};
+            types = {'Levee', 'Floodwall', 'Rubble Mound'};
             for tt = 1:length(types)
                 tpl_t = proj.get_library_template(types{tt});
                 for rr = 1:size(tpl_t.responses, 1)
@@ -881,12 +882,19 @@ classdef chessController < handle
             msg = obj.status(obj.results_status());
         end
 
-        function [project_forcing, dsw] = results_forcing(obj)
-            % Project Forcing & Storm DB Probability Masses For The Loaded Results (Loaded Once, Kept In results)
+        function project_forcing = results_project_forcing(obj)
+            % Saved Project Forcing Of The Loaded Results (Loaded Once, Kept In results; [] When The File Is Missing). The Storm
+            % Event Viewer And Response Table Read It Alone: No Storm DB File Needed
             if isempty(obj.results.project_forcing) && isfile(obj.results.out_files.project_forcing)
                 P = load(obj.results.out_files.project_forcing, 'project_forcing');
                 obj.results.project_forcing = P.project_forcing;
             end
+            project_forcing = obj.results.project_forcing;
+        end
+
+        function [project_forcing, dsw] = results_forcing(obj)
+            % Project Forcing & Storm DB Probability Masses For The Loaded Results (Loaded Once, Kept In results)
+            obj.results_project_forcing();
             if isempty(obj.results.prob_mass)
                 S = load(obj.results.dbObj.output_paths.storm_db, 'prob_mass');
                 obj.results.prob_mass = S.prob_mass;
@@ -936,7 +944,7 @@ classdef chessController < handle
             rows = {
                 'hc',          'Hazard Curve',                    [1 4],   {'Peaks','Timeseries'}, false, false, false, {}
                 'det_scatter', 'Response vs Forcing',             2,       {'Peaks','Timeseries'}, false, false, false, {'c_field'}
-                'det_table',   'Response Table',                  2,       {'Peaks','Timeseries'}, false, false, true,  {}
+                'det_table',   'Response Table',                  [1 2 3 4], {'Peaks','Timeseries'}, false, false, true,  {}
                 'det_compare', 'Peaks vs Timeseries',             2,       {'Peaks'},              false, false, false, {}
                 'event',       'Storm Event Viewer',              [1 2 3 4], {'Peaks','Timeseries'}, false, false, true,  {}
                 'annual',      'Annual Response Distribution',    3,       {'Peaks','Timeseries'}, false, false, false, {'bin_edges','cb_lim','grid_on','cb_log'}
@@ -962,8 +970,12 @@ classdef chessController < handle
             cat = cat(keep);
         end
 
-        function [lbl, items] = field_items(obj, key, data)
-            % Field To Plot Items Per Plot Type (Library Method Field Lists)
+        function [lbl, items] = field_items(obj, key, data, data_type)
+            % Field To Plot Items Per Plot Type (Library Method Field Lists). data_type ('Peaks' / 'Timeseries', Optional):
+            % Overtopping Volumes (Q_vol*) Are Offered For Timeseries Only
+            if nargin < 4
+                data_type = '';
+            end
             lbl = 'Field To Plot:';
             s_fields = {};
             if isstruct(data) && isfield(data, 'S')
@@ -980,15 +992,15 @@ classdef chessController < handle
                     items = obj.det_fields(data);
                 case 'det_table' % Columns Are Picked In The Table Pop-Out
                     items = {};
-                case 'event' % Responses The Event Viewer Recomputes For This Structure Type (And The Run Computed)
+                case 'event' % Responses The Event Viewer Draws For This Structure Type (Hazard Curve Entries, Saved Responses, Saved S)
                     if isfield(data, 'var')
                         run_fields = {data.var};
                     else
-                        run_fields = fieldnames(data)';
+                        run_fields = [fieldnames(data)', s_fields];
                     end
-                    items = intersect(obj.response_list('event'), run_fields, 'stable');
+                    items = intersect(obj.response_list('event', data_type), run_fields, 'stable');
                 case 'annual'
-                    items = intersect(obj.response_list('annual'), [fieldnames(data)', s_fields], 'stable');
+                    items = intersect(obj.response_list('annual', data_type), [fieldnames(data)', s_fields], 'stable');
                 case 'armor'
                     items = [intersect({'Smax', 'LSmax'}, s_fields, 'stable'), s_series];
                 case {'damaging', 'dashboard'}
@@ -1001,10 +1013,14 @@ classdef chessController < handle
                 otherwise % Event Sampling: No Field
                     items = {};
             end
+            if strcmp(data_type, 'Peaks')
+                items = items(~startsWith(items, 'Q_vol'));
+            end
         end
 
         function [lbl, items, on] = aux_items(obj, key, data, ds_query, field)
-            % Storm ID Dropdown Per Plot Type: Event ID, Life Cycle Or A Plot Option (field: Field To Plot Selected)
+            % Storm ID Dropdown Per Plot Type: Life Cycle Or A Plot Option (field: Field To Plot Selected). The Storm Event Viewer
+            % And Response Table Select Their Storm In The Figure: No Item Here
             lbl = 'Storm ID:';
             items = {'-'};
             on = false;
@@ -1019,25 +1035,13 @@ classdef chessController < handle
                         items = {'Off', 'Run Sample', 'Storm Values'};
                         on = true;
                     end
-                case 'det_scatter' % X Axis (Color: Right-Click Plot Options)
+                case 'det_scatter' % X Axis (Color: Right-Click Plot Options); Q_vol* Timeseries Only
                     lbl = 'X Axis:';
                     items = obj.det_fields(data);
+                    if strcmp(ds_query.data_type, 'Peaks')
+                        items = items(~startsWith(items, 'Q_vol'));
+                    end
                     on = true;
-                case 'det_table' % Timeseries: Storm Whose Hydrographs Are Shown | Peaks: All Storms
-                    if strcmp(ds_query.data_type, 'Timeseries')
-                        items = arrayfun(@num2str, data.storm_id, 'un', false);
-                        on = true;
-                    else
-                        items = {'All'};
-                    end
-                case 'event' % Timeseries: One Event | Peaks: All Events
-                    if strcmp(ds_query.data_type, 'Timeseries')
-                        stm_data = aux_methods.pull_data(ds_query, obj.load_storm(obj.results.dbObj));
-                        items = arrayfun(@num2str, cell2mat(stm_data(:, 1)), 'un', false);
-                        on = true;
-                    else
-                        items = {'All'};
-                    end
                 case 'annual'
                     lbl = 'Normalize:';
                     items = {'percent', 'count'};
@@ -1910,12 +1914,13 @@ classdef chessController < handle
             end
         end
 
-        function fields = response_list(obj, list_name)
+        function fields = response_list(obj, list_name, data_type)
             % Response Names Accepted By Library Plot Methods (Mirror Of Their Argument Validation)
             %   'annual': lcs_methods.annual_response_distribution | 'event': CHESSPlotsBase.storm_event_viewer (Per Structure Type)
+            %   data_type 'Peaks': No Overtopping Volumes (Q_vol* Are Computed For Timeseries Only)
             switch list_name
                 case 'annual'
-                    fields = {'Hm0t', 'R2p', 'R2p_SWL', 'Dn50', 'Dn50_LCBW', 'Dn50_Lee', 'p1', 'q', 'q_overflow', 'q_wave_ot',...
+                    fields = {'Hm0t', 'R2p', 'R2p_SWL', 'Dn50', 'Dn50_Lee', 'p1', 'q', 'q_overflow', 'q_wave_ot',...
                         'Q_vol', 'Q_vol_overflow', 'Q_vol_wave_ot', 'DamDepthElev', 'DamDepth', 'p2dyn', 'p2sta', 'p2total',...
                         'p3dyn', 'p3sta', 'p3total', 'pu', 'X_low', 'X_up', 'X_c_surge', 'Bx', 'theta_low', 'theta_up',...
                         'theta_center', 'Bjet', 'Vjet', 'Fjet', 'S_seaside_with_repairs', 'S_seaside_no_repairs',...
@@ -1929,10 +1934,12 @@ classdef chessController < handle
                             fields = [{'p1'}, overtopping, {'p2dyn', 'p2sta', 'p2total', 'p3dyn', 'p3sta', 'p3total', 'pu',...
                                 'X_low', 'X_up', 'X_c_surge', 'Bx', 'theta_low', 'theta_up', 'theta_center', 'Bjet', 'Vjet', 'Fjet'}];
                         case 3
-                            fields = [{'Hm0t', 'R2p', 'R2p_SWL', 'Dn50', 'Dn50_LCBW', 'Dn50_Lee'}, overtopping];
-                        otherwise
-                            fields = [{'Hm0t', 'R2p', 'R2p_SWL', 'Dn50_LCBW'}, overtopping];
+                            fields = [{'Hm0t', 'R2p', 'R2p_SWL', 'Dn50', 'Dn50_Lee'}, overtopping,...
+                                {'S_seaside_with_repairs', 'S_seaside_no_repairs', 'S_leeside_with_repairs', 'S_leeside_no_repairs'}];
                     end
+            end
+            if strcmp(data_type, 'Peaks')
+                fields = fields(~startsWith(fields, 'Q_vol'));
             end
         end
 
