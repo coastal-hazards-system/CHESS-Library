@@ -1,7 +1,11 @@
 function Resp = chess_csr(config, project_forcing, structure, emp_coeff, data_type, outfolder)
+% Overtopping Volume (Q_vol) Is Timeseries Only
+if strcmp(data_type, 'peaks')
+    config.compute_q_vol = 0;
+end
 % Get Storm Types
 storm_type = fieldnames(project_forcing);
-% Compute Structure Respose: q, R2%, Dn50, Dn50 LCBW, P1
+% Compute Structure Respose: q, R2%, Dn50, Dn50 Lee, P1
 for ii = 1:length(storm_type)
     Resp.(storm_type{ii}) = compute_structure_response(config, structure,...
         project_forcing.(storm_type{ii}),...

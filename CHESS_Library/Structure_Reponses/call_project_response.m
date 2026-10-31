@@ -30,6 +30,10 @@ function [Resp] = call_project_response(config, project_forcing, structure)
     % Load Empirical Coefficients & Initialize Output Struct
     [emp_coeff] = load_empirical_coefficients();
     Resp        = struct();
+
+    % Overtopping Volume (Q_vol) Is Timeseries Only: Peaks Datasets Run Without It
+    config_peaks = config;
+    config_peaks.compute_q_vol = 0;
     
     % Establish Output Directory (Workflow Folder Of The Alternative, chess_paths.m)
     paths  = chess_paths(config);
@@ -59,7 +63,7 @@ function [Resp] = call_project_response(config, project_forcing, structure)
                     fprintf('   Processing %s dataset....\n', fName);
                     save_path = fullfile(subDir, sprintf('%s1_%s', wName, fName));
                     
-                    Resp.Peaks.(fName) = chess_pros(config, ...
+                    Resp.Peaks.(fName) = chess_pros(config_peaks, ...
                         project_forcing.Peaks.(fName), structure, emp_coeff, save_path);
                 end
             end
@@ -89,7 +93,7 @@ function [Resp] = call_project_response(config, project_forcing, structure)
                     end
 
                     fprintf('   Processing %s dataset....\n', fName);
-                    Resp.Peaks.(fName) = chess_det(config, ...
+                    Resp.Peaks.(fName) = chess_det(config_peaks, ...
                         project_forcing.Peaks.(fName), structure, emp_coeff);
                 end
             end
