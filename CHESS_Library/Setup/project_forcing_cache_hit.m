@@ -5,7 +5,10 @@ function [hit, project_forcing, missing_desc] = project_forcing_cache_hit(config
 The coverage rule of call_chess_boundary_conditions.m (step 0, which
 also needs config.forcing_stamp): the cached
 config.out_files.project_forcing exists and covers the current request
-(project_forcing_coverage.m). No side effects (a non-covering cache is
+(project_forcing_coverage.m) in the current layout (current_layout:
+every PROS/DET dataset carries storm_duration, LCS Timeseries life
+cycles have lcs_columns().n_timeseries columns; an older forcing is
+rebuilt, never converted). No side effects (a non-covering cache is
 not deleted here). Hotstart resolution runs first and deletes the cache
 when a dependency changed (apply_hotstart_level.m, used by the library's
 resolve_hotstart_state.m and by the GUI), so call this after it, or
@@ -35,4 +38,36 @@ end
 S = load(config.out_files.project_forcing, 'project_forcing');
 project_forcing = S.project_forcing;
 [hit, missing_desc] = project_forcing_coverage(config, project_forcing);
+if hit && ~current_layout(config.workflow, project_forcing)
+    hit = false;
+    missing_desc = 'storm_duration (forcing layout)';
+end
+end
+
+%% AUX FUNCTION: FORCING IN THE CURRENT LAYOUT (PROS/DET: storm_duration Per Dataset; LCS: Timeseries Column Count)
+function ok = current_layout(workflow, project_forcing)
+if workflow == 3
+    ok = true;
+    if isfield(project_forcing, 'Timeseries')
+        lcs = struct2cell(project_forcing.Timeseries.Default);
+        ok = all(cellfun(@(d) all(cellfun(@(x) size(x, 2) == lcs_columns().n_timeseries, d(:))), lcs));
+    end
+    return
+end
+ok = has_storm_duration(project_forcing);
+end
+
+function ok = has_storm_duration(data)
+% Every Dataset Struct (Holding SWL) Below data Carries storm_duration
+if isfield(data, 'SWL')
+    ok = isfield(data, 'storm_duration');
+    return
+end
+ok = true;
+for fn = fieldnames(data)'
+    if isstruct(data.(fn{1})) && ~has_storm_duration(data.(fn{1}))
+        ok = false;
+        return
+    end
+end
 end

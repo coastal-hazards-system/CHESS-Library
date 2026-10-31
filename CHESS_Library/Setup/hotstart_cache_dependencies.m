@@ -36,8 +36,9 @@ deps.data_shape: Fields consumed by project_forcing_coverage.m (via
     check it at all.
 
 deps.forcing_build: Fields baked into the generated forcing that do not
-    change which storms are sampled (storm duration stamped on the peaks
-    built from the sampled storms). A change rebuilds the forcing from the
+    change which storms are sampled (storm_duration of every dataset:
+    config.storm_duration, or with compute_storm_duration = 1 the SWL
+    duration of each Timeseries storm). A change rebuilds the forcing from the
     storm database; LCS keeps its sampled life cycles. multiline
     (multiline_stage2_config.m: stage 1 alternative, its forcing build
     stamp and geometry): a multi-line stage 2 forcing is rebuilt from
@@ -63,7 +64,7 @@ Developed by: Fabian A. Garcia Moreno ERDC-CHL
 %}
 deps.sampling = {'mcs_nYears','mcs_nLC','lcs_restrict_sampling_rate','storm_db_build_date'};
 deps.data_shape = {'create_wlp','create_whp','use_timeseries','storm_sampling'};
-deps.forcing_build = {'storm_duration', 'multiline'};
+deps.forcing_build = {'storm_duration', 'compute_storm_duration', 'multiline'};
 deps.f_adjust = {'apply_depth_limitation','apply_random_tides','tide_file','swl_slr', ...
     'toe_elevation','wall_bottom_elevation','berm_crest_elevation','berm_seaward_slope','berm_crest_width', ...
     'add_toe_berm','struc_type'};

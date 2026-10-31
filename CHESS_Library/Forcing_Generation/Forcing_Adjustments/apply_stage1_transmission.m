@@ -14,7 +14,7 @@ function project_forcing = apply_stage1_transmission(config, project_forcing)
         crest_width, 1/seaside_slope, g) of the stage 1 run's geometry.
         Kt = 0 (e.g. Hm0_toe = 0 at a dry stage 1 toe) gives Hm0 = 0:
         the waves are dissipated, surge-only responses still run.
-        SWL, Tp, wDir, dt, storms/life cycles and replicates are kept as
+        SWL, Tp, wDir, dt, storm_duration, storms/life cycles and replicates are kept as
         is: stage 1's uncertainty, random tides and SLR are already in
         them, so stage 2 skips the sampling, the uncertainty step and the
         adjustment step (call_chess_boundary_conditions.m: built here by

@@ -134,8 +134,8 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                        normU_hm0, storm_name)};
                    % Tp
                    project_forcing.Tp = {Tp{1}.*normU_tp};
-                   % Storm Duration
-                   project_forcing.dt  = {repmat(datenum(0,0,0,config.storm_duration,0,0), size(SWL{1}))};
+                   % Storm Duration [days] (Peaks Samples: No dt)
+                   project_forcing.storm_duration  = {repmat(datenum(0,0,0,config.storm_duration,0,0), size(SWL{1}))};
                    % Per-Sample MC Forcing (Single Column, No z = 0 Replicate): Tag As PROS-FB Even When Called From A PROS-RB Run (pros_methods.call_pros_fb)
                    config_fb = config;
                    config_fb.workflow = 4;

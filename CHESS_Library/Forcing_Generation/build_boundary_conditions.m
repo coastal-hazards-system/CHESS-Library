@@ -13,8 +13,12 @@ function [project_forcing, config] = build_boundary_conditions(config, storm, pr
               apply_stage1_transmission.m (stage 1's complete forcing,
               transmitted behind stage 1, depth limited at the stage 2 toe).
         Peaks storm duration is restamped from config.storm_duration (in
-        memory only). PROS/DET check that Peaks and Timeseries hold the
-        same storm IDs in the same order.
+        memory only). Every dataset carries storm_duration (event length);
+        Timeseries also carry dt (row time step); with
+        compute_storm_duration = 1 (missing = 0) the Timeseries
+        storm_duration is the SWL duration of each storm
+        (timeseries_storm_durations.m). PROS/DET check that Peaks and
+        Timeseries hold the same storm IDs in the same order.
 
     %% INPUTS
         config: Run configuration. | struct
@@ -35,16 +39,22 @@ if isfield(config, 'multiline') && ~isempty(config.multiline)
     return
 end
 % Peaks Storm Duration From config (In Memory Only; Peaks Only, Timeseries Time Steps Untouched): The Storm DB
-% Column Holds The Duration The DB Was Built With, While Dn50 Always Uses config.storm_duration
+% Column Holds The Duration The DB Was Built With; The Restamped Column Becomes The Peaks storm_duration (Dn50, LCS Peaks Reliability)
 storm = restamp_peaks_storm_duration(storm, config.storm_duration);
+% Timeseries storm_duration: config.storm_duration, Or Per Storm From Its SWL (compute_storm_duration = 1; Missing = 0)
+if ~isfield(config, 'compute_storm_duration') || isempty(config.compute_storm_duration)
+    config.compute_storm_duration = 0;
+end
 switch config.workflow
     case {1,4} % CHESS: PROS (RB1, RB3, FB)
         check_peaks_timeseries_ids(storm, config.storm_sampling);
         % Reshape Forcing Parameters For RB Analysis (nStorms * normal_discretizations)
-        project_forcing = chess_pros_formater(config.storm_sampling, storm, prob_mass, config.print_progress);
+        project_forcing = chess_pros_formater(config.storm_sampling, storm, prob_mass, config.print_progress,...
+            config.storm_duration, config.compute_storm_duration);
     case 2 % CHESS: Deterministic (No Replicates)
         check_peaks_timeseries_ids(storm, config.storm_sampling);
-        project_forcing = chess_det_formater(config.storm_sampling, storm, config.print_progress);
+        project_forcing = chess_det_formater(config.storm_sampling, storm, config.print_progress,...
+            config.storm_duration, config.compute_storm_duration);
     case 3 % CHESS: LCS
         % Monte Carlo Storm Sampler (config: Adds lcs_effective_sampling_rate)
         [project_forcing, config] = chess_lcs(config, storm, prob_mass);

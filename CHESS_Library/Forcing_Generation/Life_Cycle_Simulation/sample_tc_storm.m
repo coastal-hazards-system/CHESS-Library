@@ -227,7 +227,7 @@ for j = 1:simulation_years
 end% for j
 [~, bi] = ismember(lcs_data(:, C.id), storm_peaks(:, 1));
 % Pull Storm Responses For Sampled Storms (Storm Database Columns: ID SWL Hm0 Tp wDir datenum duration)
-lcs_data(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir, C.dt]) =  storm_peaks(bi, [2 3 3 4 5 7]);
+lcs_data(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir, C.storm_duration]) =  storm_peaks(bi, [2 3 3 4 5 7]);
 
 %% STORE SAMPLED TROPICAL STORMS
 % Sampled Storm Indexes

@@ -30,8 +30,8 @@ function Resp = chess_det(config, project_forcing, structure, emp_coeff)
             Max: One value per storm for storm_id, the forcing (SWL,
                 Hm0_offshore, Hm0_toe, Tp), h, Rc and every response,
                 plus time (datenum of the peak SWL). | struc
-        The forcing itself (time, dt, SWL, Hm0_offshore, Hm0_toe, Tp) is
-        not copied: read it from project_forcing, same data type, match
+        The forcing itself (time, storm_duration, dt (Timeseries), SWL,
+        Hm0_offshore, Hm0_toe, Tp) is not copied: read it from project_forcing, same data type, match
         type and storm type, same row order (one row per storm).
         Hm0_offshore is the database wave height (Goda pressures, damaging
         depth), Hm0_toe the one depth limited at the toe (every other
@@ -46,7 +46,6 @@ for st = 1:length(storm_types)
     % Forcing As Used By The Response Equations (Forcing Copies Only Feed storm_maxima, Dropped Below)
     out.storm_id = pf.storm_id;
     out.time = pf.time;
-    out.dt = pf.dt;
     out.SWL = pf.SWL;
     out.Hm0_offshore = pf.Hm0_offshore; % Database Wave Height
     out.Hm0_toe = pf.Hm0_toe; % After Depth Limitation (Equal To Hm0_offshore When Off, Except An Emergent Toe)
@@ -63,21 +62,19 @@ for st = 1:length(storm_types)
     end
     % One Value Per Storm (Forcing Maxima Included), Then The Forcing Copies Are Dropped (Rows Match project_forcing)
     out.Max = storm_maxima(out);
-    out = rmfield(out, {'time', 'dt', 'SWL', 'Hm0_offshore', 'Hm0_toe', 'Tp'});
+    out = rmfield(out, {'time', 'SWL', 'Hm0_offshore', 'Hm0_toe', 'Tp'});
     Resp.(storm_types{st}) = out;
     clear out
 end
 end
 
 function Max = storm_maxima(out)
-skip = {'storm_id', 'time', 'dt'};
+skip = {'storm_id', 'time'};
 names = setdiff(fieldnames(out), skip, 'stable');
 Max.storm_id = out.storm_id;
 for kk = 1:length(names)
     v = out.(names{kk});
-    if isnumeric(v) && numel(v) == numel(out.storm_id) % Already One Value Per Storm (Q_vol)
-        Max.(names{kk}) = v(:);
-    elseif iscell(v) && all(cellfun(@(x) isnumeric(x) && size(x, 2) == 1, v))
+    if iscell(v) && all(cellfun(@(x) isnumeric(x) && size(x, 2) == 1, v))
         if strcmp(names{kk}, 'Rc')
             Max.(names{kk}) = cellfun(@(x) min(x, [], 1), v);
         else

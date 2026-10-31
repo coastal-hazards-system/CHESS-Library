@@ -29,8 +29,6 @@ switch config.struc_type
     case 1 % Levee
         config.compute_dn50_seaside = 0;
         config.compute_dn50_leeside = 0;
-        config.compute_dn50_lcbw = 0;
-        config.compute_dn50_submerged = 0;
         config.compute_p1 = 0;
         config.compute_p2_p3 = 0;
         config.compute_nappe = 0;
@@ -38,8 +36,6 @@ switch config.struc_type
         config.compute_wave_transmission = 0;
         config.compute_dn50_seaside = 0;
         config.compute_dn50_leeside = 0;
-        config.compute_dn50_lcbw = 0;
-        config.compute_dn50_submerged = 0;
         config.compute_r2p = 0;
         % Enforce Dependencies For P2/P3 Computations
         if config.compute_p2_p3 == 1
@@ -53,17 +49,13 @@ switch config.struc_type
             config.pros_compute_forcing_HC = 1;
         end
     case 3 % Rubble Mound
-        config.compute_dn50_lcbw = 0;
         config.compute_p1 = 0;
         config.compute_p2_p3 = 0;
         config.compute_nappe = 0;
-    case 4 % Low Crested Break Water
-        config.compute_dn50_seaside = 0;
-        config.compute_dn50_leeside = 0;
-        config.compute_dn50_submerged = 0;
-        config.compute_p1 = 0;
-        config.compute_p2_p3 = 0;
-        config.compute_nappe = 0;
+end
+% Per-Storm Timeseries Durations From SWL (Forcing Setting, Every Structure Type): Off Unless Requested
+if ~isfield(config, 'compute_storm_duration') || isempty(config.compute_storm_duration)
+    config.compute_storm_duration = 0;
 end
 
 %% WORKFLOW & RESPONSE DEPENDENCIES
@@ -88,6 +80,10 @@ if sum([config.use_peaks,config.use_timeseries])~=2
     % Set WLP, WHP To Off
     config.create_wlp = 0;
     config.create_whp = 0;
+end
+% Overtopping Volume (Q_vol) Integrates Hourly Timeseries Only: Off Without Timeseries Data
+if config.use_timeseries ~= 1
+    config.compute_q_vol = 0;
 end
 
 %% APPEND ADDITIONAL SIMULATION DETAILS TO CONFIG

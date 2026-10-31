@@ -1,4 +1,4 @@
-function project_forcing = chess_pros_formater(storm_sampling, storm, prob_mass, print_progress)
+function project_forcing = chess_pros_formater(storm_sampling, storm, prob_mass, print_progress, storm_duration, compute_storm_duration)
 %% PREP INPUTS
 % Execute Code Block According To Strom Type Being Calle
 switch storm_sampling
@@ -31,19 +31,25 @@ for st = 1:length(storm_types)
             end
             % Create Replicates
             project_forcing.(data_type{kk}).(match_types{ii}).(storm_types{st}) = create_reps(storm.(storm_types{st}).(data_type{kk}).(match_types{ii})(:, 2), RandNorm, [1 2 3]);
+            % Storm IDs And Time Stamps [datenum] (Rows Match The Forcing; Storm Event Viewer / Response Table)
+            storm_rows = storm.(storm_types{st}).(data_type{kk}).(match_types{ii});
+            project_forcing.(data_type{kk}).(match_types{ii}).(storm_types{st}).storm_id = cell2mat(storm_rows(:, 1));
+            project_forcing.(data_type{kk}).(match_types{ii}).(storm_types{st}).time = cellfun(@(x) x(:, 5), storm_rows(:, 2), 'un', false);
             % Reshape Storm Probability Masses To Be nStorms * normal_discretization
             if strcmp(storm_types{st}, 'TC')
                 project_forcing.(data_type{kk}).(match_types{ii}).(storm_types{st}).TC_Prob = prob_mass.TC_Freq;%./RandNorm;
             end
-            % Include dt
+            % Storm Duration [days] Per Storm (Event Length) And, Timeseries Only, dt [days] (Row Time Step). Timeseries Is
+            % Always The Default Match Type, So Its Fields Are Stored Once Under .Default
             if strcmp(data_type{kk}, 'Timeseries')
-                project_forcing.(data_type{kk}).Default.(storm_types{st}).dt = cellfun(@(x) x(:, end), storm.(storm_types{st}).(data_type{kk}).('Default')(:, 2),'un',false);
-            else % Peaks
-                n_events = length(storm.(storm_types{st}).(data_type{kk}).(match_types{ii})(:, 1));
-                dt_val = cellfun(@(x) x(1, end),...
+                ts_data = storm.(storm_types{st}).(data_type{kk}).('Default')(:, 2);
+                project_forcing.(data_type{kk}).Default.(storm_types{st}).dt = cellfun(@(x) x(:, end), ts_data,'un',false);
+                project_forcing.(data_type{kk}).Default.(storm_types{st}).storm_duration = cellfun(@(x, d) repmat(d, size(x, 1), 1),...
+                    ts_data, num2cell(timeseries_storm_durations(ts_data, storm_duration, compute_storm_duration)), 'un', false);
+            else % Peaks: config.storm_duration (Restamped By build_boundary_conditions), No dt
+                project_forcing.(data_type{kk}).(match_types{ii}).(storm_types{st}).storm_duration = cellfun(@(x) x(1, end),...
                     storm.(storm_types{st}).(data_type{kk}).(match_types{ii})(:, 2),...
                     'un', false);
-                project_forcing.(data_type{kk}).(match_types{ii}).(storm_types{st}).dt = dt_val;
             end
         end
     end

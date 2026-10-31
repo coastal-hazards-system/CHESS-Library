@@ -96,8 +96,6 @@ function [PF_Summary,Reliab_Summary] = chess_csr_peaks(config, structure, emp_co
 %% GRAB INPUTS FROM "config"
 % Water density (kg/m^3)
 dw = config.water_density;
-% Storm duration (hr)
-Dstm = config.storm_duration;
 % Get Requested CLs
 prc = [cellfun(@str2double,strsplit(config.project_CLs(2:end-1),{' '}))];
 
@@ -183,7 +181,7 @@ for lcS=1:length(LC_MCSimOUT)
     % wave period (sec)
     Tm10 = Tp/1.1;
     % Number of waves per storm
-    Nz = (Dstm*3600)./Tm;
+    Nz = (LC_MCSimOUT{lcS}(:, C.storm_duration)*24*3600)./Tm; % Storm Duration Column [days] To Seconds
     % deep water wave length based on mean wave period
     Lm0 = (g*Tm.^2)/(2*pi);
     % Compute Water Col

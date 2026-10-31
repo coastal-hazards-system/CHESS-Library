@@ -193,7 +193,7 @@ end%for j
 lcs_data = zeros(numel(XC_INDEX), C.n_peaks); % Life-Cycle Peaks Layout (lcs_columns.m)
 lcs_data(:, [C.id, C.bin, C.year, C.order]) = [XC_INDEX, SimOUT_XC];
 lcs_data(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir]) = Y(:, [1 2 2 3 4]);
-lcs_data(:, C.dt) = storm_peaks(stm_2_pull, end); % Storm Duration (Storm Database Last Column)
+lcs_data(:, C.storm_duration) = storm_peaks(stm_2_pull, end); % Storm Duration (Storm Database Last Column)
 % Sampled Storm Indexes (For Timeseries LC Creation)
 sampled_storms = [XC_INDEX, SimOUT_XC]; % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
 

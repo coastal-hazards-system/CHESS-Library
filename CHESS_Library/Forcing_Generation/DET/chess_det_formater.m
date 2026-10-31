@@ -1,4 +1,4 @@
-function project_forcing = chess_det_formater(storm_sampling, storm, print_progress)
+function project_forcing = chess_det_formater(storm_sampling, storm, print_progress, storm_duration, compute_storm_duration)
 %{
     %% DESCRIPTION
         Formats the storm suite for CHESS: Deterministic (workflow 2).
@@ -12,11 +12,17 @@ function project_forcing = chess_det_formater(storm_sampling, storm, print_progr
         storm_sampling: 'XC', 'TC' or 'CC'. | char
         storm: CHESS storm database. | struc
         print_progress: Toggle status print outs. | logical
+        storm_duration: Storm duration [hrs] (config.storm_duration). | double
+        compute_storm_duration: 1 = Timeseries storm_duration from each
+            storm's SWL (timeseries_storm_durations.m). | double
 
     %% OUTPUTS
         project_forcing.(data_type).(match_type).(storm_type) with fields:
             SWL, Hm0_offshore, Tp: Forcing per storm (nSteps x 1 each). | cell
-            dt: Time step per storm [days]. | cell
+            storm_duration: Event length per storm [days], repeated on
+                every row of a Timeseries storm (Peaks:
+                config.storm_duration). | cell
+            dt: Timeseries only, time step per storm [days]. | cell
             storm_id: Storm IDs. | double (nStorms x 1)
             time: Time stamp(s) per storm [datenum]. | cell
 
@@ -40,10 +46,17 @@ for st = 1:length(storm_types)
         match_types = fieldnames(storm.(storm_types{st}).(data_type{kk}));
         for ii = 1:length(match_types)
             storm_data = storm.(storm_types{st}).(data_type{kk}).(match_types{ii});
+            data_out = struct();
             data_out.SWL = cellfun(@(x) x(:, 1), storm_data(:, 2), 'un', false);
             data_out.Hm0_offshore = cellfun(@(x) x(:, 2), storm_data(:, 2), 'un', false);
             data_out.Tp = cellfun(@(x) x(:, 3), storm_data(:, 2), 'un', false);
-            data_out.dt = cellfun(@(x) x(:, end), storm_data(:, 2), 'un', false);
+            if strcmp(data_type{kk}, 'Timeseries')
+                data_out.dt = cellfun(@(x) x(:, end), storm_data(:, 2), 'un', false);
+                data_out.storm_duration = cellfun(@(x, d) repmat(d, size(x, 1), 1), storm_data(:, 2),...
+                    num2cell(timeseries_storm_durations(storm_data(:, 2), storm_duration, compute_storm_duration)), 'un', false);
+            else % Peaks: config.storm_duration (Restamped By build_boundary_conditions), No dt
+                data_out.storm_duration = cellfun(@(x) x(1, end), storm_data(:, 2), 'un', false);
+            end
             data_out.storm_id = cell2mat(storm_data(:, 1));
             data_out.time = cellfun(@(x) x(:, col_time), storm_data(:, 2), 'un', false);
             project_forcing.(data_type{kk}).(match_types{ii}).(storm_types{st}) = data_out;

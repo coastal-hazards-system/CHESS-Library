@@ -23,7 +23,7 @@ OUTPUTS HEADERS (Column Map: lcs_columns.m):
             (07) Wave Height Offshore           [meters] (Before Depth Limitation)
             (08) Peak Wave Period               [seconds]
             (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
-            (10) Storm Duration                 [days]
+            (10) Storm Duration                 [days] (config.storm_duration; No Time Step)
     LC_SimOUT_hyd:
         First Level:
             Size (# of LC's, 1) -> (Rows,Col)
@@ -41,6 +41,8 @@ OUTPUTS HEADERS (Column Map: lcs_columns.m):
             (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
             (10) Time Step                      [days]
             (11) Timestep Counter               [0:storm_tstp-1]
+            (12) Storm Duration                 [days] (Per Storm, On Every Row: config.storm_duration, Or The
+                                                        Storm's SWL Duration With compute_storm_duration = 1)
     MC_indx:
         First Level:
             Size (# of LC's, 1) -> (Rows,Col)
@@ -77,6 +79,8 @@ number_of_life_cyles = config.mcs_nLC;
 simulation_years = config.mcs_nYears;
 % Create Water Level Priority Switch
 wlp_switch = config.create_wlp;
+% Timeseries Storm Duration From Each Storm's SWL (Missing = 0: config.storm_duration)
+compute_sd = isfield(config, 'compute_storm_duration') && isequal(config.compute_storm_duration, 1);
 % Create Wave Height Priority Switch
 whp_switch = config.create_whp;
 switch storm_sampling
@@ -180,6 +184,7 @@ end
 
 %% LIFE-CYCLE COLUMN MAP
 C = lcs_columns();
+C_ts = lcs_columns('Timeseries');
 
 %% CREATE DUMMY PEAKS DATASET IF NEEDED
 if config.use_peaks == 0
@@ -263,10 +268,11 @@ end
         end
         % Replicate Storm Sampling With Storm Timeseries
         if config.use_timeseries == 1
+            ts_dur = sampled_storm_durations(sampled_xc, storm.('XC').('Timeseries').('Default'));
             for lc=1:number_of_life_cyles
                 % Build LCS Timeseries Dataset
                 project_forcing.Timeseries.Default.('XC'){lc, 1} = timeseries_lc_creation(sampled_xc{lc, 1},...
-                    storm.('XC').('Timeseries').('Default'));
+                    storm.('XC').('Timeseries').('Default'), ts_dur);
             end
         end
         % Alternate Datasets: XC Peaks Are Copula Draws Fitted To The Default Peaks, Not Database Values Of The Sampled Storms.
@@ -309,11 +315,14 @@ end
             end
         end
         % Replicate Storm Sampling With Storm Timeseries
+        if config.use_timeseries == 1
+            ts_dur = sampled_storm_durations(sampled_tc, storm.('TC').('Timeseries').('Default'));
+        end
         for lc=1:number_of_life_cyles
             if config.use_timeseries == 1
                 % Build LCS Timeseries Dataset
                 project_forcing.Timeseries.Default.('TC'){lc, 1} = timeseries_lc_creation(sampled_tc{lc, 1},...
-                    storm.('TC').('Timeseries').('Default'));
+                    storm.('TC').('Timeseries').('Default'), ts_dur);
             end
             % Create Alternate Datasets
             if config.create_wlp == 1
@@ -411,17 +420,22 @@ warning('on','all');
                 stm_type, stm_rate*n_years, stm_rate, n_years, floor(1/stm_rate) + 1);
         end
     end
+%% AUX FUNCTION: STORM DURATION PER STORM DATABASE ROW (TIMESERIES)
+    function dur = sampled_storm_durations(sampled, storm_ts)
+        % Storm Duration [days] Of Every Sampled Storm (timeseries_storm_durations.m), Computed Once Per Storm ID And
+        % Reused In Every Life Cycle The Storm Appears In. NaN For Database Storms Not Sampled
+        dur = NaN(size(storm_ts, 1), 1);
+        ids = unique(cell2mat(cellfun(@(x) x(:, 1), sampled(:), 'un', false)));
+        rows = find(ismember(cell2mat(storm_ts(:, 1)), ids));
+        dur(rows) = timeseries_storm_durations(storm_ts(rows, 2), config.storm_duration, compute_sd);
+    end
 %% AUX FUNCTION: TIMESERIES LC CREATOR
-    function lc_out = timeseries_lc_creation(sample_indx, storm)
+    function lc_out = timeseries_lc_creation(sample_indx, storm, ts_dur)
         % Life Cycle Without Storms
         if isempty(sample_indx)
             lc_out = zeros(0, C.n_timeseries);
             return
         end
-        % Compute Stride To Make Data Hourly 
-        hourly_stride = num2cell(1./(cellfun(@(x) x(1, 6), storm(:,2), 'un', true).*24));
-        % Make storm data hourly 
-        storm(:, 2) = cellfun(@(x, y) y(1:x:end,:), hourly_stride, storm(:, 2), 'un', false);
         % Indentify Storm IDs To Pull Hydrographs For
         [~, pull_indx] = arrayfun(@(x) ismember(x,...
             cell2mat(storm(:, 1))),...
@@ -442,6 +456,7 @@ warning('on','all');
         lc_out(:, [C.id, C.bin, C.year, C.order]) = sample_indx_hyd;
         lc_out(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir, C.dt]) = stm_mat(:, [1 2 2 3 4 6]);
         lc_out(:, C.step) = cell2mat(stm_tstp);
+        lc_out(:, C_ts.storm_duration) = repelem(ts_dur(pull_indx), cellfun(@(x) size(x, 1), storm(pull_indx, 2)));
     end
 %% AUX FUNCTION: REFERENCE CASE XC PEAK VALUES (SAMPLING SEED FILE)
     function seed = load_reference_xc_seed(ref_pf_file, sampled, ref_label)
@@ -469,7 +484,7 @@ warning('on','all');
             % Storm Database Columns: SWL Hm0 Tp wDir
             lc_peaks(ss, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir]) = storm_data{stm_indx(ss), 2}(:, [1 2 2 3 4]);
         end
-        lc_peaks(:, C.dt) = duration_days;
+        lc_peaks(:, C.storm_duration) = duration_days;
     end
 %% AUX FUNCTION: COPY COLUMNS OF ONE LIFE-CYCLE MATRIX INTO ANOTHER
     function d = copy_columns(d, s, cols)
@@ -502,6 +517,6 @@ warning('on','all');
         [~, bi] = ismember(sampled_indx(:, 1), storm_data(:, 1));
         % Pull WLP/WHP Dataset For Sampled Storms (Life-Cycle Rows Keep Their Order; Was lcs_default(bi, ...),
         % Which Used Database Rows As Life-Cycle Rows And Padded The Life Cycle With Zero Rows)
-        lcs_default(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir, C.dt]) = storm_data(bi, [2 3 3 4 5 7]);
+        lcs_default(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir, C.storm_duration]) = storm_data(bi, [2 3 3 4 5 7]);
     end
 end
