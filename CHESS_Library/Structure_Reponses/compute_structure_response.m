@@ -2,8 +2,6 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %% GRAB DETAILS FROM "config"
 % Strucutre Type
 struc_type = config.struc_type;
-% Storm Duration [s]
-duration = config.storm_duration*3600; % Convert hours to s
 % Define Requested Workflow
 workflow = config.workflow;
 % Gravity
@@ -11,28 +9,24 @@ g = config.gravity_constant;
 % Grab Structure Response Switches
 calc_dn50_ss = config.compute_dn50_seaside;
 calc_dn50_ls = config.compute_dn50_leeside;
-calc_dn50_lcbw = config.compute_dn50_lcbw;
 calc_r2p = config.compute_r2p;
 calc_q = config.compute_q;
-calc_q_vol = config.compute_q_vol; % Permanently set to 0 for FB
+calc_q_vol = config.compute_q_vol; % Timeseries Only: 0 For Peaks Calls (call_project_response, chess_csr) And FB
 calc_dd = config.compute_damaging_depth;
 calc_dd_ks = config.compute_damaging_depth_Ks;
 calc_p1 = config.compute_p1;
 calc_p2_p3 = config.compute_p2_p3;
 calc_nappe = config.compute_nappe;
 calc_wave_transmission = config.compute_wave_transmission;
-calc_dn50_submerged = config.compute_dn50_submerged;
 % Remove Responses Based On Structure Type
 switch struc_type
     case 1 % Levee (R2p & OT)
         calc_p1 = 0;
         calc_dn50_ss = 0;
         calc_dn50_ls = 0;
-        calc_dn50_lcbw = 0;
     case 2 % Floodwall (q, P1, P2, P3, Nappe)
         calc_dn50_ss = 0;                  
         calc_dn50_ls = 0;
-        calc_dn50_lcbw = 0;
         calc_r2p = 0;
         if calc_p2_p3 == 1
             calc_p1 = 1;
@@ -42,14 +36,7 @@ switch struc_type
         end
     case 3 % Rubblemound (R2p, q, Dn50)
         calc_p1 = 0;
-        calc_dn50_lcbw = 0;
-    case 4  % LCBW
-        calc_p1 = 0;
-        calc_dn50_ss = 0;
-        calc_dn50_ls = 0;
 end
-% No Structural Response Computed
-no_resp = sum([calc_dn50_ss,calc_dn50_ls,calc_dn50_lcbw,calc_r2p,calc_q,calc_q_vol,calc_p1,calc_dd,calc_wave_transmission]);
 
 %% GRAB DETAILS FROM "structure"
 % Define Structure Crest Elevation
@@ -76,10 +63,6 @@ end
 offshore_slope_tana = 1./structure.offshore_slope;
 % Rubblemound Fields
 switch struc_type
-    case 4
-        % Delta
-        delta = structure.armor_delta;
-        P=0;
     case 3
         % Delta
         delta = structure.armor_delta;
@@ -101,15 +84,8 @@ switch struc_type
 end
 % Water Density kg/m^3
 rho_w = config.water_density;
-% GET BW SPECIFIC FIELDS
-if ismember(struc_type, [3, 4])
-    SG = 1 + structure.armor_delta;% Armor Stone Specific Gravity
-    dr = SG*rho_w;% Armor Stone Density [kg/m^3]
-    V_ss = structure.seaside_mass/dr; % Seaside Median Volume of Armor Stone
-    SDn = V_ss^(1/3);% (LCBW) Seaside Nominal Stone Diameter (m)
-end
 % Get Slopes
-if ismember(struc_type, [1, 3, 4])
+if ismember(struc_type, [1, 3])
     % Seaside Slope (cot(alpha))
     mound_seaside_slope_cota = structure.seaside_slope;
     % Leeside Slope
@@ -128,7 +104,14 @@ switch workflow
         Tp = project_forcing.Tp; % Tp
         h = cellfun(@(x) x - toe_elev, SWL, 'un', false);
         Rc = cellfun(@(x) crest_elev - x, SWL, 'un', false);
-        dt = cellfun(@(x) x*24*3600, project_forcing.dt, 'un', false); % Convert from days to seconds
+        storm_dur = cellfun(@(x) x*24*3600, project_forcing.storm_duration, 'un', false); % Event Length [days -> s]
+        % Row Time Step [days -> s]: Timeseries Only (Peaks Have No dt, So No Overtopping Volume)
+        if isfield(project_forcing, 'dt')
+            dt = cellfun(@(x) x*24*3600, project_forcing.dt, 'un', false);
+        else
+            calc_q_vol = 0;
+        end
+        q_step = cell(size(SWL));
     case 3 % LCS
         C = lcs_columns();
         SWL = cellfun(@(x) x(:, C.SWL),project_forcing,'un',false); % SWL
@@ -137,8 +120,21 @@ switch workflow
         Tp = cellfun(@(x) x(:, C.Tp),project_forcing,'un',false); % Tp
         h = cellfun(@(x) x - toe_elev, SWL, 'un', false);
         Rc = cellfun(@(x) crest_elev - x, SWL, 'un', false);
-        dt = cellfun(@(x) x(:, C.dt)*24*3600,project_forcing,'un',false); % dt
+        % Timeseries Life Cycles (Storms Start At step == 0); Peaks Life Cycles Have One Row Per Storm
+        is_ts = cellfun(@(x) size(x, 2) == C.n_timeseries, project_forcing);
+        % Event Length [days -> s]: Last Column Of Either Layout (Peaks 10, Timeseries 12)
+        sd_col = [C.storm_duration, lcs_columns('Timeseries').storm_duration];
+        storm_dur = cellfun(@(x, a) x(:, sd_col(1 + a))*24*3600, project_forcing, num2cell(is_ts), 'un', false);
+        % Row Time Step [days -> s] And Storm Step: Timeseries Life Cycles Only (Empty For Peaks)
+        dt = cellfun(@(x, a) ts_column(x, C.dt, a)*24*3600, project_forcing, num2cell(is_ts), 'un', false);
+        q_step = cellfun(@(x, a) ts_column(x, C.step, a), project_forcing, num2cell(is_ts), 'un', false);
+        % Overtopping Volume Is Timeseries Only, Even If The Switch Arrives On For Peaks Life Cycles
+        if ~any(is_ts)
+            calc_q_vol = 0;
+        end
 end
+% No Structural Response Computed
+no_resp = sum([calc_dn50_ss,calc_dn50_ls,calc_r2p,calc_q,calc_q_vol,calc_p1,calc_dd,calc_wave_transmission]);
 % Compute Water Depth @ Berm
 hb = cellfun(@(x) x - berm_elev, SWL,'un',false);
 % Compute Mean Period
@@ -149,9 +145,6 @@ Tm10 = cellfun(@(x) x./1.1,Tp,'un',false); %
 Ts = Tp; % Assuming narrow spectrat Ts~Tp
 
 %% COMPUTE STRUCTURE RESPONSE
-% Intialize LCBW Flag
-calc_FS_lcbw = 0;
-%
 if no_resp~=0
     % Call Eurotop Influence Factors
     gammas = cellfun(@(x,y) call_eurotop_ifactors(config, structure, x, y),SWL,Hm0,'un',false);
@@ -198,7 +191,7 @@ if no_resp~=0
                     Resp.(n_names{nn}) = cellfun(@nan_where, Resp.(n_names{nn}), Resp.q, 'un', false);
                 end
             end
-        case {1,3,4} % Levees & Rubblemound & LCBW
+        case {1,3} % Levees & Rubblemound
             % Reformat Slope If Needed
             slope_aux = cellfun(@(y) repmat(mound_seaside_slope_cota, size(y)), SWL, 'un', false);
             % Compute runup & Overtopping
@@ -208,51 +201,18 @@ if no_resp~=0
                     toe_elev, P, g, struc_type),...
                     Hm0, Tm10, SWL, Rc, gammas, slope_aux,'un',false);
             end
-            % Compute Stone Size Using S Limit State
-            if struc_type == 3 || struc_type == 4
-                % Dn50 Seaside (Melby - Momentum Flux)
+            % Rubblemound Stone Size (Seaside & Leeside Component Stability ANN, ann_rubblemound_stability.m)
+            if struc_type == 3 && (calc_dn50_ss == 1 || calc_dn50_ls == 1)
+                % Number Of Waves Duration [s]: The Storm Duration (Event Length, Set With The Forcing), Never dt
+                [Dn50_ss, Dn50_ls] = cellfun(@(a, b, c, d, e, f, k) ann_rubblemound_stability(a, b, c, d, e, f,...
+                    crest_elev - toe_elev, crest_width, mound_seaside_slope_cota, mound_leeside_slope_cota,...
+                    offshore_slope_tana, P, k.gamma_f, S, S_ls, delta, g),...
+                    Hm0, Tm, Tm10, h, Rc, storm_dur, gammas, 'un', false);
                 if calc_dn50_ss == 1
-                    [Resp.Dn50] = cellfun(@(a, b, c, d) melby_Dn50_seaside_stability(a, b, c,...
-                        duration, mound_seaside_slope_cota, delta, P, S, g, emp_coeff.km1, emp_coeff.km2, d),...
-                        Hm0, Tm, h, Rc,'un',false);
-                    % Compute Damage When Structure Is Submerged
-                   if calc_dn50_submerged == 1
-                       % Call Submerged Equation Here
-                       [Resp.Dn50, ~] = cellfun(@(a,b,c,d,e) submerged_stone_armor_stability(a, b, c, d, e,crest_elev,S,delta,g),...
-                           Hm0, Tp, h, Rc, Resp.Dn50, 'un', false);
-                   end
+                    Resp.Dn50 = Dn50_ss;
                 end
-                % Leeside
                 if calc_dn50_ls == 1
-                    %
-                    [Resp.Dn50_Lee] = cellfun(@(a,b,c,d,e) ...
-                        van_gent_Dn50_leeside_stability(S_ls, a, b, c, d,...
-                        crest_width,mound_seaside_slope_cota, mound_leeside_slope_cota, duration, delta, g,...
-                        emp_coeff.k_ls1, emp_coeff.k_ls2, e.gamma_f),...
-                        Hm0, Tm10, Tm, Rc, gammas,'un',false);
-                    % Compute Damage When Structure Is Submerged
-                    if calc_dn50_submerged == 1
-                        % Call Submerged Equation Here
-                        [Resp.Dn50_Lee, ~] = cellfun(@(a,b,c,d,e) submerged_stone_armor_stability(a, b, c, d, e,crest_elev,S_ls,delta,g),...
-                            Hm0, Tp, h, Rc, Resp.Dn50_Lee, 'un', false);
-                    end
-                end
-            end
-            % Dn50 Seaside Low Crested Breakwater
-            if calc_dn50_lcbw == 1
-                %{
-                    Melby addition for LCBW. This is a temporary fix for Midbay. Ultimately we will have a branch whether  
-                    breakwater is normal or low-crested.  In that case, there will not be a separate crest elevation for low-crested structure.  
-                    However, for Midbay, we have both normal structure and low crested because toe berm is at MLLW. 
-                    So we have both normal and LC (toe berm) stability computed in same sim.
-                %}
-                if workflow == 3 % Compute Stability Number (Ns)
-                    calc_dn50_lcbw = 0; % Turn Of To Pull Correct Label
-                    calc_FS_lcbw = 1; % Turn On To Pull Correct Label
-                    % Compute LCBW FS
-                    [Resp.FS_LCBW] = cellfun(@(a,b) melby_low_crested_stability(a, b, delta, SDn), Hm0, Rc,'un', false);
-                else % Compute Dn50 (PROS)
-                    [Resp.Dn50_LCBW] = cellfun(@(a,b) melby_low_crested_stability(a, b, delta, []), Hm0, Rc, 'un', false);
+                    Resp.Dn50_Lee = Dn50_ls;
                 end
             end
     end
@@ -286,9 +246,10 @@ if no_resp~=0
             calc_dd_ks, a, b, berm_width, berm_slope_tana, offshore_slope_tana, g), SWL, Hm0_off, Tp, h, hb, 'un', false);
     end
     % Compute Overtopping Volume
-    if calc_q_vol == 1 && length(Resp.q{1}(:,1)) > 1
-        Resp.Q_vol = cell2mat(cellfun(@(x, y) sum(x.*y,1,"omitnan"),Resp.q, dt, 'un',false));
-        Resp.Q_vol_wave_ot = cell2mat(cellfun(@(x, y) sum(x.*y,1,"omitnan"),Resp.q_wave_ot, dt, 'un',false));
+    % Timeseries Only, Progressive Per Storm [m^3/m] (Running Sum Of q.*dt, dt From The Forcing), A Storm's Total Is Its Last Value
+    if calc_q_vol == 1 && isfield(Resp, 'q') && isfield(Resp, 'q_wave_ot')
+        Resp.Q_vol = cellfun(@progressive_volume, Resp.q, dt, q_step, 'un', false);
+        Resp.Q_vol_wave_ot = cellfun(@progressive_volume, Resp.q_wave_ot, dt, q_step, 'un', false);
     end
 else % No Responses Computed
     Resp = [];
@@ -297,8 +258,8 @@ end
 %% FLATTEN DATA & STORE RESPONSES
 if get_max == 1
     % Build Var Inventory Logical Vector
-    var_bool = [calc_dn50_ss, calc_dn50_ls, calc_dn50_lcbw, calc_FS_lcbw, calc_r2p, calc_r2p, calc_q, calc_q, calc_p1, calc_dd, calc_dd, calc_wave_transmission];
-    var_names = {'Dn50', 'Dn50_Lee', 'Dn50_LCBW', 'FS_LCBW', 'R2p', 'R2p_SWL', 'q', 'q_wave_ot', 'p1', 'DamDepth', 'DamDepthElev', 'Hm0t'};
+    var_bool = [calc_dn50_ss, calc_dn50_ls, calc_r2p, calc_r2p, calc_q, calc_q, calc_p1, calc_dd, calc_dd, calc_wave_transmission];
+    var_names = {'Dn50', 'Dn50_Lee', 'R2p', 'R2p_SWL', 'q', 'q_wave_ot', 'p1', 'DamDepth', 'DamDepthElev', 'Hm0t'};
     % Evaluate According To Workflow
     switch workflow
         case {1, 2, 4} % Find Max Responses For Timeseries (RB3)
@@ -317,10 +278,36 @@ if get_max == 1
                 Resp = rmfield(Resp, rm_names(rm_indx));
             end
             % Loop Through Each Response
-            for vv = 1:length(var_names)
-                Resp.(var_names{vv}) = cell2mat(cellfun(@(x) max(x,[],1), Resp.(var_names{vv}), 'un', false));
+            vars_to_find = vars_to_find(isfield(Resp, vars_to_find)); % Q_vol* Only When The Overtopping Fields Exist
+            for vv = 1:length(vars_to_find)
+                Resp.(vars_to_find{vv}) = cell2mat(cellfun(@(x) max(x,[],1), Resp.(vars_to_find{vv}), 'un', false));
             end
     end
+end
+end
+
+function Q = progressive_volume(q, dt, step)
+% Running Total Of q.*dt Down Dim 1 (NaN Counts As 0): The Whole Cell (One Storm), Or Restarting At Each Storm Start
+% (step == 0, LCS Timeseries Life Cycles)
+Q = q.*dt;
+Q(isnan(Q)) = 0;
+if isempty(step)
+    Q = cumsum(Q, 1);
+    return
+end
+starts = [find(step == 0); size(Q, 1) + 1];
+for ss = 1:length(starts)-1
+    rows = starts(ss):starts(ss+1)-1;
+    Q(rows, :) = cumsum(Q(rows, :), 1);
+end
+end
+
+function v = ts_column(x, col, is_timeseries)
+% Column Of A Timeseries Life Cycle (dt, step), Empty For Peaks
+if is_timeseries
+    v = x(:, col);
+else
+    v = [];
 end
 end
 

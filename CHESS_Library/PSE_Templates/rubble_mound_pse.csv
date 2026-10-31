@@ -1,14 +1,14 @@
 CHESS Project General Inputs,,,,,Structure Responses,,,
 Model Variable Symbol,Description,Units,Value,,Model Variable Symbol,Field Names,Units,Value
-project_name,Project name,NA,Chicago Shoreline GRR,,compute_dn50_seaside,Compute Seaward Median Stone Size Response (Momentum Flux),NA,1
-struc_id,Structure/Trasnsect ID,NA,R7175_T3,,compute_dn50_leeside,Compute Landward Median Stone Size Response (Van Gent),NA,1
-case_name,Case Name,NA,Seawall_existing,,compute_dn50_submerged,Compute Dn50 Responses When Submerged (CEM VI-5-25),NA,1
-outfolder,CHESS Project output folder.,NA,CHESS_Outputs_7175_T3,,compute_r2p,Compute Run-up Response (Eurotop),NA,1
-project_datum,Project output datum. (Still not implemented. Used for plot title currently),NA,IGLD85,,compute_wave_transmission,Compute wave transmission (eurotop),NA,1
-project_CLs,"Percentiles to compute CLs (max 4, 50 is already being calculated)",NA,[84 90],,compute_q,Compute Overtopping Discharge Rate per Unit Width Response (Eurotop),NA,1
-workflow,"CHESS workflow to call for project. (1 - CHESS:PROS , 3- CHESS:LCS, 4- CHESS: PROS Frequency Base (FB))",NA,1,,compute_q_vol,Compute Overtopping Discharge Volume Unit Width Response (Eurotop) (RB3 Only),NA,1
-struc_type,"Structure type  (Levee - 1, Floodwalls - 2, Rubblemound - 3)",NA,3,,compute_damaging_depth,Compute Damaging Depth Response,NA,0
-storm_sampling,"Storm sampling scheme to use for project. (XC,TC or CC)",NA,XC,,compute_damaging_depth_Ks,Shielding Parameter To Use For Damaging Depths,NA,1
+project_name,Project name,NA,Chicago Shoreline GRR,,compute_dn50_seaside,Compute Seaward Median Stone Size Response (Component Stability ANN),NA,1
+struc_id,Structure/Trasnsect ID,NA,R7175_T3,,compute_dn50_leeside,Compute Landward Median Stone Size Response (Component Stability ANN),NA,1
+case_name,Case Name,NA,Seawall_existing,,compute_r2p,Compute Run-up Response (Eurotop),NA,1
+outfolder,CHESS Project output folder.,NA,CHESS_Outputs_7175_T3,,compute_wave_transmission,Compute wave transmission (eurotop),NA,1
+project_datum,Project output datum. (Still not implemented. Used for plot title currently),NA,IGLD85,,compute_q,Compute Overtopping Discharge Rate per Unit Width Response (Eurotop),NA,1
+project_CLs,"Percentiles to compute CLs (max 4, 50 is already being calculated)",NA,[84 90],,compute_q_vol,Compute Overtopping Discharge Volume Unit Width Response (Eurotop) (RB3 Only),NA,1
+workflow,"CHESS workflow to call for project. (1 - CHESS:PROS , 3- CHESS:LCS, 4- CHESS: PROS Frequency Base (FB))",NA,1,,compute_damaging_depth,Compute Damaging Depth Response,NA,0
+struc_type,"Structure type  (Levee - 1, Floodwalls - 2, Rubblemound - 3)",NA,3,,compute_damaging_depth_Ks,Shielding Parameter To Use For Damaging Depths,NA,1
+storm_sampling,"Storm sampling scheme to use for project. (XC,TC or CC)",NA,XC,,,,,
 swl_slr,Sea level rise applied as vertical offset to SWL.,[m],0,,,,,
 apply_random_tides,Apply random tide to storm SWL (0 - Off / 1 - On),NA,0,,CHESS: Monte Carlo Simulation (MCS) Module Inputs,,,
 apply_depth_limitation,Apply Depth Limitation To Waves  (0 - Off / 1 - On),NA,1,,Model Variable Symbol,Field Names,Units,Value
@@ -19,9 +19,10 @@ create_whp,Create Wave Height Priority Peaks Dataset (WLP)  (0 - Off / 1 - On). 
 load_project_forcing,Load project_forcing CHESS File From Other case_name Under The Same project_name (0- Sample New Storms/1-Load Previous Storm Suite),NA,1,,Model Variable Symbol,Field Names,Units,Value
 ref_case_name,Define Reference case_name To Load project_forcing From,NA,none,,csr_call_dpa,Call CHESS: CSR-DPA (0/1),NA,0
 ,,,,,csr_apply_structure_repair,"Structure Repair (0 - None, 1 - Above SLS, 2 - Above ULS, 3 - Above SLS Or ULS)",NA,0
-CHESS Project Forcing Data,,,,,csr_compute_S_submerged,Compute Dn50 Responses When Submerged (CEM VI-5-25),NA,1
-Model Variable Symbol,Description,Units,Value,,csr_apply_cutoff_correction,Apply Cutoff Correction (0/1),NA,0
-storm_duration,Storm duration.,hrs,1,,csr_cutoff_offset,Cutoff Elevation Delta (Number>=0),[m],0
+CHESS Project Forcing Data,,,,,csr_apply_cutoff_correction,Apply Cutoff Correction (0/1),NA,0
+Model Variable Symbol,Description,Units,Value,,csr_cutoff_offset,Cutoff Elevation Delta (Number>=0),[m],0
+storm_duration,Storm duration.,hrs,1,,,,,
+compute_storm_duration,"Storm Duration From The SWL Hydrograph For Timeseries Storms (0/1) (0 - storm_duration / 1 - Per Storm: 98% Threshold, 1 h Minimum)",NA,0,,,,,
 chs_dependencies,CHS regional dependencies folder,NA,..\CHS_Dependencies,,,,,
 chs_zip,CHS Zip Folder or Custom Modeling .mat File (Relative Path),NA,Chicago_files\CHS-GLMH_XH_SimBslc0_Post0_SP37697_Timeseries.zip,,"CHESS: Probabilistic Run-up, Overtopping & Stone Sizing (PROS)",,,
 tide_file,Tidal file used to randomly sample tidal values for storm SWL. (Relative Path),NA,none,,Model Variable Symbol,Field Names,Units,Value

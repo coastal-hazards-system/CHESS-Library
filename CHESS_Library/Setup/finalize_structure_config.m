@@ -11,7 +11,7 @@ function config = finalize_structure_config(config)
         config: CHESS configuration. | struc
             Required fields:
                 struc_type: Structure type (1 - Levee, 2 - Floodwall,
-                            3 - Rubblemound, 4 - Low Crested Breakwater)
+                            3 - Rubblemound)
             Optional fields:
                 add_toe_berm: Toe berm switch (0/1). Defaults to 0.
                 wall_bottom_elevation: Required for floodwalls without berm.
@@ -23,7 +23,7 @@ function config = finalize_structure_config(config)
         Developed by: Fabian A. Garcia Moreno ERDC-CHL
 %}
 %% DEFAULTS
-% Toe Berm Switch Not Provided (e.g. Low Crested Breakwater Template)
+% Toe Berm Switch Not Provided
 if ~isfield(config, 'add_toe_berm') || isempty(config.add_toe_berm)
     config.add_toe_berm = 0;
 end

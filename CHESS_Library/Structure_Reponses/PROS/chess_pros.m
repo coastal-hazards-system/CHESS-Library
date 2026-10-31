@@ -4,8 +4,6 @@ function HC_out = chess_pros(config, project_forcing, structure, emp_coeff, outP
 warning('off');
 % Get AEP vs AEF Flag
 use_aep = config.pros_use_aep;
-% Force LCBW FS To False, Not supported on PROS 
-% config.compute_dn50_lcbw = 0;
 % Display PROS Message
 disp(['      Running CHESS: PROS....']);
 % Get Secondary Responses Switch

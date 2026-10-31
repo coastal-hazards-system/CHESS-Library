@@ -41,7 +41,7 @@ for j = s_indx
             u_field = u_vector{contains(u_names, 'chs_swl_u_r')};
         case {'Q_vol_wave_ot','Q_vol','q_wave_ot'}
             u_field = u_vector{contains(u_names, 'q')};
-        case {'Dn50','Dn50_LCBW', 'Dn50_Lee'}
+        case {'Dn50', 'Dn50_Lee'}
             u_field = u_vector{contains(u_names, 'dn50')};
         case {'p2dyn','p2sta','p2total','p3dyn','p3sta','p3total','pu','X_low','theta_low','X_up','theta_up','Bx','X_c_surge','theta_center','Bjet','Vjet','Fjet'}
             % Skip Until Issues Are Sorted

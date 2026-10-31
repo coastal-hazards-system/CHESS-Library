@@ -1,7 +1,7 @@
 function  [Output]= call_hazard_curve_builder(config, TC_Prob, Resp, storm_type, use_aep, outPath)
 % CALL_STRUCTURE_CURVE_BUILDER Computes hazard curve for provided forcing
 % and structure responses using CHESS's SST & JPM. Supports hazard curve
-% calculations for: SWL, Tp, Hm0_offshore, Hm0_toe, R2p, R2p+SWL, q, Dn50, Dn50_LCBW, p1.
+% calculations for: SWL, Tp, Hm0_offshore, Hm0_toe, R2p, R2p+SWL, q, Dn50, Dn50_Lee, p1.
 % Responses hold one column per replicate: the z = 0 replicate is dropped
 % (drop_z0.m) before fitting and kept in POT (overlays). Forcing curves
 % SWL, Tp, Hm0_offshore (pros_forcing_curves.m) come in as the z = 0 column

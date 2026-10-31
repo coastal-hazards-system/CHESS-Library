@@ -84,22 +84,16 @@ switch staID
             y_label = ['$R_{2\%}$ + SWL [' unit_label ']'];
             var_name = '$R_{2\%}$ + SWL';
         end
-    case {'Dn50','Dn50_LCBW', 'Dn50_Lee'}
+    case {'Dn50', 'Dn50_Lee'}
         U_a=0;
         U_r = dn50_u;
         uncert_treatment_jpm = 'relative';
         unit_label = 'm';
         y_label = ['$D_{n_{50}}$ [' unit_label ']'];
         var_name = '$D_{n_{50}}$';
-        if any(strcmp(staID,{'Dn50_LCBW', 'Dn50_Lee'}))
-            switch staID
-                case 'Dn50_LCBW'
-                    str_suffix = 'LCBW';
-                case 'Dn50_Lee'
-                    str_suffix = 'Lee';
-            end
-            y_label = ['$D_{n_{50}}$ ' str_suffix ' [' unit_label ']'];
-            var_name = ['$D_{n_{50}}$ ' str_suffix];
+        if strcmp(staID, 'Dn50_Lee')
+            y_label = ['$D_{n_{50}}$ Lee [' unit_label ']'];
+            var_name = '$D_{n_{50}}$ Lee';
         end
     case 'p1'
         U_a=0;

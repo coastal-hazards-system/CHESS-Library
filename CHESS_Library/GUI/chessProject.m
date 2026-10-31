@@ -1159,7 +1159,7 @@ classdef chessProject < handle
 
         function struc_type = get_struc_type(pse_type)
             % GUI PSE Type -> Library Structure Type (Single Place For GUI Labels).
-            % Former Labels 'Vertical Wall' / 'Low Crested Mound' Accepted For Previously Saved Projects
+            % Former Label 'Vertical Wall' Accepted For Previously Saved Projects
             switch pse_type
                 case 'Levee'
                     struc_type = 1;
@@ -1167,8 +1167,6 @@ classdef chessProject < handle
                     struc_type = 2;
                 case 'Rubble Mound'
                     struc_type = 3;
-                case {'Low Crested Breakwater', 'Low Crested Mound'}
-                    struc_type = 4;
                 otherwise
                     error('Unsupported PSE type "%s".', pse_type);
             end
@@ -1184,7 +1182,7 @@ classdef chessProject < handle
                 cache = containers.Map();
             end
             % Internal Template Per Library Structure Type: <name>.csv (Primary, No Excel Needed), Else <name>.xlsx
-            fnames = {'levee_pse', 'floodwall_pse', 'rubble_mound_pse', 'low_crested_breakwater_pse'};
+            fnames = {'levee_pse', 'floodwall_pse', 'rubble_mound_pse'};
             fname = fnames{chessProject.get_struc_type(pse_type)};
             % Templates Live In CHESS_Library\PSE_Templates (Setup's Sibling Folder)
             setup_dir = fileparts(which('create_structure_geometry'));

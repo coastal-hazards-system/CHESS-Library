@@ -77,13 +77,6 @@ switch struc_type
             'armor_delta','seaside_mass','leeside_mass','water_density','cem_P',...
             'seaside_design_S','leeside_design_S',...
             'roughness_ifactor', 'seaside_S_uls', 'leeside_S_uls','offshore_slope'};
-    case 4 % LCBW 
-                % Define Structure Type String
-        s_type = 'lowcrestedbw';
-        % Define Vars To Grab
-        vars_2_grab = {'crest_width','toe_elevation','seaside_slope',...
-            'leeside_slope','berm_crest_width','berm_crest_elevation','berm_seaward_slope',...
-            'armor_delta','crest_elevation','seaside_mass','water_density','roughness_ifactor','offshore_slope'};
 end
 
 % Temp Patch (Remove Berm Fields)
