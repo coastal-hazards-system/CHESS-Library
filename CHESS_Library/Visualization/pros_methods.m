@@ -716,4 +716,301 @@ classdef pros_methods < CHESSPlotsBase
         end
         % -----------------------------------------
     end
+
+    %% STORM EVENT VIEWER / RESPONSE TABLE (WORKFLOWS 1 AND 4)
+    % Forcing: the saved, already adjusted project_forcing (cells per storm [nSteps x replicates]; storm_id, time:
+    % chess_pros_formater.m). Workflow 1 draws one replicate column (z selector) and recomputes its responses with
+    % compute_structure_response on that column only (Resp holds hazard curves, not per-step responses). Workflow 4 draws
+    % the z = 0 column and, instead of responses, the hazard curve values at the chosen AEF/AEP and CLs (overlay lines).
+    methods (Access=public)
+        function ch = event_choices(self, ds_query)
+            % Choices: Storm IDs Of The Saved Forcing, Timeseries Flag, Peaks-View Toggle (Workflow 1), z Values (1) / AEF-CL List (4)
+            pf = self.event_forcing(ds_query);
+            ch.storm_ids = pf.storm_id(:);
+            ch.is_ts = strcmp(ds_query.data_type, 'Timeseries');
+            ch.peaks_toggle = ch.is_ts && self.config.workflow == 1;
+            ch.z_values = [];
+            ch.aefs = [];
+            ch.cls = [];
+            switch self.config.workflow
+                case 1
+                    ch.z_values = self.replicate_z(ds_query.storm_type);
+                case 4
+                    data = aux_methods.pull_data(ds_query, self.Resp);
+                    if ~isempty(data)
+                        ch.aefs = data(1).x_table(:);
+                        ch.cls = data(1).CL(:)';
+                    end
+            end
+        end
+
+        function sel = refine_selection(self, sel, choices)
+            switch self.config.workflow
+                case 1 % Replicate Column (Default: z = 0)
+                    n = numel(choices.z_values);
+                    if ~isnumeric(sel.z_col) || ~isscalar(sel.z_col) || sel.z_col < 1 || sel.z_col > n
+                        sel.z_col = replicate_z0_col(n);
+                    end
+                    sel.z_col = round(sel.z_col);
+                case 4 % AEF/AEP (Default: Closest To 0.01), CL ('All' Or One)
+                    if ~isempty(choices.aefs) && (isempty(sel.aef) || ~ismember(sel.aef, choices.aefs))
+                        [~, r] = min(abs(log(choices.aefs) - log(0.01)));
+                        sel.aef = choices.aefs(r);
+                    end
+                    if ~ischar(sel.cl) && (isempty(sel.cl) || ~ismember(sel.cl, choices.cls))
+                        sel.cl = 'All';
+                    end
+            end
+        end
+
+        function ctrl = event_controls(self, parent, row, sel, choices, emit)
+            % Control Row: Storm ID (+ Peaks View, Workflow 1) | Workflow 1: z Slider Snapping To The Replicates |
+            % Workflow 4: AEF/AEP And CL Dropdowns
+            ctrl = uigridlayout(parent, [1 8], 'ColumnWidth', {'fit', 100, 'fit', 'fit', 110, 'fit', 130, '1x'}, ...
+                'RowHeight', {'1x'}, 'Padding', [5 2 5 2]);
+            ctrl.Layout.Row = row;
+            if choices.is_ts
+                put(uilabel(ctrl, 'Text', 'Storm ID:', 'HorizontalAlignment', 'right'), 1);
+                put(uidropdown(ctrl, 'Items', string(choices.storm_ids), 'ItemsData', choices.storm_ids, 'Value', sel.storm_id, ...
+                    'Enable', ~sel.peaks_view, 'ValueChangedFcn', @(src, ~) emit('storm_id', src.Value)), 2);
+                if choices.peaks_toggle
+                    put(uicheckbox(ctrl, 'Text', aux_methods.tern(sel.peaks_view, 'Swap to timeseries view', 'Swap to peaks view'), ...
+                        'Value', sel.peaks_view, 'ValueChangedFcn', @(src, ~) emit('peaks_view', logical(src.Value))), 3);
+                end
+            else
+                put(uilabel(ctrl, 'Text', 'All events (Peaks)'), 1);
+            end
+            switch self.config.workflow
+                case 1
+                    ctrl.ColumnWidth = {'fit', 100, 'fit', 'fit', '1x', 270};
+                    z_text = @(col) sprintf('z = %.4f  (replicate %d of %d)', choices.z_values(col), col, numel(choices.z_values));
+                    put(uilabel(ctrl, 'Text', 'z-score:', 'HorizontalAlignment', 'right'), 4);
+                    value_label = uilabel(ctrl, 'Text', z_text(sel.z_col));
+                    put(value_label, 6);
+                    put(uislider(ctrl, 'Limits', [1 numel(choices.z_values)], 'Value', sel.z_col, 'MajorTicks', [], 'MinorTicks', [], ...
+                        'ValueChangingFcn', @(~, evt) set(value_label, 'Text', z_text(round(evt.Value))), ...
+                        'ValueChangedFcn', @(src, ~) emit('z_col', round(src.Value))), 5);
+                case 4
+                    if self.config.pros_use_aep == 1
+                        aef_label = 'AEP:';
+                    else
+                        aef_label = 'AEF [1/yr]:';
+                    end
+                    put(uilabel(ctrl, 'Text', aef_label, 'HorizontalAlignment', 'right'), 4);
+                    put(uidropdown(ctrl, 'Items', arrayfun(@(v) sprintf('%g', v), choices.aefs, 'un', false), 'ItemsData', choices.aefs, ...
+                        'Value', sel.aef, 'ValueChangedFcn', @(src, ~) emit('aef', src.Value)), 5);
+                    put(uilabel(ctrl, 'Text', 'CL:', 'HorizontalAlignment', 'right'), 6);
+                    cl_items = [{'All'}, arrayfun(@(v) self.cl_name(v), choices.cls, 'un', false)];
+                    put(uidropdown(ctrl, 'Items', cl_items, 'ItemsData', [{'All'}, num2cell(choices.cls)], 'Value', sel.cl, ...
+                        'ValueChangedFcn', @(src, ~) emit('cl', src.Value)), 7);
+            end
+
+            function w = put(w, col)
+                w.Layout.Column = col;
+            end
+        end
+
+        function ser = event_series(self, ds_query, response_to_view, sel)
+            % Storm Event Viewer Data: One Storm (Timeseries View) Or The Per-Storm Maxima (Peaks View / Peaks Data, Rc Minimum)
+            % At The Selected Replicate. Workflow 4: No Response Line, Overlay Lines From The Hazard Curve Instead.
+            d = self.event_data(ds_query, sel);
+            ser.x = d.x;
+            ser.x_kind = d.x_kind;
+            ser.storm_ids = d.ids;
+            ser.swl = d.cols.SWL;
+            ser.hm0_off = d.cols.Hm0_offshore;
+            ser.hm0_toe = d.cols.Hm0_toe;
+            ser.h = d.cols.h;
+            ser.rc = d.cols.Rc;
+            ser.hb = self.berm_depth(ser.swl);
+            ser.resp = [];
+            resp_name = char(response_to_view);
+            if isfield(d.cols, resp_name)
+                ser.resp = d.cols.(resp_name);
+            end
+            ser.event_str = d.event_str;
+            if self.config.workflow == 4
+                [ser.overlay, aef_str] = self.event_overlay(ds_query, resp_name, sel);
+                ser.event_str = [ser.event_str ' | ' aef_str];
+            end
+        end
+
+        function [T, info] = event_table(self, ds_query, sel)
+            % Response Table Rows: Same Data As The Viewer, All Forcing And Response Columns. Workflow 4 Adds The Hazard Curve
+            % Values At The Chosen AEF/AEP (<response>_BE, <response>_CL<n>, Constant Down The Rows)
+            d = self.event_data(ds_query, sel);
+            if strcmp(d.mode, 'ts')
+                T = table(d.time_table(:), 'VariableNames', {'Time'});
+            else
+                T = table(d.ids(:), d.time_table(:), 'VariableNames', {'StormID', 'Time'});
+            end
+            for f = fieldnames(d.cols)'
+                T.(f{1}) = d.cols.(f{1})(:);
+            end
+            if self.config.workflow == 4
+                data = aux_methods.pull_data(ds_query, self.Resp);
+                [~, r] = min(abs(data(1).x_table(:) - sel.aef));
+                cls = aux_methods.tern(ischar(sel.cl), data(1).CL, sel.cl);
+                for v = 1:numel(data)
+                    for cl = cls(:)'
+                        j = find(data(v).CL == cl, 1);
+                        tag = aux_methods.tern(cl == 50, 'BE', sprintf('CL%d', cl));
+                        T.([data(v).var '_' tag]) = repmat(data(v).y_table(r, j), height(T), 1);
+                    end
+                end
+            end
+            info = struct('mode', d.mode, 'view_label', d.view_label, 'plot_title', d.plot_title, 'x_label', 'Storm Duration [hrs]');
+        end
+    end
+
+    methods (Access=private)
+        function pf = event_forcing(self, ds_query)
+            % Saved Project Forcing Of The Queried Dataset (Storm IDs And Time Stamps Come With It)
+            if strcmp(ds_query.storm_type, 'CC')
+                error('pros_methods:noCC', 'PROS CC results are derived from TC and XC: pick TC or XC.');
+            end
+            if isempty(self.project_forcing)
+                error('pros_methods:noForcing', 'The saved project forcing is not available for this run.');
+            end
+            pf = aux_methods.pull_data(ds_query, self.project_forcing);
+            if ~isfield(pf, 'storm_id')
+                error('pros_methods:noStormIds', 'The saved project forcing has no storm IDs. Re-run the case to rebuild its forcing.');
+            end
+        end
+
+        function z = replicate_z(~, storm_type)
+            % z-Scores Of The Replicate Columns (Sorted, z = 0 In The Middle: XC 21, TC 445)
+            switch storm_type
+                case 'XC'
+                    z = readmatrix('discrete_norm_20.txt');
+                case 'TC'
+                    z = readmatrix('discrete_norm_444.txt');
+            end
+            z = z(:);
+        end
+
+        function name = cl_name(~, cl)
+            name = aux_methods.tern(cl == 50, 'Best Estimate', sprintf('%g%%', cl));
+        end
+
+        function d = event_data(self, ds_query, sel)
+            % Columns Of The Selected Storm (mode 'ts') Or One Row Per Storm (mode 'peaks') At The Selected Replicate Column
+            % (Workflow 4: z = 0). cols: SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc, Responses (Workflow 1)
+            pf = self.event_forcing(ds_query);
+            n_col = size(pf.SWL{1}, 2);
+            if self.config.workflow == 1
+                z_col = sel.z_col;
+                z_val = self.replicate_z(ds_query.storm_type);
+                z_str = sprintf('z = %.4f (replicate %d)', z_val(z_col), z_col);
+            else
+                z_col = replicate_z0_col(n_col);
+                z_str = '';
+            end
+            is_ts = strcmp(ds_query.data_type, 'Timeseries') && ~sel.peaks_view;
+            if is_ts
+                rows = find(pf.storm_id == sel.storm_id, 1);
+                if isempty(rows)
+                    error('pros_methods:unknownStorm', 'Storm ID %g is not in this dataset.', sel.storm_id);
+                end
+            else
+                rows = (1:numel(pf.storm_id))';
+            end
+            column = @(c) cellfun(@(v) v(:, z_col), c(rows), 'un', false);
+            one.SWL = column(pf.SWL);
+            one.Hm0_offshore = column(pf.Hm0_offshore);
+            one.Hm0_toe = column(pf.Hm0_toe);
+            one.Tp = column(pf.Tp);
+            one.storm_duration = pf.storm_duration(rows);
+            if isfield(pf, 'dt') % Timeseries Only
+                one.dt = pf.dt(rows);
+            end
+            R = [];
+            if self.config.workflow == 1 % Responses Of This Replicate Only (Forcing Is Already Adjusted)
+                cfg = self.config;
+                if ~strcmp(ds_query.data_type, 'Timeseries') % Q_vol Is Timeseries Only (As In The Run, call_project_response)
+                    cfg.compute_q_vol = 0;
+                end
+                R = compute_structure_response(cfg, self.structure, one, load_empirical_coefficients(), 0);
+            end
+            toe = self.structure.toe_elevation;
+            crest = self.structure.crest_elevation;
+            st = ds_query.storm_type;
+            if is_ts
+                d.mode = 'ts';
+                t = pf.time{rows}(:);
+                d.x = datetime(t, 'ConvertFrom', 'datenum');
+                d.x_kind = 'datetime';
+                d.ids = sel.storm_id;
+                d.time_table = (t - t(1))*24;
+                d.cols.SWL = one.SWL{1}(:);
+                d.cols.Hm0_offshore = one.Hm0_offshore{1}(:);
+                d.cols.Hm0_toe = one.Hm0_toe{1}(:);
+                d.cols.Tp = one.Tp{1}(:);
+                d.cols.h = d.cols.SWL - toe;
+                d.cols.Rc = crest - d.cols.SWL;
+                d.event_str = num2str(sel.storm_id);
+                d.view_label = sprintf('%s Timeseries (hourly, 1 storm)', st);
+                reduce = @(v) v{1}(:);
+            else
+                d.mode = 'peaks';
+                d.ids = pf.storm_id(rows);
+                d.x = (1:numel(rows))';
+                d.x_kind = 'event';
+                [swl_max, ix] = cellfun(@(v) max(v, [], 1), one.SWL);
+                d.time_table = datetime(cellfun(@(t, i) t(i), pf.time(rows), num2cell(ix)), 'ConvertFrom', 'datenum', 'Format', 'yyyy-MM-dd HH:mm');
+                reduce = @(v) cellfun(@(x) max(x, [], 1), v);
+                d.cols.SWL = swl_max;
+                d.cols.Hm0_offshore = reduce(one.Hm0_offshore);
+                d.cols.Hm0_toe = reduce(one.Hm0_toe);
+                d.cols.Tp = reduce(one.Tp);
+                d.cols.h = swl_max - toe;
+                d.cols.Rc = crest - swl_max;
+                if strcmp(ds_query.data_type, 'Timeseries')
+                    d.event_str = 'All (Timeseries peaks)';
+                    d.view_label = sprintf('%s Timeseries (storm maxima)', st);
+                else
+                    d.event_str = 'All (Peaks)';
+                    d.view_label = sprintf('%s Peaks (%s)', st, ds_query.match_type);
+                end
+            end
+            if ~isempty(R)
+                for f = fieldnames(R)'
+                    v = R.(f{1});
+                    if iscell(v) && all(cellfun(@(x) isnumeric(x) && size(x, 2) == 1, v))
+                        d.cols.(f{1}) = reduce(v);
+                    end
+                end
+            end
+            if ~isempty(z_str)
+                d.event_str = [d.event_str ' | ' z_str];
+                d.view_label = [d.view_label ' | ' z_str];
+            end
+            d.plot_title = sprintf('Storm %g', sel.storm_id);
+        end
+
+        function [overlay, aef_str] = event_overlay(self, ds_query, resp_name, sel)
+            % Workflow 4: Hazard Curve Values Of The Response At The Chosen AEF/AEP, One Horizontal Line Per Chosen CL
+            data = aux_methods.pull_data(ds_query, self.Resp);
+            aef_str = sprintf('%s %g', aux_methods.tern(self.config.pros_use_aep == 1, 'AEP', 'AEF'), sel.aef);
+            overlay = struct('y', {}, 'label', {}, 'color', {});
+            hc = data(strcmp({data.var}, resp_name));
+            if isempty(hc)
+                return
+            end
+            [~, r] = min(abs(hc.x_table(:) - sel.aef));
+            palette = [0 0 0; 0 0 1; 1 0 0; 1 0 1; 0 1 1];
+            cols = 1:numel(hc.CL);
+            if ~ischar(sel.cl)
+                cols = find(hc.CL == sel.cl);
+            end
+            for j = cols
+                y = hc.y_table(r, j);
+                if ~isfinite(y)
+                    continue
+                end
+                overlay(end+1) = struct('y', y, 'label', sprintf('%s: %.4g', self.cl_name(hc.CL(j)), y), ...
+                    'color', palette(mod(j - 1, size(palette, 1)) + 1, :)); %#ok<AGROW>
+            end
+        end
+    end
 end

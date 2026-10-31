@@ -741,7 +741,7 @@ classdef lcs_methods < CHESSPlotsBase
                 field_to_plot string  {mustBeMember(field_to_plot, [ ...
                     "Hm0t", ...
                     "R2p", "R2p_SWL", ...
-                    "Dn50", "Dn50_LCBW", "Dn50_Lee", ...
+                    "Dn50", "Dn50_Lee", ...
                     "p1", ...
                     "q", "q_overflow", "q_wave_ot", ...
                     "Q_vol", "Q_vol_overflow", "Q_vol_wave_ot", ...
@@ -997,4 +997,205 @@ classdef lcs_methods < CHESSPlotsBase
         end
     end
 
+    %% STORM EVENT VIEWER / RESPONSE TABLE (WORKFLOW 3)
+    % Saved life-cycle matrices (project_forcing.<dt>.<mt>.<st>{lc}, columns: lcs_columns.m) and the responses aligned
+    % row for row (Resp...<st>.<field>{lc}); S_* damage series only when the run saved them (DPA on). Nothing is computed.
+    methods (Access=public)
+        function ch = event_choices(self, ds_query)
+            % Choices: Life Cycles, Simulation Years With Storms Per Life Cycle, Timeseries Flag (Peaks-View Toggle)
+            C = lcs_columns();
+            pf = self.event_matrices(ds_query);
+            ch.storm_ids = [];
+            ch.is_ts = strcmp(ds_query.data_type, 'Timeseries');
+            ch.peaks_toggle = ch.is_ts;
+            ch.n_lc = numel(pf);
+            ch.years = cellfun(@(x) unique(x(:, C.year))', pf, 'un', false);
+        end
+
+        function sel = refine_selection(~, sel, choices)
+            if ~isnumeric(sel.lc) || ~isscalar(sel.lc) || sel.lc < 1 || sel.lc > choices.n_lc
+                sel.lc = 1;
+            end
+            sel.lc = round(sel.lc);
+            if ~(ischar(sel.year) && strcmp(sel.year, 'All')) && (isempty(sel.year) || ~ismember(sel.year, choices.years{sel.lc}))
+                sel.year = 'All';
+            end
+        end
+
+        function ctrl = event_controls(~, parent, row, sel, choices, emit)
+            % Control Row: Life Cycle, Simulation Year ('All' Or One), Peaks-View Checkbox (Timeseries)
+            ctrl = uigridlayout(parent, [1 6], 'ColumnWidth', {'fit', 90, 'fit', 90, 'fit', '1x'}, 'RowHeight', {'1x'}, 'Padding', [5 2 5 2]);
+            ctrl.Layout.Row = row;
+            years = choices.years{sel.lc};
+            uilabel(ctrl, 'Text', 'Life cycle:', 'HorizontalAlignment', 'right');
+            uidropdown(ctrl, 'Items', arrayfun(@num2str, 1:choices.n_lc, 'un', false), 'ItemsData', 1:choices.n_lc, 'Value', sel.lc, ...
+                'ValueChangedFcn', @(src, ~) emit('lc', src.Value));
+            uilabel(ctrl, 'Text', 'Year:', 'HorizontalAlignment', 'right');
+            uidropdown(ctrl, 'Items', [{'All'}, arrayfun(@num2str, years, 'un', false)], 'ItemsData', [{'All'}, num2cell(years)], ...
+                'Value', sel.year, 'ValueChangedFcn', @(src, ~) emit('year', src.Value));
+            if choices.peaks_toggle
+                uicheckbox(ctrl, 'Text', aux_methods.tern(sel.peaks_view, 'Swap to timeseries view', 'Swap to peaks view'), ...
+                    'Value', sel.peaks_view, 'ValueChangedFcn', @(src, ~) emit('peaks_view', logical(src.Value)));
+            end
+        end
+
+        function ser = event_series(self, ds_query, response_to_view, sel)
+            % Storm Event Viewer Data. Timeseries View: Storm Hours Of The Chosen Year (One Color Per Storm) Or Of The Whole Life
+            % Cycle (One Style, Storm Start/End Lines, Years On The Axis); Peaks View / Peaks Data: One Marker Per Storm.
+            d = self.event_data(ds_query, sel);
+            ser = rmfield(d, {'cols', 'mode', 'time_table', 'view_label', 'plot_title', 'extra', 'ids'});
+            ser.storm_ids = d.ids;
+            ser.swl = d.cols.SWL;
+            ser.hm0_off = d.cols.Hm0_offshore;
+            ser.hm0_toe = d.cols.Hm0_toe;
+            ser.h = d.cols.h;
+            ser.rc = d.cols.Rc;
+            ser.hb = self.berm_depth(ser.swl);
+            ser.resp = [];
+            resp_name = char(response_to_view);
+            if isfield(d.cols, resp_name)
+                ser.resp = d.cols.(resp_name);
+            end
+        end
+
+        function [T, info] = event_table(self, ds_query, sel)
+            % Response Table Rows: The Viewer's Rows (Storm Hours / One Row Per Storm), All Forcing And Response Columns
+            d = self.event_data(ds_query, sel);
+            if strcmp(d.mode, 'ts')
+                T = table(d.time_table(:), d.ids(:), d.extra.Year(:), d.extra.Order(:), 'VariableNames', {'Time', 'StormID', 'Year', 'Order'});
+            else
+                T = table(d.ids(:), d.extra.Year(:), d.extra.Order(:), 'VariableNames', {'StormID', 'Year', 'Order'});
+            end
+            for f = fieldnames(d.cols)'
+                T.(f{1}) = d.cols.(f{1})(:);
+            end
+            info = struct('mode', d.mode, 'view_label', d.view_label, 'plot_title', d.plot_title, 'x_label', 'Storm Duration [hrs]');
+        end
+    end
+
+    methods (Access=private)
+        function pf = event_matrices(self, ds_query)
+            % Saved Life-Cycle Matrices Of The Queried Dataset (Cell Per Life Cycle)
+            if isempty(self.project_forcing)
+                error('lcs_methods:noForcing', 'The saved project forcing is not available for this run.');
+            end
+            pf = aux_methods.pull_data(ds_query, self.project_forcing);
+        end
+
+        function d = event_data(self, ds_query, sel)
+            % Rows Of The Chosen Life Cycle (And Year): mode 'ts' (One Row Per Time Step, Storms In Order) Or 'peaks' (One Row Per Storm,
+            % [year, order] Groups: Maxima, Rc Minimum). cols: SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc, Saved Responses
+            C = lcs_columns();
+            pf = self.event_matrices(ds_query);
+            M = pf{sel.lc};
+            R = aux_methods.pull_data(ds_query, self.Resp);
+            all_years = ischar(sel.year);
+            if all_years
+                rows = (1:size(M, 1))';
+            else
+                rows = find(M(:, C.year) == sel.year);
+            end
+            Mk = M(rows, :);
+            n = size(Mk, 1);
+            if n > 0
+                [~, ~, g] = unique(Mk(:, [C.year C.order]), 'rows', 'stable'); % Storms (Rows Of A Storm Are Contiguous)
+                segs = accumarray(g, (1:n)', [], @(r) {r});
+            else
+                g = zeros(0, 1);
+                segs = {};
+            end
+            firsts = cellfun(@(r) r(1), segs);
+            lasts = cellfun(@(r) r(end), segs);
+            % Per-Row Series: Forcing From The Matrix, Responses (And S_*) Aligned Row For Row With It
+            row_cols.SWL = Mk(:, C.SWL);
+            row_cols.Hm0_offshore = Mk(:, C.Hm0_offshore);
+            row_cols.Hm0_toe = Mk(:, C.Hm0_toe);
+            row_cols.Tp = Mk(:, C.Tp);
+            for f = fieldnames(R)'
+                add_response(f{1}, R.(f{1}));
+            end
+            if isfield(R, 'S') && isstruct(R.S)
+                for f = fieldnames(R.S)'
+                    if startsWith(f{1}, 'S_')
+                        add_response(f{1}, R.S.(f{1}));
+                    end
+                end
+            end
+            toe = self.structure.toe_elevation;
+            crest = self.structure.crest_elevation;
+            is_ts = size(M, 2) == C.n_timeseries && ~sel.peaks_view;
+            d.extra.Year = Mk(firsts, C.year);
+            d.extra.Order = Mk(firsts, C.order);
+            if all_years
+                year_str = 'All years';
+            else
+                year_str = sprintf('Year %d', sel.year);
+            end
+            d.x_label = '';
+            d.segments = [];
+            d.color_segments = false;
+            d.bounds = [];
+            d.xticks = [];
+            if is_ts
+                d.mode = 'ts';
+                d.cols = row_cols;
+                d.cols.h = d.cols.SWL - toe;
+                d.cols.Rc = crest - d.cols.SWL;
+                step_h = Mk(:, C.dt)*24;
+                hours = cumsum([0; step_h(1:max(n - 1, 0))]);
+                hours = hours(1:n);
+                d.x = hours;
+                d.x_kind = 'hours';
+                d.time_table = hours;
+                d.ids = Mk(:, C.id);
+                d.extra.Year = Mk(:, C.year);
+                d.extra.Order = Mk(:, C.order);
+                d.segments = segs;
+                if all_years % One Style, Storm Start/End Lines, Years On The X Axis (First Storm Of Each Year)
+                    d.bounds = [hours(firsts); hours(lasts)];
+                    [yrs, iy] = unique(Mk(:, C.year), 'stable');
+                    keep = 1:max(1, ceil(numel(yrs)/15)):numel(yrs);
+                    if ~isempty(keep)
+                        d.xticks = struct('pos', hours(iy(keep))', 'labels', {arrayfun(@num2str, yrs(keep)', 'un', false)});
+                    end
+                    d.x_label = 'Simulation Year';
+                else % One Color Per Storm
+                    d.color_segments = true;
+                    d.x_label = sprintf('Storm Duration In Year %d [hrs]', sel.year);
+                end
+                d.event_str = sprintf('Life cycle %d | %s | %d storms', sel.lc, year_str, numel(segs));
+                d.view_label = sprintf('%s Timeseries (life cycle %d, %s, %d storms)', ds_query.storm_type, sel.lc, year_str, numel(segs));
+                d.plot_title = sprintf('Life cycle %d | %s', sel.lc, year_str);
+            else
+                d.mode = 'peaks';
+                reduce = @(v) accumarray(g, v(:), [], @(a) max(a, [], 'omitnan'));
+                if n == 0
+                    reduce = @(v) zeros(0, 1);
+                end
+                d.cols.SWL = reduce(row_cols.SWL);
+                d.cols.Hm0_offshore = reduce(row_cols.Hm0_offshore);
+                d.cols.Hm0_toe = reduce(row_cols.Hm0_toe);
+                d.cols.Tp = reduce(row_cols.Tp);
+                d.cols.h = d.cols.SWL - toe;
+                d.cols.Rc = crest - d.cols.SWL;
+                for f = setdiff(fieldnames(row_cols), fieldnames(d.cols), 'stable')'
+                    d.cols.(f{1}) = reduce(row_cols.(f{1}));
+                end
+                d.x = (1:numel(segs))';
+                d.x_kind = 'event';
+                d.time_table = [];
+                d.ids = Mk(firsts, C.id);
+                d.event_str = sprintf('Life cycle %d | %s | %d storms (peaks)', sel.lc, year_str, numel(segs));
+                d.view_label = sprintf('%s Peaks (life cycle %d, %s, %d storms)', ds_query.storm_type, sel.lc, year_str, numel(segs));
+                d.plot_title = '';
+            end
+
+            function add_response(name, v)
+                % Adds A Response Cell With One Value Per Row Of This Life Cycle To row_cols
+                if iscell(v) && numel(v) >= sel.lc && isnumeric(v{sel.lc}) && size(v{sel.lc}, 1) == size(M, 1) && size(v{sel.lc}, 2) == 1
+                    row_cols.(name) = v{sel.lc}(rows);
+                end
+            end
+        end
+    end
 end

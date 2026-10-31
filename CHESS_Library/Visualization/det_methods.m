@@ -10,8 +10,6 @@ classdef det_methods < CHESSPlotsBase
     properties (Constant, Access=private)
         % Plotted Before The Responses, In This Order
         forcing_fields = {'SWL', 'Hm0_offshore', 'Hm0_toe', 'Tp', 'h', 'Rc'}
-        % Datum-Referenced Elevations (Left yyaxis On Hydrographs)
-        elevation_fields = {'SWL', 'R2p_SWL', 'DamDepthElev'}
     end
 
     methods (Access=public)
@@ -97,132 +95,75 @@ classdef det_methods < CHESSPlotsBase
                 'VerticalAlignment', 'top', 'FontSize', self.base_fnt - 2);
         end
 
-        % Method: Response Table Pop-Out (Axes On Top, Table Below)
-        function fig = response_table(self, ds_query, storm_id)
-            % Peaks: One Row Per Storm; Select 2 Columns (1st Click = X, 2nd = Y) For A Scatter.
-            % Timeseries: Pick A Storm ID; Its Hourly Rows Are Shown And Selected Columns Plot As Hydrographs
-            %   (Elevations On The Left yyaxis, Everything Else On The Right; Max 2 Unit Groups).
-            if nargin < 3, storm_id = []; end
-            is_ts = strcmp(ds_query.data_type, 'Timeseries');
-            d = self.det_data(ds_query);
-            lbl = aux_methods.tern(is_ts, sprintf('%s Timeseries (hourly, 1 storm)', ds_query.storm_type), self.title_str(ds_query));
-            fig = uifigure('Name', ['Response Table | ' lbl], 'Position', [60 60 1250 820]);
-            gl = uigridlayout(fig, [3 1], 'RowHeight', {30, 440, '1x'});
-            top = uigridlayout(gl, [1 3], 'ColumnWidth', {'1x', 80, 120}, 'Padding', 0);
-            uilabel(top, 'Text', ['<b>Response Table</b> | ' lbl], 'Interpreter', 'html');
-            axp = uipanel(gl, 'BorderType', 'none');
-            ax = uiaxes(axp, 'Units', 'normalized', 'OuterPosition', [0 0 1 1]);
-            ut = uitable(gl, 'RowName', {}, 'FontSize', self.base_fnt - 1, 'SelectionType', 'column', 'Multiselect', 'on');
-            st.order = {}; st.T = table(); st.id = [];
-            if is_ts
-                uilabel(top, 'Text', 'Storm ID:', 'HorizontalAlignment', 'right');
-                dd = uidropdown(top, 'Items', string(d.storm_id), 'ItemsData', d.storm_id, ...
-                    'ValueChangedFcn', @(s, ~) set_storm(s.Value));
-                if isempty(storm_id), storm_id = d.storm_id(1); end
-                set_storm(storm_id);
-            else
-                uilabel(top, 'Text', ''); uilabel(top, 'Text', '');
-                set_table(self.max_table(ds_query));
-            end
-            ut.CellSelectionCallback = @on_select;
-            % Programmatic Access (Scripts / Tests)
-            fig.UserData = struct('select', @select, 'set_storm', @set_storm, 'axes', ax, 'table', ut);
+        function ch = event_choices(self, ds_query)
+            % Storm Event Viewer / Response Table Choices: Storm IDs Of The Saved Results, Timeseries Flag
+            ch.storm_ids = self.det_data(ds_query).storm_id(:);
+            ch.is_ts = strcmp(ds_query.data_type, 'Timeseries');
+            ch.peaks_toggle = ch.is_ts;
+        end
 
-            function set_table(T)
-                st.T = T; st.order = {};
-                vn = T.Properties.VariableNames;
-                Tf = T;
-                for k = 1:numel(vn)
-                    if ~isfloat(Tf.(vn{k})), continue, end
-                    [~, ~, is_log] = self.field_info(vn{k});
-                    if is_log == 1 % Log-Scaled Fields (e.g. q): Scientific Notation So Small Values Do Not Show As 0
-                        Tf.(vn{k}) = arrayfun(@(x) sprintf('%.2e', x), Tf.(vn{k}), 'un', false);
-                    else
-                        Tf.(vn{k}) = round(Tf.(vn{k}), 4);
-                    end
+        function [T, info] = event_table(self, ds_query, sel)
+            % Response Table Rows (DET): The Selected Storm's Hourly Rows (Timeseries View), Else One Row Per Storm (Max).
+            % info: mode ('ts'|'peaks'), view_label, plot_title, x_label
+            if strcmp(ds_query.data_type, 'Timeseries') && ~sel.peaks_view
+                T = self.storm_table(ds_query, sel.storm_id);
+                info.mode = 'ts';
+                info.view_label = sprintf('%s Timeseries (hourly, 1 storm)', ds_query.storm_type);
+            else
+                T = self.max_table(ds_query);
+                info.mode = 'peaks';
+                info.view_label = self.title_str(ds_query);
+            end
+            info.plot_title = sprintf('Storm %g', sel.storm_id);
+            info.x_label = 'Storm Duration [hrs]';
+        end
+
+        function ser = event_series(self, ds_query, response_to_view, sel)
+            % Storm Event Viewer Data (DET): Straight From The Saved Results, Nothing Recomputed.
+            %   Timeseries View: One Storm's Histories (project_forcing + Resp, Matched By Storm ID).
+            %   Peaks View / Peaks Data: The Saved Max Struct, One Value Per Storm (Rc Is The Minimum).
+            % ser: x, x_kind ('datetime'|'event'), storm_ids, swl, hm0_off, hm0_toe, h, hb ([] w/o berm), rc, resp, event_str
+            d = self.det_data(ds_query);
+            resp_name = char(response_to_view);
+            if strcmp(ds_query.data_type, 'Timeseries') && ~sel.peaks_view
+                pf = aux_methods.pull_data(ds_query, self.project_forcing);
+                kf = find(pf.storm_id == sel.storm_id, 1);
+                kr = find(d.storm_id == sel.storm_id, 1);
+                if isempty(kf) || isempty(kr)
+                    error('det_methods:unknownStorm', 'Storm ID %g is not in this dataset.', sel.storm_id);
                 end
-                ut.Data = Tf;
-                ut.ColumnName = cellfun(@(v) self.column_name(v), vn, 'un', false);
-                if isnumeric(T.Time), ut.ColumnName{strcmp(vn, 'Time')} = 'Time [hrs]'; end % Timeseries: Storm Hours
-                ut.Selection = [];
-                redraw();
-            end
-            function set_storm(id)
-                if ~ismember(id, d.storm_id)
-                    error('det_methods:unknownStorm', 'Storm ID %g is not in this dataset.', id);
+                ser.x = datetime(pf.time{kf}(:), 'ConvertFrom', 'datenum');
+                ser.x_kind = 'datetime';
+                ser.storm_ids = sel.storm_id;
+                ser.swl = pf.SWL{kf}(:);
+                ser.hm0_off = pf.Hm0_offshore{kf}(:);
+                ser.hm0_toe = pf.Hm0_toe{kf}(:);
+                ser.h = d.h{kr}(:);
+                ser.rc = d.Rc{kr}(:);
+                ser.resp = [];
+                if isfield(d, resp_name)
+                    ser.resp = d.(resp_name){kr}(:);
                 end
-                st.id = id; dd.Value = id;
-                set_table(self.storm_table(ds_query, id));
-            end
-            function on_select(~, evt)
-                cols = unique(evt.Indices(:, 2))';
-                names = st.T.Properties.VariableNames(cols);
-                keep = st.order(ismember(st.order, names)); % Click Order Preserved
-                st.order = [keep, setdiff(names, keep, 'stable')];
-                redraw();
-            end
-            function select(names)
-                st.order = names;
-                ut.Selection = find(ismember(st.T.Properties.VariableNames, names));
-                redraw();
-            end
-            function show_msg(lines_in)
-                cla(ax, 'reset'); ax.XTick = []; ax.YTick = []; box(ax, 'on');
-                text(ax, 0.5, 0.5, lines_in, 'Units', 'normalized', 'HorizontalAlignment', 'center', ...
-                    'FontSize', self.base_fnt, 'Color', [.35 .35 .35]);
-            end
-            function redraw()
-                sel = st.order(~ismember(st.order, {'StormID', 'Time'}));
-                if ~is_ts
-                    if numel(sel) ~= 2
-                        show_msg({'Select 2 table columns to plot', '1st click = X axis, 2nd click = Y axis'});
-                        return
-                    end
-                    [xl, ~, xlog] = self.field_info(sel{1}); [yl, ~, ylog] = self.field_info(sel{2});
-                    cla(ax, 'reset');
-                    aux_methods.initiate_axes(ax, xl, yl, '', self.base_fnt);
-                    ok = ~isnan(st.T.(sel{1})) & ~isnan(st.T.(sel{2}));
-                    scatter(ax, st.T.(sel{1})(ok), st.T.(sel{2})(ok), 30, [0 0.447 0.741], 'filled', 'MarkerEdgeColor', [.2 .2 .2]);
-                    ax.XScale = aux_methods.tern(xlog == 1, 'log', 'linear');
-                    ax.YScale = aux_methods.tern(ylog == 1, 'log', 'linear');
-                    aux_methods.pad_limits(ax, 'X', st.T.(sel{1})(ok));
-                    aux_methods.pad_limits(ax, 'Y', st.T.(sel{2})(ok));
-                else
-                    if isempty(sel)
-                        show_msg({'Select one or more table columns', 'to plot their hydrographs'});
-                        return
-                    end
-                    % Group By (Datum Elevation?, Unit): Max 2 Groups -> Left / Right yyaxis
-                    key = cellfun(@(v) sprintf('%d|%s', ismember(v, self.elevation_fields), self.field_unit(v)), sel, 'un', false);
-                    [grp, ~, gi] = unique(key, 'stable');
-                    if numel(grp) > 2
-                        show_msg({'Selected columns span more than 2 unit groups', 'Deselect columns until 2 or fewer remain'});
-                        return
-                    end
-                    cla(ax, 'reset'); hold(ax, 'on'); grid(ax, 'on'); box(ax, 'on');
-                    set(ax, 'FontSize', self.base_fnt - 2, 'FontWeight', 'bold');
-                    cols = lines(numel(sel)); side = {'left', 'right'};
-                    for g = 1:numel(grp)
-                        yyaxis(ax, side{g});
-                        members = find(gi' == g); labs = cell(1, numel(members)); any_log = false;
-                        for m = 1:numel(members)
-                            k = members(m);
-                            [labs{m}, ~, lg] = self.field_info(sel{k}); any_log = any_log || lg == 1;
-                            plot(ax, st.T.Time, st.T.(sel{k}), '-', 'Color', cols(k, :), 'LineWidth', 1.4, 'DisplayName', labs{m});
-                        end
-                        ylabel(ax, aux_methods.latex_escape(strjoin(labs, ', ')), 'Interpreter', 'latex', 'FontSize', self.base_fnt, 'FontWeight', 'bold');
-                        ax.YColor = [.15 .15 .15];
-                        ax.YScale = aux_methods.tern(any_log, 'log', 'linear');
-                        vals = cellfun(@(v) st.T.(v), sel(members), 'un', false);
-                        aux_methods.pad_limits(ax, 'Y', vertcat(vals{:}));
-                    end
-                    % Single Unit Group: Hide The Empty Right Axis
-                    ax.YAxis(2).Visible = aux_methods.tern(numel(grp) == 1, 'off', 'on');
-                    legend(ax, 'Interpreter', 'latex', 'Location', 'northoutside', 'Orientation', 'horizontal', 'FontSize', self.base_fnt - 1);
-                    xlabel(ax, 'Storm Duration [hrs]', 'Interpreter', 'latex', 'FontSize', self.base_fnt, 'FontWeight', 'bold');
-                    title(ax, sprintf('Storm %g', st.id), 'Interpreter', 'latex', 'FontSize', self.base_fnt + 2, 'FontWeight', 'bold');
-                    ax.XLim = [0 max(st.T.Time(end), 1)];
+                ser.event_str = num2str(sel.storm_id);
+            else
+                mx = d.Max;
+                ser.x = (1:numel(mx.storm_id))';
+                ser.x_kind = 'event';
+                ser.storm_ids = mx.storm_id(:);
+                ser.swl = mx.SWL(:);
+                ser.hm0_off = mx.Hm0_offshore(:);
+                ser.hm0_toe = mx.Hm0_toe(:);
+                ser.h = mx.h(:);
+                ser.rc = mx.Rc(:);
+                ser.resp = [];
+                if isfield(mx, resp_name)
+                    ser.resp = mx.(resp_name)(:);
                 end
+                ser.event_str = aux_methods.tern(strcmp(ds_query.data_type, 'Timeseries'), 'All (Timeseries peaks)', 'All (Peaks)');
+            end
+            ser.hb = [];
+            if self.config.add_toe_berm == 1
+                ser.hb = ser.swl - self.structure.berm_crest_elevation;
             end
         end
     end
@@ -273,21 +214,6 @@ classdef det_methods < CHESSPlotsBase
                     T.(f{1}) = double(v{k}(:));
                 end
             end
-        end
-
-        function [lbl, unit, is_log] = field_info(self, field)
-            [~, ~, ~, unit, ~, lbl, is_log] = response_library_headers(self.config, field);
-            if strcmp(lbl, 'nan'), lbl = strrep(field, '_', ' '); unit = ''; end
-        end
-
-        function unit = field_unit(self, field)
-            [~, unit] = self.field_info(field);
-        end
-
-        function name = column_name(self, field)
-            if any(strcmp(field, {'StormID', 'Time'})), name = field; return, end
-            unit = strrep(strrep(self.field_unit(field), '$', ''), '^3', char(179));
-            name = aux_methods.tern(isempty(unit), field, [field ' [' unit ']']);
         end
 
         function check_fields(~, T, fields)
