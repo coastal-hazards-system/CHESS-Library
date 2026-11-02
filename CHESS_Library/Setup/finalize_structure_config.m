@@ -27,8 +27,6 @@ function config = finalize_structure_config(config)
 if ~isfield(config, 'add_toe_berm') || isempty(config.add_toe_berm)
     config.add_toe_berm = 0;
 end
-% Deprecated Or Hidden Features
-config.structure_dir = 0; % Assume Shore Normal Waves
 
 %% BERM RULES
 % Hide Berms Until Conceptual Models Are Set (Floodwalls Included 2026-10-05)

@@ -27,7 +27,7 @@ function [project_forcing, config] = call_chess_boundary_conditions(config, stor
     %% INPUTS
         config: Run configuration after hotstart resolution
             (resolve_hotstart_state.m or the GUI). | struct
-        storm: Storm database request (call_chs_data_formater.m). | struct
+        storm: Storm database request (call_chs_data_formatter.m). | struct
         prob_mass: Storm probability masses. | struct
         structure: CHESS structure geometry. | struct
         progress_fcn: Optional progress callback progress_fcn(step, message),

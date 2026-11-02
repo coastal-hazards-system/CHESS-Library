@@ -38,19 +38,13 @@ WHP_switch = config.create_whp;
 chs_region = config.region;
 % Save Point ID
 spID = config.sp_ID;
-% Storm Duration
-storm_duration = config.storm_duration/24; % Convert from hours to days (storm DB column 6 is a datenum duration)
 %
 disp_on = config.print_progress;
 
 %% DEFINE AUX VARIABLES
-% storm Type Flag To Search For
-switch storm_type
-    case 'TC'
-        storm_if = {'TS','TC'};
-    case 'XC'
-        storm_if = {'XC','XH'};
-        prob_mass = [];
+% No Probability Masses For Extratropical Storms
+if strcmp(storm_type, 'XC')
+    prob_mass = [];
 end
 
 %% PROCESS CHS PEAKS DATASET TO CREATE "storm.Peaks"
@@ -62,10 +56,10 @@ if use_peaks == 1
         disp_toggle(disp_on,['Matching CHS tropical peak waves and water levels....']);
     end
     % Pull Storm Data From Parsed H5 Files
-    [peaks_data, adcirc_bool,  STWAVE_headers_location, Tp_special] = chs_file_selection(CHS_Data, 'Peaks', storm_if);
+    [peaks_data, adcirc_bool,  STWAVE_headers_location, Tp_special] = chs_file_selection(CHS_Data, 'Peaks', storm_type);
     % Format storm Data
-    [storm.('Peaks').Default, storm2rm] = chs_peaks_formater(peaks_data{adcirc_bool},...
-        peaks_data{~adcirc_bool}, STWAVE_headers_location, storm_duration, Tp_special); % storm2rm is a storm ID
+    [storm.('Peaks').Default, storm2rm] = chs_peaks_formatter(peaks_data{adcirc_bool},...
+        peaks_data{~adcirc_bool}, STWAVE_headers_location, Tp_special); % storm2rm is a storm ID
 else
     storm2rm = [];
 end
@@ -79,9 +73,9 @@ if use_timeseries == 1
         disp_toggle(disp_on,['Matching CHS tropical timeseries waves and water levels....']);
     end
     % Pull Storm Data From Parsed H5 Files
-    [timeseries_data, adcirc_bool_ts,  STWAVE_headers_location_ts, Tp_special_ts] = chs_file_selection(CHS_Data, 'Timeseries', storm_if);
+    [timeseries_data, adcirc_bool_ts,  STWAVE_headers_location_ts, Tp_special_ts] = chs_file_selection(CHS_Data, 'Timeseries', storm_type);
     % Create ADCIRC-STWAVE TimeSeries Dataset
-    [storm.Timeseries.Default, storm2rm] = chs_timeseries_formater(timeseries_data{adcirc_bool_ts},...
+    [storm.Timeseries.Default, storm2rm] = chs_timeseries_formatter(timeseries_data{adcirc_bool_ts},...
         timeseries_data{~adcirc_bool_ts},...
         storm2rm, STWAVE_headers_location_ts, Tp_special_ts, disp_on);
     % Create Alternate Datasets
@@ -90,13 +84,13 @@ if use_timeseries == 1
         if WLP_switch == 1
             [storm.('Peaks').WLP, ~] = create_priority_dataset(peaks_data{adcirc_bool},...
                 timeseries_data{adcirc_bool_ts}, timeseries_data{~adcirc_bool_ts},...
-                storm2rm, STWAVE_headers_location_ts, storm_duration, Tp_special_ts, 'wlp', disp_on);
+                storm2rm, STWAVE_headers_location_ts, Tp_special_ts, 'wlp', disp_on);
         end
         % Create Wave Height Priority
         if WHP_switch == 1
             [storm.('Peaks').WHP, ~] = create_priority_dataset(peaks_data{~adcirc_bool}, ...
                 timeseries_data{adcirc_bool_ts}, timeseries_data{~adcirc_bool_ts},...
-                storm2rm, STWAVE_headers_location, storm_duration, Tp_special, 'whp', disp_on);
+                storm2rm, STWAVE_headers_location, Tp_special, 'whp', disp_on);
         end
     end
 end
@@ -189,13 +183,9 @@ switch storm_type
 end
 
 %% APPLY BIAS CORRECTION
-% Load Bias Correction Data For CHS Region
-if exist(config.in_files.BnU_circulation, 'file') && exist(config.in_files.BnU_waves, 'file')
-    bias_tgr = 1;
-else
-    % Check for Non Zero Bias Values
-    bias_tgr = 0;
-end
+% Applied When The Region's Water Level And Wave Height Bias & Uncertainty Files Exist (chs_dependency_files.m)
+chs_files = chs_dependency_files(config.chs_dependencies, chs_region);
+bias_tgr = double(chs_files.bias_uncertainty_available);
 % Enforce No Bias Correction For XCs
 if strcmp(storm_type, 'XC')
     bias_tgr = 0;
@@ -224,14 +214,15 @@ if bias_tgr == 1
 end
 
 %% AUX FUNCTION
-    function [storm_data, ad_indx, STWAVE_headers_location, Tp_special] = chs_file_selection(CHS_Data, data_type, storm_type)
-        % Pull CHS Parsed H5 Files Accordin To Data Type & Storm Type
-        file_indx = contains({CHS_Data.Filename},{data_type}) &...
-            contains({CHS_Data.Filename}, storm_type);
+    function [storm_data, ad_indx, STWAVE_headers_location, Tp_special] = chs_file_selection(CHS_Data, data_type, selected_storm_type)
+        % Pull CHS Parsed H5 Files Accordin To Data Type & Storm Type (CHS File Name Rule: chs_file_name_parts.m)
+        file_parts = chs_file_name_parts({CHS_Data.Filename});
+        file_indx = strcmp({file_parts.data_type}, data_type) &...
+            strcmp({file_parts.storm_type}, selected_storm_type);
         % Extract Peaks Files
         storm_data = CHS_Data(file_indx);
         % Find ADCIRC Filename
-        ad_indx = contains({storm_data.Filename},{'ADCIRC'});
+        ad_indx = logical([file_parts(file_indx).is_adcirc]);
         % Get Headers For Hm0,Tp,wDir
         [STWAVE_headers_location, Tp_special] = chs_wave_model_header_locator(storm_data(~ad_indx));
         % Extract "Strom_Table" Field

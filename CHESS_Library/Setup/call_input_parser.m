@@ -7,10 +7,10 @@ function [config, structure] = call_input_parser(input_filename)
     CHS input (.zip / CHS_Data .mat): the storm files are checked by name
     (chs_storm_file_slots.m: one study identity, chs_study_identity.m, and
     one ADCIRC + one wave file per slot) before any unzip, and a TC/CC request needs
-    CHS_Dependencies for the region (chs_dependencies_available.m).
+    CHS_Dependencies TC statistics for the region (chs_dependency_files.m).
     A .zip input is never unzipped here: the savepoint depth is read from
     the first ADCIRC .h5 entry alone, extracted to a system temp folder
-    (tempname) removed before returning; call_chs_data_formater.m unzips
+    (tempname) removed before returning; call_chs_data_formatter.m unzips
     the input when it converts it.
     Storm .mat input (storm + prob_mass): validated, checked against this
     run's request and saved as the storm database with its db_info
@@ -29,10 +29,8 @@ function [config, structure] = call_input_parser(input_filename)
 %}
 
 %% GRAB AND DEFINE INPUTS
-% Add Filename To Config
-config.chess_input_file = input_filename;
 % Add Gravity Constant
-config.gravity_constant = 9.80665; % m/s^2
+config.gravity_constant = standard_gravity(); % m/s^2
 
 %% PARSE INPUT FILE AND CREATE CONFIG STRUCTURE
 % Every Section Row Of The Input File (.xlsx Or .csv, Layout Independent: read_chess_input.m), By Symbol (Last Wins)
@@ -41,7 +39,7 @@ for jj = 1:size(input_rows, 1)
     config.(input_rows{jj, 1}) = input_rows{jj, 4};
 end
 %
-if ~ismember(config.workflow, [1,2,3,4])
+if ~ismember(config.workflow, [chess_workflows().number])
     error('Error: config.workflow must be 1 (PROS), 2 (DET), 3 (LCS), or 4 (PROS-FB).');
 end
 % Make Sure Specified File Exist
@@ -80,28 +78,23 @@ switch data_case
         config.sp_ID = study.sp_ID;
         config.sp_ID_wave = study.sp_ID_wave;
         % Without CHS_Dependencies For The Region CHESS Runs XC Only (TC Needs Its Probability Masses)
-        if ~strcmp(config.storm_sampling, 'XC') && ~chs_dependencies_available(config.chs_dependencies, config.region)
+        chs_files = chs_dependency_files(config.chs_dependencies, config.region);
+        if ~strcmp(config.storm_sampling, 'XC') && ~chs_files.tropical_statistics_available
             error(chs_dependencies_message(config.storm_sampling, config.region));
         end
     case 'storm_data'
         % Add CHS Files 2 Convert In Cell Array
         config.chs_files_2_convert = cell(0, 2);
-        % Try To Find Savepoint ID On Filename
-        if contains(fname, {'SP'})
-            sp_id = strsplit(fname, {'_'});
-            sp_id = sp_id{contains(sp_id, {'SP'})};
-            sp_id = str2double(strrep(sp_id,'SP',''));
-            config.sp_ID = sp_id;
+        % Savepoint ID And CHS Region From The File Name (storm_mat_name_parts)
+        name_parts = storm_mat_name_parts(config.chs_zip);
+        if ~isempty(name_parts.sp_ID)
+            config.sp_ID = name_parts.sp_ID;
         else
-            % Define Save Point ID As Empty
             config.sp_ID = 1;
         end
         config.sp_ID_wave = []; % Not important
-        % Try And Find CHS Region On File Name
-        if contains(fname, {'CHS-'})
-            chs_region = strsplit(fname, '_');
-            chs_region = chs_region{contains(chs_region, {'CHS-'})};
-            config.region = chs_region;
+        if ~isempty(name_parts.region)
+            config.region = name_parts.region;
         else
             config.region = 'Custom_Modeling';% User Needs To Provide Prob Mass
         end
@@ -137,7 +130,7 @@ if chess_storm
         % Older Database (No db_info) Of A Storm .mat Input: Created Again From The Provided File Below
         chess_storm = false;
     end
-    % CHS Input Without db_info: call_chs_data_formater.m Rebuilds The Database From The Raw File (Or Stops)
+    % CHS Input Without db_info: call_chs_data_formatter.m Rebuilds The Database From The Raw File (Or Stops)
 end
 
 %% GRAB CHS_DATA DETAILS
@@ -169,10 +162,11 @@ if strcmp(data_case, 'chs_data')
                 [~, sp_coords] = chs_data_attributes(CHS_Data);
                 config = set_sp_coords(config, sp_coords, 'CHS_Data attributes');
             else
-                % File Names Only: call_chs_data_formater.m Unzips The Input (System Temp Folder) Right Before Conversion
+                % File Names Only: call_chs_data_formatter.m Unzips The Input (System Temp Folder) Right Before Conversion
                 config.chs_files_2_convert = [repmat({''}, numel(file_list), 1), file_list(:)];
                 % Savepoint Coordinates On The HDF5 Attributes Of The First ADCIRC Storm File (Only That Entry Extracted)
-                sp_coords = zip_sp_coords(config.chs_zip, file_list(contains(file_list, 'ADCIRC')));
+                file_parts = chs_file_name_parts(file_list);
+                sp_coords = zip_sp_coords(config.chs_zip, file_list([file_parts.is_adcirc]));
                 config = set_sp_coords(config, sp_coords, 'h5 attributes');
             end
     end

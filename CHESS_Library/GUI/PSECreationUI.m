@@ -300,20 +300,6 @@ classdef PSECreationUI < handle
         function UIWindowCloseRequest(obj, event)
             delete(obj.uifig);
             obj.pse_created = 0;
-%             if isempty(obj.pse_to_copy)
-%                 opMode = 'pse';
-%             else
-%                 opMode = 'alt';
-%             end
-%             obj.chess_project.delete_project_field('pse_tables', obj.pse_name, obj.alt_name, opMode);
-%             obj.chess_project.delete_project_field('pse_geometry', obj.pse_name, obj.alt_name, opMode);
-%             alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
-%             if length(alt_list) == 1
-%                 obj.chess_project.delete_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
-%                 obj.chess_project.delete_project_field('pse_list', obj.pse_name, obj.alt_name, 'pse');
-%             else
-%                 obj.chess_project.delete_project_field('alternative_list', obj.pse_name, obj.alt_name, 'alt');
-%             end
         end
 
         function AddBermCheckBoxValueChanged(obj, event)
@@ -339,17 +325,16 @@ classdef PSECreationUI < handle
             % PSE And Alternative Names (While Typing And On Change): chessProject.name_problem Against The Project's Names
             % And The Folders On Disk (An Orphan Folder Blocks The Name). First Problem Shown Under The Fields; Create
             % Enabled Only When Both Are Valid. The Names Are Applied To The Project At Create
-            proj_dir = fullfile(obj.chess_project.path, obj.chess_project.name);
             msg = '';
             if isempty(obj.pse_to_copy) % New PSE Being Added
                 pse_list = obj.chess_project.get_project_field('pse_list', '', '', 'proj');
-                pse_msg = chessProject.name_problem(pse_value, pse_list, '', fullfile(proj_dir, 'PSE'));
+                pse_msg = chessProject.name_problem(pse_value, pse_list, '', chess_paths(obj.chess_project.path, obj.chess_project.name).pse_root_dir);
                 if ~isempty(pse_msg)
                     msg = ['PSE name: ' pse_msg];
                 end
                 alt_dir = ''; % New PSE: No Alternative Folder Can Exist Under It Yet
             else % New Alternative Being Added
-                alt_dir = fullfile(proj_dir, 'PSE', obj.pse_name);
+                alt_dir = chess_paths(obj.chess_project.path, obj.chess_project.name, obj.pse_name).pse_dir;
             end
             if isempty(msg)
                 alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, '', 'pse');

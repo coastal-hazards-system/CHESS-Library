@@ -1,12 +1,4 @@
 function cc_resp = call_hazard_curve_combiner(config, tc_resp, xc_resp, use_aep)
-%% GRAB DETAILS FORM "config"
-% Build Uncertainty Vector
-u_names = fieldnames(config);
-u_vector = struct2cell(config);
-% Grab Uncertainty Fields
-u_vector = u_vector(contains(u_names, {'u_a','_u'}));
-u_names = u_names(contains(u_names, {'u_a','_u'}));
-
 %% COMBINE HAZARD CURVES FOR PRIMARY RESPONSES
 % Define AEP's or AEF's
 if use_aep == 1
@@ -31,31 +23,14 @@ cc_resp = rmfield(tc_resp([]),{'tbl_rsp_x','tbl_rsp_y'});
 ctr = 1;
 % Loop Through Each Parameter
 for j = s_indx
-    % Determine Corresponding Uncertainty Field
-    switch tc_resp(j).var
-        case 'R2p_SWL'
-            u_field = u_vector{contains(u_names, 'r2p')};
-        case 'Tp'
-            u_field = sqrt(1+u_vector{contains(u_names, 'chs_hm0_u_r')})-1;
-        case {'q_overflow', 'Q_vol_overflow', 'DamDepthElev', 'DamDepth'}
-            u_field = u_vector{contains(u_names, 'chs_swl_u_r')};
-        case {'Q_vol_wave_ot','Q_vol','q_wave_ot'}
-            u_field = u_vector{contains(u_names, 'q')};
-        case {'Dn50', 'Dn50_Lee'}
-            u_field = u_vector{contains(u_names, 'dn50')};
-        case {'p2dyn','p2sta','p2total','p3dyn','p3sta','p3total','pu','X_low','theta_low','X_up','theta_up','Bx','X_c_surge','theta_center','Bjet','Vjet','Fjet'}
-            % Skip Until Issues Are Sorted
-            continue;
-        case {'Hm0t', 'Hm0_toe'}
-            % Use Values Associated To Hm0
-            u_field = u_vector{contains(u_names, 'hm0_u_r')};
-        case 'Hm0_offshore'
-            % Same Lookup As The Former 'Hm0' Curve (First Config Field Containing 'hm0')
-            u_field = u_vector{contains(u_names, 'hm0')};
-        case 'SWL'
-            u_field = u_vector{contains(u_names, 'chs_swl_u_r')};
-        otherwise
-            u_field = u_vector{contains(u_names, lower(tc_resp(j).var))};
+    % Registry Rules (response_registry.m): Skipped Responses; U_r Only Feeds The ALS Confidence Limits
+    row = response_registry('name', tc_resp(j).var);
+    if ~isempty(row) && strcmp(row.cc_rule, 'skip')
+        continue;
+    end
+    u_field = [];
+    if ~isempty(row) && strcmp(row.cc_confidence_limit_method, 'als_relative')
+        u_field = config.(row.relative_uncertainty);
     end
     % Matching XC Entry
     xc_j = xc_resp(find(strcmp(xc_vars, tc_resp(j).var), 1));

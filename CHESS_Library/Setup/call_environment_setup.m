@@ -15,19 +15,8 @@ individual strucutre fields.
 Developed by: Fabian A. Garcia Moreno ERDC-CHL
 %}
 %% CREATE DIRECTORIES
-% Define Workflow
+% Define Workflow (chess_workflows.m)
 workflow = config.workflow;
-%
-switch workflow
-    case 1
-        wflow2 = 'PROS';
-    case 2
-        wflow2 = 'DET';
-    case 3
-        wflow2 = 'LCS';
-    case 4
-        wflow2 = 'PROS';
-end
 if ~isfield(config, 'region')
     chs_region = 'NoRegion';
 else
@@ -67,39 +56,15 @@ if run_flag == 1
 end
 
 %% CHECK FOR CHS DEPENDENCIES FOLDER
-% Without It (Or For A Region It Does Not Cover) CHESS Runs XC Only: A TC/CC Request Already Stopped In call_input_parser.m
-if chs_dependencies_available(config.chs_dependencies, chs_region)
+% Without It (Or For A Region It Does Not Cover) CHESS Runs XC Only: A TC/CC Request Already Stopped In call_input_parser.m.
+% File Paths Are Looked Up Where They Are Read (chs_dependency_files.m); config Keeps Only chs_dependencies & region
+chs_files = chs_dependency_files(config.chs_dependencies, chs_region);
+if chs_files.tropical_statistics_available
     disp('External CHS_Dependencies folder found...');
-    % Revised function: Returns a cell array of full paths for 0, 1, or N matches
-    f_x = @(x, y) fullfile({y(contains({y.name}, x)).folder}, {y(contains({y.name}, x)).name});
-
-    % 1. Get ADCIRC & Wave Model Bias And Uncertainty
-    dummy = dir(fullfile(config.chs_dependencies, 'Probability_Masses', config.region, '*.mat'));
-    config.in_files.tc_dsw = cell2mat(f_x('DSW', dummy));
-    config.in_files.tc_master_table = cell2mat(f_x('Param', dummy));
-
-    % 2. Atlantic Basin TC Statistics
-    dummy = dir(fullfile(config.chs_dependencies, 'Probability_Masses', '*.mat'));
-    config.in_files.crl = cell2mat(f_x('CRLs', dummy)); % Coastal Reference Locations
-    config.in_files.tc_srr = f_x('SRR', dummy); % Storm Recurrance Rates [stm/yr*Km] at CRLs
-
-    % 3. Study Grid
-    dummy = dir(fullfile(config.chs_dependencies, 'Grid_Files', config.region, '*.mat'));
-    config.in_files.grid = cell2mat(f_x(config.region, dummy));
-
-    % 4. Model Bias & Epistemic Uncertainty
-    dummy = dir(fullfile(config.chs_dependencies, 'Bias_and_Uncertainty', config.region, '*.mat'));
-    config.in_files.BnU_circulation = cell2mat(f_x({'Comb','WL'}, dummy));
-    config.in_files.BnU_waves = cell2mat(f_x({'STWAVE', 'SWAN'}, dummy));
+elseif chs_files.folder_exists && chs_files.region_supported
+    disp(['External CHS_Dependencies folder found (no TC statistics for ' chs_region ': XC only)...']);
 else
     disp('CHS_Dependencies not found. Running in XC-only mode...');
-    config.in_files.BnU_circulation = [];
-    config.in_files.BnU_waves = [];
-    config.in_files.grid = [];
-    config.in_files.tc_srr = [];
-    config.in_files.crl = [];
-    config.in_files.tc_master_table = [];
-    config.in_files.tc_dsw = [];
 end
 
 %% BUILD FILENAMES FOR SIMULATION
@@ -111,8 +76,8 @@ config.out_files.chs_data = paths.chs_data;
 
 %% HOTSTART STATE
 % Bias & Uncertainty, TC Bias Correction And Nyrs_XC/Nstm_XC Come From The Storm Database's db_info (storm_db_info.m),
-% Applied In call_input_parser.m Or, When The Database Is Built, In call_chs_data_formater.m
-config = resolve_hotstart_state(config, wflow2);
+% Applied In call_input_parser.m Or, When The Database Is Built, In call_chs_data_formatter.m
+config = resolve_hotstart_state(config);
 
 %% DET: NO FORCING UNCERTAINTY
 % Unused By The Deterministic Workflow; Zero-Filled So Downstream Label/Header Lookups Still Work

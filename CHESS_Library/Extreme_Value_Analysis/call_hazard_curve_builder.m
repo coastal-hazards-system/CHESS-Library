@@ -71,7 +71,7 @@ for ii = 1:length(vars_to_process)
     [drows, dcols] = size(fit_data);
     % Great Lakes Water Levels Are Fitted As Surge (Mean Lake Level Removed, Added Back To The Hazard Curve)
     switch resp_var
-        case {'SWL','R2p_SWL','DamDepthElev'}
+        case response_registry('output', 'names', 'datum_elevation', true)
             lake_offset = mean_lake_level(config);
         otherwise
             lake_offset = 0;
@@ -111,10 +111,7 @@ for ii = 1:length(vars_to_process)
 
     %% PREP NAMING STRINGS
     % Define Workflow String
-    wstr = strsplit(outPath,filesep);
-    wstr = wstr{end};
-    wstr = strsplit(wstr,'_');
-    wstr = wstr{1};
+    wstr = chess_workflows(config.workflow).wflow_name;
     % PROS-RB Naming Overwrite When Calling PROS-FB
     if ismember(resp_var, pros_forcing_curves())
         % For FB Analysis The Forcing HC Are Created Using RB

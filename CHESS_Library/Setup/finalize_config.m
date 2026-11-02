@@ -24,34 +24,22 @@ function config = finalize_config(config)
         Developed by: Fabian A. Garcia Moreno ERDC-CHL
 %}
 %% APPLY STRUCTURE TYPE RESPONSES RESTRICTIONS
-% Grab Structure Response Switches
-switch config.struc_type
-    case 1 % Levee
-        config.compute_dn50_seaside = 0;
-        config.compute_dn50_leeside = 0;
-        config.compute_p1 = 0;
-        config.compute_p2_p3 = 0;
-        config.compute_nappe = 0;
-    case 2 % Floodwall
-        config.compute_wave_transmission = 0;
-        config.compute_dn50_seaside = 0;
-        config.compute_dn50_leeside = 0;
-        config.compute_r2p = 0;
-        % Enforce Dependencies For P2/P3 Computations
-        if config.compute_p2_p3 == 1
-            config.compute_p1 = 1;
-            % Secondary Responses Require Forcing HCs
-            config.pros_compute_forcing_HC = 1;
-        end
-        % Enforce Dependencies For Nappe Discharge Computations
-        if config.compute_nappe == 1
-            config.compute_q = 1;
-            config.pros_compute_forcing_HC = 1;
-        end
-    case 3 % Rubble Mound
-        config.compute_p1 = 0;
-        config.compute_p2_p3 = 0;
-        config.compute_nappe = 0;
+% Switch Off The Compute Switches Of Responses Not Applicable To The Structure Type (response_registry.m)
+switches_off = setdiff(response_registry('output', 'switches'),...
+    response_registry('output', 'switches', 'structure_type', config.struc_type), 'stable');
+for switch_name = switches_off
+    config.(switch_name{1}) = 0;
+end
+% Enforce Dependencies For P2/P3 Computations (Floodwall Only After The Zeroing)
+if config.compute_p2_p3 == 1
+    config.compute_p1 = 1;
+    % Secondary Responses Require Forcing HCs
+    config.pros_compute_forcing_HC = 1;
+end
+% Enforce Dependencies For Nappe Discharge Computations
+if config.compute_nappe == 1
+    config.compute_q = 1;
+    config.pros_compute_forcing_HC = 1;
 end
 % Per-Storm Timeseries Durations From SWL (Forcing Setting, Every Structure Type): Off Unless Requested
 if ~isfield(config, 'compute_storm_duration') || isempty(config.compute_storm_duration)
@@ -84,6 +72,10 @@ end
 % Overtopping Volume (Q_vol) Integrates Hourly Timeseries Only: Off Without Timeseries Data
 if config.use_timeseries ~= 1
     config.compute_q_vol = 0;
+end
+% Overtopping Volume Integrates The Overtopping Discharge: Q_vol Needs q
+if config.compute_q_vol == 1
+    config.compute_q = 1;
 end
 
 %% APPEND ADDITIONAL SIMULATION DETAILS TO CONFIG
@@ -118,9 +110,6 @@ end
 if ~isfield(config, 'multiline')
     config.multiline = [];
 end
-% Deprecated Or Hidden Features
-config.chs_wDir_u_a = 0; % Assume Shore Normal Waves
-config.tide_std = 0; % Tidal std , not implemented
 % This helps toggle print outs
 config.print_progress = true;
 

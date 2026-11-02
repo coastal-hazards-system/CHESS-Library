@@ -264,23 +264,6 @@ classdef chessProject < handle
             end
         end
 
-        function delete_project_field(obj, field, pse_name, alt_name, dtype)
-            switch dtype
-                case 'proj'
-                    % Empty Field (Keeps Field Class)
-                    obj.(field) = obj.(field)([]);
-                otherwise
-                    set_working_pse(obj, pse_name);
-                    switch dtype
-                        case 'alt'
-                            set_working_alt(obj, pse_name, alt_name);
-                            obj.(field){obj.pse_indx}(obj.alt_indx) = [];
-                        case 'pse'
-                            obj.(field)(obj.pse_indx) = [];
-                    end
-            end
-        end
-
         function val = get_project_field(obj, field, pse_name, alt_name, dtype)
             % Returns [] When PSE/Alternative/DB Is Not Found
             val = [];
@@ -312,15 +295,6 @@ classdef chessProject < handle
             end
         end
 
-        function reset_project(obj)
-            obj.pse_list = {};
-            obj.alternative_list = {};
-            obj.pse_tables = {};
-            obj.pse_geometry = {};
-            obj.sims = {};
-            obj.multiline = obj.multiline([]);
-        end
-
         function leftover = remove_pse(obj, pse_name, delete_files)
             % Removes PSE From Every Per-PSE Field (Keeps Fields Aligned). delete_files (Default false): Its Folder
             % <path>\<name>\PSE\<pse> Is Deleted First (delete_folder; An Error Leaves The Project Unchanged).
@@ -334,7 +308,7 @@ classdef chessProject < handle
                 return
             end
             if delete_files
-                leftover = chessProject.delete_folder(fullfile(obj.path, obj.name, 'PSE', pse_name));
+                leftover = chessProject.delete_folder(chess_paths(obj.path, obj.name, pse_name).pse_dir);
             end
             fields = {'pse_list', 'alternative_list', 'pse_tables', 'pse_geometry', 'sims'};
             for kk = 1:length(fields)
@@ -369,7 +343,7 @@ classdef chessProject < handle
                 return
             end
             if delete_files
-                leftover = chessProject.delete_folder(fullfile(obj.path, obj.name, 'PSE', pse_name, alt_name));
+                leftover = chessProject.delete_folder(chess_paths(obj.path, obj.name, pse_name, alt_name).alt_dir);
             end
             fields = {'alternative_list', 'pse_tables', 'pse_geometry', 'sims'};
             for kk = 1:length(fields)
@@ -450,7 +424,7 @@ classdef chessProject < handle
             files = cell(0, 1);
             for pp = 1:numel(obj.pse_list)
                 for aa = 1:numel(obj.alternative_list{pp})
-                    for wf = {'PROS-RB', 'DET', 'LCS', 'PROS-FB'}
+                    for wf = {chess_workflows().wflow_name}
                         files = [files; obj.bundle_files(obj.pse_list{pp}, obj.alternative_list{pp}{aa}, db_name, wf{1})]; %#ok<AGROW>
                     end
                 end
@@ -469,7 +443,7 @@ classdef chessProject < handle
                         rows = obj.sims{pp}{aa};
                         wfs = {rows(strcmpi(db_name, {rows.db})).workflow};
                     end
-                    for wf = {'PROS-RB', 'DET', 'LCS', 'PROS-FB'}
+                    for wf = {chess_workflows().wflow_name}
                         if ~any(strcmpi(wf{1}, wfs)) && ~isempty(obj.bundle_files(obj.pse_list{pp}, obj.alternative_list{pp}{aa}, db_name, wf{1}))
                             wfs{end+1} = wf{1}; %#ok<AGROW>
                         end
@@ -723,7 +697,6 @@ classdef chessProject < handle
                 project_names cell = {}
             end
             new_name = char(new_name);
-            proj_dir = fullfile(obj.path, obj.name);
             switch level
                 case 'proj'
                     current = obj.name;
@@ -734,7 +707,7 @@ classdef chessProject < handle
                     p = find(strcmp(pse_name, obj.pse_list), 1);
                     current = pse_name;
                     siblings = obj.pse_list([1:p-1, p+1:end]);
-                    parent = fullfile(proj_dir, 'PSE');
+                    parent = chess_paths(obj.path, obj.name).pse_root_dir;
                     name_field = 'struc_id';
                 case 'alt'
                     p = find(strcmp(pse_name, obj.pse_list), 1);
@@ -742,7 +715,7 @@ classdef chessProject < handle
                     a = find(strcmp(alt_name, alts), 1);
                     current = alt_name;
                     siblings = alts([1:a-1, a+1:end]);
-                    parent = fullfile(proj_dir, 'PSE', pse_name);
+                    parent = chess_paths(obj.path, obj.name, pse_name).pse_dir;
                     name_field = 'case_name';
             end
             msg = chessProject.name_problem(new_name, siblings, current);
@@ -836,8 +809,9 @@ classdef chessProject < handle
 
         function note = export_archive(obj, zip_file)
             % Project Archive zip_file: <name>/... (The Project Folder) Plus, When The Project Has A Region (project_region) And A
-            % Valid chs_dependencies Folder Elsewhere, <name>/CHS_Dependencies/ With That Region's Files Only: Grid_Files\<region>,
-            % Bias_and_Uncertainty\<region>, Probability_Masses\<region> (If Any), Probability_Masses\*.mat (Shared TC Files).
+            % Valid chs_dependencies Folder Elsewhere, <name>/CHS_Dependencies/ With That Region's Files Only (chs_dependency_files:
+            % region_files Under Their Bias_and_Uncertainty|Grid_Files|Probability_Masses\<region> Folders, shared_files Under
+            % Probability_Masses).
             % java.util.zip (MATLAB zip Takes One Root Folder): Nothing Is Copied Into The Project Folder. note: Status Text
             proj_dir = fullfile(obj.path, obj.name);
             bundle_dir = fullfile(proj_dir, 'CHS_Dependencies');
@@ -859,20 +833,15 @@ classdef chessProject < handle
                 src = src(keep);
                 names = names(keep);
                 top = [obj.name '/CHS_Dependencies'];
-                src = [src; {''; ''; ''; ''}];
-                names = [names; strcat(top, {'/'; '/Grid_Files/'; '/Bias_and_Uncertainty/'; '/Probability_Masses/'})];
-                for sub = {'Grid_Files', 'Bias_and_Uncertainty', 'Probability_Masses'}
-                    sub_dir = fullfile(obj.chs_dependencies, sub{1}, region);
-                    if isfolder(sub_dir)
-                        [s, n] = chessProject.folder_entries(sub_dir, [top '/' sub{1} '/' region]);
-                        src = [src; s]; %#ok<AGROW>
-                        names = [names; n]; %#ok<AGROW>
-                    end
-                end
-                pm = dir(fullfile(obj.chs_dependencies, 'Probability_Masses', '*.mat'));
-                pm = pm(~[pm.isdir]);
-                src = [src; fullfile({pm.folder}', {pm.name}')];
-                names = [names; strcat([top '/Probability_Masses/'], {pm.name}')];
+                chs_files = chs_dependency_files(obj.chs_dependencies, region);
+                % Archive Names Keep The Last Path Parts: <subfolder>/<region>/<file> (Region), Probability_Masses/<file> (Shared)
+                last_parts = @(f, n) strjoin(f(end-n+1:end), '/');
+                region_rel = cellfun(@(f) last_parts(strsplit(f, filesep), 3), chs_files.region_files, 'un', false);
+                shared_rel = cellfun(@(f) last_parts(strsplit(f, filesep), 2), chs_files.shared_files, 'un', false);
+                region_dirs = unique(cellfun(@(r) r(1:find(r == '/', 1, 'last')), region_rel, 'un', false));
+                dir_names = [{'/'; '/Grid_Files/'; '/Bias_and_Uncertainty/'; '/Probability_Masses/'}; strcat('/', region_dirs)];
+                src = [src; repmat({''}, numel(dir_names), 1); chs_files.region_files; chs_files.shared_files];
+                names = [names; strcat(top, dir_names); strcat([top '/'], [region_rel; shared_rel])];
                 note = sprintf('Project exported to %s with CHS_Dependencies (region %s files).', zip_file, region);
             end
             chessProject.write_zip(zip_file, src, names);
@@ -900,9 +869,12 @@ classdef chessProject < handle
             % (_prev).mat (Library chess_paths; Exact, Case-Insensitive Names), Responses File First. Column Cell
             paths = chess_paths(obj.path, obj.name, pse_name, alt_name, chessProject.workflow_number(workflow), db_name);
             d = dir(fullfile(paths.wf_dir, '*.mat'));
-            pat = ['^' regexptranslate('escape', [db_name '_' workflow])...
-                '_(config_file|project_forcing|project_responses|sampling_seed)(_prev)?\.mat$'];
-            d = d(~cellfun(@isempty, regexpi({d.name}, pat, 'once')));
+            in_bundle = false(size(d));
+            for ff = 1:numel(d)
+                run_file = chess_paths('parse', d(ff).name);
+                in_bundle(ff) = ~isempty(run_file) && strcmpi(run_file.db, db_name) && strcmpi(run_file.wflow_name, workflow);
+            end
+            d = d(in_bundle);
             files = cell(0, 1);
             for ff = 1:numel(d)
                 files{end+1, 1} = fullfile(d(ff).folder, d(ff).name); %#ok<AGROW>
@@ -916,15 +888,17 @@ classdef chessProject < handle
             % chess_paths; Case-Insensitive, Run Backups Not Counted). Column Struct Array: db, workflow (Upper Case), config
             % (Its Config File), datenum (Responses File Date)
             bundles = struct('db', {}, 'workflow', {}, 'config', {}, 'datenum', {});
-            alt_dir = fullfile(obj.path, obj.name, 'PSE', pse_name, alt_name);
-            wf = {'PROS', 'PROS-RB|PROS-FB'; 'DET', 'DET'; 'LCS', 'LCS'};
-            for kk = 1:size(wf, 1)
-                d = dir(fullfile(alt_dir, wf{kk, 1}, '*_project_responses.mat'));
-                tok = regexpi({d.name}, ['^(.+)_(' wf{kk, 2} ')_project_responses\.mat$'], 'tokens', 'once');
-                for ff = find(~cellfun(@isempty, tok))
-                    wf_name = upper(tok{ff}{2});
-                    bundles(end+1, 1) = struct('db', tok{ff}{1}, 'workflow', wf_name, 'datenum', d(ff).datenum,...
-                        'config', fullfile(d(ff).folder, [tok{ff}{1} '_' wf_name '_config_file.mat'])); %#ok<AGROW>
+            alt_dir = chess_paths(obj.path, obj.name, pse_name, alt_name).alt_dir;
+            for wf_folder = unique({chess_workflows().folder}, 'stable')
+                d = dir(fullfile(alt_dir, wf_folder{1}, '*_project_responses.mat'));
+                for ff = 1:numel(d)
+                    run_file = chess_paths('parse', d(ff).name);
+                    if isempty(run_file) || ~strcmp(run_file.file_type, 'project_responses') || run_file.is_backup...
+                            || ~strcmp(run_file.wf_folder, wf_folder{1})
+                        continue
+                    end
+                    bundles(end+1, 1) = struct('db', run_file.db, 'workflow', run_file.wflow_name, 'datenum', d(ff).datenum,...
+                        'config', fullfile(d(ff).folder, [run_file.db '_' run_file.wflow_name '_config_file.mat'])); %#ok<AGROW>
                 end
             end
         end
@@ -1093,8 +1067,10 @@ classdef chessProject < handle
         end
 
         function wf = workflow_number(wflow_name)
-            % Library Workflow Number Of A chess_paths wflow_name (PROS-RB 1, DET 2, LCS 3, PROS-FB 4; Case-Insensitive)
-            wf = find(strcmpi(wflow_name, {'PROS-RB', 'DET', 'LCS', 'PROS-FB'}), 1);
+            % Library Workflow Number Of A chess_paths wflow_name (chess_workflows: PROS-RB 1, DET 2, LCS 3, PROS-FB 4;
+            % Case-Insensitive; [] When Unknown)
+            workflows = chess_workflows();
+            wf = [workflows(find(strcmpi(wflow_name, {workflows.wflow_name}), 1)).number];
         end
 
         function [lock, holder, problem] = acquire_lock(proj_dir)
@@ -1413,12 +1389,13 @@ classdef chessProject < handle
 
         function msg = chs_dependencies_problem(chs_dir, region)
             % '' When chs_dir Is A CHS_Dependencies Folder (Bias_and_Uncertainty, Grid_Files, Probability_Masses) That, For A
-            % Non-Empty region, Holds Grid_Files\<region> And Bias_and_Uncertainty\<region> (Great Lakes Studies Have No
-            % Probability_Masses\<region>). Else The Message Shown To The User
+            % Non-Empty region, Holds The Region's Study Grid And Both Bias & Uncertainty Files (chs_dependency_files; Great
+            % Lakes Studies Have No TC Files). Else The Message Shown To The User
             msg = '';
-            if isempty(chs_dir) || ~all(isfolder(fullfile(chs_dir, {'Bias_and_Uncertainty', 'Grid_Files', 'Probability_Masses'})))
+            chs_files = chs_dependency_files(chs_dir, region);
+            if ~chs_files.folder_layout_ok
                 msg = 'Selected CHS_Dependencies folder does not meet required folder structure.';
-            elseif ~isempty(region) && ~all(isfolder(fullfile(chs_dir, {'Grid_Files', 'Bias_and_Uncertainty'}, region)))
+            elseif ~isempty(region) && ~(chs_files.study_grid_available && chs_files.bias_uncertainty_available)
                 msg = sprintf('This CHS_Dependencies folder has no %s files. Select a folder containing region %s.', region, region);
             end
         end

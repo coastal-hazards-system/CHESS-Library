@@ -9,7 +9,7 @@ classdef det_methods < CHESSPlotsBase
 
     properties (Constant, Access=private)
         % Plotted Before The Responses, In This Order
-        forcing_fields = {'SWL', 'Hm0_offshore', 'Hm0_toe', 'Tp', 'h', 'Rc'}
+        forcing_fields = response_registry('output', 'names', 'kind', 'forcing')
     end
 
     methods (Access=public)

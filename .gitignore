@@ -1,12 +1,12 @@
 .DS_Store
 *.asv
+~$*
 *.mat
 **/*.mat
 *.zip
 *.h5
 *.docx
 ignore_this
-CHESS_Library/Forcing_Generation/Forcing_Adjustments/NOAA-Test*
 CHS_Dependencies
 Test_Env
 CHESS-Library.wiki
@@ -16,4 +16,5 @@ CHESS_Outputs
 unit_test
 
 
-!CHESS_Library/Structure_Reponses/ANN/*.mat
+!CHESS_Library/Structure_Responses/ANN/*.mat
+CHESS_Library/Retired/

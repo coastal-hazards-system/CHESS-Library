@@ -3,7 +3,7 @@ function [data, config] = boundary_conditions_adjust(config, structure, data, st
     %% DESCRIPTION
         Step 3 of call_chess_boundary_conditions.m: forcing adjustments of
         one dataset (data type x match type x storm type), per workflow.
-            - PROS, DET, LCS: Forcing_Adjustments/adjust_project_forcing.m
+            - PROS, DET, LCS: Adjustments/adjust_project_forcing.m
               (random tides, SLR, depth limitation -> Hm0_toe). Tide start
               hours shared across datasets are drawn before the dataset
               loop (call_chess_boundary_conditions.m).

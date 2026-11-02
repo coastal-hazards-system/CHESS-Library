@@ -6,7 +6,7 @@ function [vertical_datum, sp_coords] = chs_data_attributes(CHS_Data)
         callers that only have a CHS_Data .mat (no .h5 files) recover the
         same details read from the .h5 root attributes ('Vertical Datum',
         'Save Point Latitude', 'Save Point Longitude'). Read from the first
-        ADCIRC storm file (chs_storm_file_names.m: Peaks/Timeseries; HC/AEF
+        ADCIRC storm file (chs_file_name_parts.m: Peaks/Timeseries; HC/AEF
         files are ignored). The coordinates locate the savepoint in the
         CHS_Dependencies study grid (storm_db_bias_uncertainty.m).
 
@@ -24,8 +24,8 @@ function [vertical_datum, sp_coords] = chs_data_attributes(CHS_Data)
 vertical_datum = '';
 sp_coords = [];
 % ADCIRC Reference File (First Storm File Found)
-[~, is_storm] = chs_storm_file_names({CHS_Data.Filename});
-ad_indx = find(is_storm & contains({CHS_Data.Filename}, 'ADCIRC'), 1);
+file_parts = chs_file_name_parts({CHS_Data.Filename});
+ad_indx = find([file_parts.is_storm_file] & [file_parts.is_adcirc], 1);
 if isempty(ad_indx)
     return
 end

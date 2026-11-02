@@ -529,7 +529,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function plot_project_responses(app, target, base_fnt)
-            % [NEW] Results Viewer: Draw The Selected Plot Type With Its CHESS-Library Method.
+            % [NEW] Results Viewer: Draw The Selected Plot Type (chessController.draw_results_plot -> chessResults: CHESS-Library
+            % Plot Method + Results Table Data).
             %   plot_project_responses(app)                   -> Results Tab Axes + Results Table (Multi-Panel Plots: Drawn
             %                                                    In The Tab Mirror Panel If The Cell Is Big Enough, Else A Note)
             %   plot_project_responses(app, target, base_fnt) -> Pop-Out (Classic Figure Or Axes)
@@ -538,9 +539,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 target = app.PSEAxes_3;
                 base_fnt = app.plotFontSize;
             end
-            state = app.controller.results;
             row = app.results_plot_row();
-            if isempty(state) || isempty(row)
+            if isempty(app.controller.results) || isempty(row)
                 return
             end
             no_storm_type = strcmp(app.StormTypeDropDown_results.Value, '-');
@@ -566,124 +566,30 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             elseif no_storm_type
                 return
             end
-            % Single-Panel Plots Need Axes, Multi-Panel Plots Take The Figure
-            if ~row.multi_panel && isa(target, 'matlab.ui.Figure')
-                target = axes('Parent', target);
-            end
-            ax = target;
-            % Selection
+            % Selection (Widgets Read Here Only) -> Library Plot
             ds_query = app.results_ds_query();
             field = app.FieldToPlotDropDown_results.Value;
-            aux = app.StormIDDropDown_results.Value;
-            lc_index = str2double(aux); % Life Cycle ('All' -> [])
-            if isnan(lc_index)
-                lc_index = [];
+            request.ds_query = ds_query;
+            request.field = field;
+            request.aux = app.StormIDDropDown_results.Value;
+            request.options = app.get_results_options(row.key);
+            request.base_font = base_fnt;
+            request.in_results_tab = tab_mode;
+            request.busy_parent = app.UIFigure;
+            request.event_selection = app.results_selection_for(row.key, ds_query);
+            request.event_on_change = @(s) app.results_selection_changed(row.key, s, ds_query);
+            request.open_viewer_popout = @() app.draw_viewer_popout(row.key, ds_query, field);
+            [results_table, plot_error] = app.controller.draw_results_plot(row, target, request);
+            if tab_mode
+                app.PSETable_3.ColumnName = results_table.column_names;
+                app.PSETable_3.Data = results_table.data;
             end
-            opts = app.get_results_options(row.key);
-            % Plot Data Loaded On Demand
-            config = state.config;
-            storm = [];
-            dsw = [];
-            add_events = 0; % Hazard Curve Events Overlay Mode: 0 Off, 1 Run Sample, 2 Storm Values
-            if strcmp(row.key, 'hc') && ~strcmp(ds_query.storm_type, 'CC') % CC: No Overlays
-                add_events = max([0, find(strcmp(aux, {'Run Sample', 'Storm Values'}), 1)]);
-            end
-            if any(strcmp(row.key, {'event', 'scheme'}))
-                config.sp_ID = CHSStormDBImportUI.get_savepoint_id(state.dbObj); % Title (GUI Run Configs Leave sp_ID Empty)
-            end
-            if strcmp(row.key, 'scheme')
-                storm = app.controller.load_storm(state.dbObj);
-            end
-            project_forcing = state.project_forcing;
-            if any(strcmp(row.key, {'event', 'det_table'})) % Saved Forcing Only (No Storm DB)
-                project_forcing = app.controller.results_project_forcing();
-            elseif add_events > 0 || strcmp(row.key, 'scheme') % Events Overlay / Sampling Scheme Need Project Forcing + TC Probability Masses
-                [project_forcing, dsw] = app.controller.results_forcing();
-            end
-            chessPlot = CHESSPlots(config, state.Resp, storm, project_forcing, dsw, state.structure, base_fnt, app.controller.project.unitsys);
-            try
-                switch row.key
-                    case 'hc' % PROS Hazard Curve (+ Table)
-                        chessPlot.hc_plot(ax, ds_query, field, add_events);
-                        if tab_mode
-                            data = aux_methods.pull_data(ds_query, state.Resp);
-                            data = data(strcmp({data.var}, field));
-                            cls = arrayfun(@(x) ['CL' num2str(x)], data.CL, 'un', false);
-                            cls(data.CL == 50) = {'BE'};
-                            if state.config.pros_use_aep == 1
-                                x_lbl = 'AEP';
-                            else
-                                x_lbl = 'AEF [1/yr]';
-                            end
-                            app.PSETable_3.ColumnName = [{x_lbl}, cls];
-                            app.PSETable_3.Data = [data.x_table, data.y_table];
-                        end
-                    case 'det_scatter' % Deterministic: Response vs Forcing (X: Storm ID Dropdown, Y: Field, Color: Plot Options)
-                        fields = app.controller.det_fields(aux_methods.pull_data(ds_query, state.Resp));
-                        c_field = opts.c_field;
-                        if isempty(c_field) || ~any(strcmp(fields, c_field))
-                            c_field = fields{max([1, find(strcmp(fields, 'Hm0_toe'), 1)])};
-                        end
-                        chessPlot.response_vs_forcing_plot(ax, ds_query, aux, field, c_field);
-                        if tab_mode % Table: The Plotted Values (Per Storm; Timeseries -> Storm Maxima)
-                            mx = aux_methods.pull_data(ds_query, state.Resp).Max;
-                            app.PSETable_3.ColumnName = {'Storm ID', aux, field, c_field};
-                            app.PSETable_3.Data = [mx.storm_id(:), mx.(aux)(:), mx.(field)(:), mx.(c_field)(:)];
-                        end
-                    case 'det_table' % Response Table Pop-Out (uifigure, Replaces The Previous One, Same Place)
-                        app.draw_viewer_popout(row.key, ds_query, field);
-                    case 'det_compare' % Deterministic: Peaks Value vs Timeseries Peak (Same Storms, 1:1 Line)
-                        chessPlot.peaks_vs_timeseries_plot(ax, ds_query, field);
-                        if tab_mode
-                            pk = aux_methods.pull_data(ds_query, state.Resp).Max;
-                            q_ts = ds_query;
-                            q_ts.data_type = 'Timeseries';
-                            ts = aux_methods.pull_data(q_ts, state.Resp).Max;
-                            [ids, ia, ib] = intersect(pk.storm_id, ts.storm_id);
-                            app.PSETable_3.ColumnName = {'Storm ID', ['Peaks ' field], ['Timeseries ' field]};
-                            app.PSETable_3.Data = [ids(:), pk.(field)(ia), ts.(field)(ib)];
-                        end
-                    case 'event' % Storm Event Viewer: Saved Results, Selectors In The Figure (Pop-Out: Its Own uifigure, Redrawn In Place)
-                        if tab_mode
-                            chessPlot.storm_event_viewer(target, ds_query, field, app.results_selection_for(row.key, ds_query), 0,...
-                                @(s) app.results_selection_changed(row.key, s, ds_query));
-                        else
-                            app.draw_viewer_popout(row.key, ds_query, field);
-                        end
-                    case 'annual' % LCS Annual Response Distribution (+ Table Of Binned Values Per Sim Year)
-                        [edges, labels] = app.controller.bin_edges(chessPlot, ds_query, field, opts.bin_edges);
-                        [~, bin_data] = chessPlot.annual_response_distribution(ax, ds_query, field, edges, string(aux),...
-                            opts.cb_lim, opts.grid_on, opts.cb_log);
-                        if tab_mode && isempty(bin_data) % No Finite Values: Library "No Data" Axes, Empty Table
-                            app.PSETable_3.ColumnName = {'Sim Year'};
-                            app.PSETable_3.Data = zeros(0, 1);
-                        elseif tab_mode
-                            app.PSETable_3.ColumnName = [{'Sim Year'}, labels];
-                            app.PSETable_3.Data = [(1:size(bin_data, 1))', bin_data(:, 1:numel(labels))];
-                        end
-                    case 'armor' % Slope Armor Damage (S_* Fields: All Or One Life Cycle)
-                        hold(ax, 'on');
-                        chessPlot.slope_armor_damage_plot(ax, ds_query, field, lc_index);
-                    case 'sampling' % Event Sampling Distribution (All Or One Life Cycle)
-                        chessPlot.event_sampling_distribution(ax, ds_query, lc_index);
-                    case 'damaging'
-                        chessPlot.plot_mound_damaging_instances_distribution(ax, ds_query, field);
-                    case 'submergence' % Field To Plot -> Normalize, Storm ID -> X Scale
-                        chessPlot.plot_pse_submergance_distribution(ax, ds_query, strcmp(aux, 'Log'), strcmp(field, 'count'),...
-                            opts.cb_log, opts.cb_lim);
-                    case 'final'
-                        chessPlot.plot_mound_final_damage_state(ax, ds_query, field);
-                    case 'dashboard' % Mound Damage Dashboard (Pop-Out)
-                        chessPlot.mound_damage_dashboard(target, ds_query, field, opts.bin_edges, opts.cb_lim);
-                    case 'scheme' % LCS Storm Sampling Diagnostics (Pop-Out)
-                        chessPlot.sampling_scheme_dashboard(target, ds_query);
-                end
-            catch me
+            if ~isempty(plot_error)
                 if tab_mode
                     app.reset_results_axes();
                     title(app.PSEAxes_3, 'Plot not available for this selection');
                 end
-                app.auxLib.alert_dlgbox(me.message, ['Results Plot: ' row.label], 'warning');
+                app.auxLib.alert_dlgbox(plot_error.message, ['Results Plot: ' row.label], 'warning');
             end
             % Right-Click Plot Options On The Tab Plot (And The Mirrored Multi-Panel Axes)
             if tab_mode
@@ -1275,13 +1181,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     siblings = proj.pse_list(~strcmp(proj.pse_list, current));
                     title_str = 'Rename PSE';
                     prompt = sprintf('New name for PSE "%s":', current);
-                    parent_dir = fullfile(proj.path, proj.name, 'PSE');
+                    parent_dir = chess_paths(proj.path, proj.name).pse_root_dir;
                 case 'alt'
                     alts = proj.alternative_list{strcmp(proj.pse_list, pse_name)};
                     siblings = alts(~strcmp(alts, current));
                     title_str = 'Rename Alternative';
                     prompt = sprintf('New name for alternative "%s" (PSE %s):', current, pse_name);
-                    parent_dir = fullfile(proj.path, proj.name, 'PSE', pse_name);
+                    parent_dir = chess_paths(proj.path, proj.name, pse_name).pse_dir;
                     stage = proj.alt_stage(pse_name, alt_name);
                     if stage > 0
                         prompt = sprintf('%s\nMulti-line stage %d: keep the "%s" ending.', prompt, stage, chessProject.stage_suffix(stage));
@@ -2094,6 +2000,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.set_dropdown_items(app.StormIDDropDown_results, a_items);
             app.StormIDDropDown_results.Enable = a_on;
         end
+
     end
 
 
@@ -2120,7 +2027,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if ~isfile(fullfile(lib_dir, 'Setup', 'create_structure_geometry.m'))
                 app.auxLib.error_dlgbox(['CHESS_Library not found. The app must be located in CHESS_Library' filesep 'GUI.']);
             else
-                addpath(genpath(lib_dir));
+                addpath(lib_dir);
+                chess_setup_path;
             end
             app.controller = chessController();
             % Constants Table (Columns Sized To Their Text; No Project Yet: '-' Rows)

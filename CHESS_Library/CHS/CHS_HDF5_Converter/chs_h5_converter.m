@@ -14,59 +14,134 @@ function [cData] = chs_h5_converter(Filein) %#ok<INUSL>
 
 %-----------------------------------------------------------------------------------------------------------------------------
 %% GET CHS FILE IDENTIFIERS
+[chs_region, FileType, storm_type] = parse_chs_file_name(Filein);
+%-----------------------------------------------------------------------------------------------------------------------------
+
+%% CHECK HDF5 FILE HIERARCHY (VERSION, BASE LEVEL AND GROUPS CONTENTS, SPECIAL CASES)
+% Get HDF5 Internal Structure
+info = h5info(Filein);
+layout = inspect_hdf5_layout(info, FileType);
+File_version = layout.File_version;
+
+%% GET ALL NAMELIST BASED ON CHECKS
+%%%% HDF5 BASE LEVEL (info.field) %%%%
+[lists, cData] = file_attribute_lists(info, layout.Has_Attributes);
+[lists, cData] = file_dataset_lists(lists, cData, info, layout);
+
+%% FIELD: GROUPS (info.Groups)
+if layout.Has_Groups
+    % Get File Groups Name List
+    lists.FileGroups = info.Groups;
+else
+    lists.FileGroups = {};
+end
+
+%%%% HDF5 GROUPS LEVEL (info.Groups.field) %%%%
+lists = group_attribute_lists(lists, info, layout.Has_Gattributes);
+lists = group_dataset_lists(lists, info, layout);
+
+%% BUILD DATA HEADERS
+if (File_version == "V1" || File_version == "V3")
+    if (layout.SRR_special==0 && layout.v1_special==0)
+        [cData.headers, cData.units] = build_headers_and_units(layout, lists);
+
+        %% EXTRACT DATA FROM HDF5
+        %%%% DATA IS STORED IN GROUPS %%%%
+        if layout.Has_Groups
+            data = read_grouped_storm_data(Filein, info, layout, lists);
+        end % END Has Groups If
+
+    else
+        %% SPECIAL CASES
+        switch FileType
+            case 'Peaks'
+                [cData,data] = read_flat_dataset_entry(cData, Filein, info, layout, lists);
+            otherwise
+                [data,cData] = chs_h5_special_cases_importer(Filein,info,lists.FA_units,lists.FileDatasets,FileType);
+        end
+    end % END V1 Special (NLR) or SRR (Special)
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    %% FORMAT EXPORT DATA
+    % Store Extracted Data Into Output Data Structure
+    cData.StormData = data;
+    if ismember(FileType,{'AEP','AEF','AEFcond'}) && size(data,1) > 1
+        cData = split_hazard_curve_entries(cData, data, info);
+    else
+        cData = format_single_entry_export(cData, data, info, FileType);
+    end
+else % V2
+    if (layout.SRR_special==0 && layout.v1_special==0) || (File_version=="V2" && layout.SRR_special==0)
+        [cData,data] = read_flat_dataset_entry(cData, Filein, info, layout, lists); %#ok<ASGLU>
+    else
+        [data,cData] = chs_h5_special_cases_importer(Filein,info,lists.FA_units,lists.FileDatasets,FileType); %#ok<ASGLU>
+    end
+end % END V1 or V2 If
+
+if length(cData) == 1
+    %% DEAL WITH LADFALL TIME
+    cData = add_storm_reference_time(cData, File_version, storm_type, FileType);
+
+    %% STORM ID Wrong Format
+    cData = storm_ids_as_text(cData);
+end
+
+%% STERIC WATER LEVEL ADJUSTMENTS  + DATUM SHIFT
+cData = great_lakes_water_level_adjustments(cData, chs_region, Filein);
+end
+
+%% AUX FUNCTION: CHS FILE IDENTIFIERS FROM THE FILE NAME (REGION, POST PROCESSING TYPE, FILE TYPE, STORM TYPE)
+function [chs_region, FileType, storm_type] = parse_chs_file_name(Filein)
 % Split Filein Path
 [~,AA,~] = fileparts(Filein);
 % Get CHS Identifiers
 A = strsplit(AA,'_');
-% region
-chs_region = A{1,1};
-% Post Processing Type
-PostType = A{1,4};
-% Get File Type
-FileType = A{1,end};
-% Storm Type
-storm_type = A{1,2};
-%-----------------------------------------------------------------------------------------------------------------------------
+% Post Processing Type (Not Used; Read So A File Name With Fewer Than Four Identifiers Still Errors Here)
+PostType = A{1,4}; %#ok<NASGU>
+% CHS File Name Rule (chs_file_name_parts.m): Region, File Type (Last Token), Storm Type ('XC'/'TC', '' Unrecognized Flag)
+name_parts = chs_file_name_parts(Filein);
+chs_region = name_parts.region;
+FileType = name_parts.data_type;
+storm_type = name_parts.storm_type;
+end
 
-%% CHECK HDF5 FILE HIERARCHY
-
-% Get HDF5 Internal Structure
-info = h5info(Filein);
+%% AUX FUNCTION: HDF5 FILE HIERARCHY (VERSION, BASE LEVEL AND GROUPS CONTENTS, SPECIAL CASES)
+function layout = inspect_hdf5_layout(info, FileType)
+layout.FileType = FileType;
 % Check What Version Of HDF5 File Is
-File_version = resolve_chs_file_version(info, FileType);
+layout.File_version = resolve_chs_file_version(info, FileType);
 
 % Check If HDF5 File Has Groups
-Has_Groups = length(info.Groups)>0; %#ok<*ISMT>
+layout.Has_Groups = length(info.Groups)>0; %#ok<*ISMT>
 % Check If HDF5 File Has Datasets (Base Level)
-Has_Datasets =   length(info.Datasets)>0;
+layout.Has_Datasets =   length(info.Datasets)>0;
 % Check If HDF5 File Has Attributes (Base Level)
-Has_Attributes =  length(info.Attributes)>0;
+layout.Has_Attributes =  length(info.Attributes)>0;
 
 %% CHECK HDF5 GROUPS (IF ANY) INTERNAL HIERARCHY
 % If File Is V1 And Has No Groups, Mark Special Case (NLR Files)
-v1_special = Has_Groups==0;
+layout.v1_special = layout.Has_Groups==0;
 % If File Has Groups But They're SRR's Own Non-Standard Named Subgroups, Mark Special Case
-SRR_special = Has_Groups~=0 && strcmp(FileType,'SRR');
+layout.SRR_special = layout.Has_Groups~=0 && strcmp(FileType,'SRR');
 % Check If Groups Have Attributes
-if Has_Groups
-    Has_Gattributes =  any(cellfun(@(x) length(x)>0, {info.Groups.Attributes}));
-    Has_Gdatasets = any(cellfun(@(x) length(x)>0, {info.Groups.Datasets}));
-    if Has_Gdatasets
-        Has_Gdatasets_Attributes = any(cellfun(@(x) length(x)>0, {info.Groups(1).Datasets.Attributes}));
+if layout.Has_Groups
+    layout.Has_Gattributes =  any(cellfun(@(x) length(x)>0, {info.Groups.Attributes}));
+    layout.Has_Gdatasets = any(cellfun(@(x) length(x)>0, {info.Groups.Datasets}));
+    if layout.Has_Gdatasets
+        layout.Has_Gdatasets_Attributes = any(cellfun(@(x) length(x)>0, {info.Groups(1).Datasets.Attributes}));
     else
-        Has_Gdatasets_Attributes = false;
+        layout.Has_Gdatasets_Attributes = false;
     end
 else
-    Has_Gattributes  = false;
-    Has_Gdatasets = false;
-    Has_Gdatasets_Attributes = false;
+    layout.Has_Gattributes  = false;
+    layout.Has_Gdatasets = false;
+    layout.Has_Gdatasets_Attributes = false;
 end
-% Check If Groups Have Datasets
+end
 
-%% GET ALL NAMELIST BASED ON CHECKS
-%%%% HDF5 BASE LEVEL (info.field) %%%%
-
-%% FIELD: ATTRIBUTES (info.Attributes)
+%% AUX FUNCTION: FILE ATTRIBUTES NAME LISTS AND UNITS (info.Attributes)
+function [lists, cData] = file_attribute_lists(info, Has_Attributes)
+cData = struct();
+% "sp_depth_on_FA" Is Only Set When The File Has Attributes (group_attribute_lists Reads It)
 if Has_Attributes
     %%%% PROCESS NAME LISTS %%%%
     % Get File Attributes Name List
@@ -75,7 +150,7 @@ if Has_Attributes
     % given file simply won't have the ones that don't apply to its layout)
     FA = {'Save Point ID';'Save Point Latitude';'Save Point Longitude';'Save Point Depth';'Storm Type'};
     %
-    sp_depth_on_FA = ismember('Save Point Depth', {FileAttributes.Name});
+    lists.sp_depth_on_FA = ismember('Save Point Depth', {FileAttributes.Name});
     % Get Location In HDF5 File Attributes Name List, In FA's Order
     [found_mask, FA_indx_raw] = ismember(FA, {FileAttributes.Name});
     FA_indx = FA_indx_raw(found_mask);
@@ -96,14 +171,17 @@ if Has_Attributes
 else
     FileAttributes = [];
     FA_indx = [];
-    FA_units_indx = {};
     FA_units = {};
 end
+lists.FileAttributes = FileAttributes;
+lists.FA_indx = FA_indx;
+lists.FA_units = FA_units;
+end
 
-%% FIELD: DATASETS (info.Datasets)
-
-if Has_Datasets
-    if (File_version=="V2" || File_version=="V3")
+%% AUX FUNCTION: FILE DATASETS NAME LISTS, DESCRIPTIONS AND UNITS (info.Datasets)
+function [lists, cData] = file_dataset_lists(lists, cData, info, layout)
+if layout.Has_Datasets
+    if (layout.File_version=="V2" || layout.File_version=="V3")
         %%%% HEADERS
         % Extract Dataset Info
         FileDatasets = info.Datasets;
@@ -132,22 +210,18 @@ else
     FileDatasets =  {};
     FDS_units = {};
 end
-
-%% FIELD: GROUPS (info.Groups)
-if Has_Groups
-    % Get File Groups Name List
-    FileGroups = info.Groups;
-else
-    FileGroups = {};
+lists.FileDatasets = FileDatasets;
+lists.FDS_units = FDS_units;
 end
 
-%% FIELD: GROUPS ATTRIBUTES (info.Groups.Attributes)
+%% AUX FUNCTION: GROUP ATTRIBUTES NAME LISTS AND UNITS (info.Groups.Attributes)
+function lists = group_attribute_lists(lists, info, Has_Gattributes)
 if Has_Gattributes
     %%%% PROCESS NAME LISTS %%%%
     % Taking First Group As Model For Rest
     GAttributes = info.Groups(1).Attributes;
     % Define Group Attributes To Look For
-    if sp_depth_on_FA
+    if lists.sp_depth_on_FA
         GA = {'Storm Name';'Storm ID';'Storm Type';'Storm Group'};
     else
         GA = {'Save Point Depth';'Storm Name';'Storm ID';'Storm Type';'Storm Group'};
@@ -167,12 +241,20 @@ if Has_Gattributes
 else
     GAttributes = {};
     GA_indx = [];
-    GA_units_indx =[];
     GA_units = [];
 end
+lists.GAttributes = GAttributes;
+lists.GA_indx = GA_indx;
+lists.GA_units = GA_units;
+end
 
+%% AUX FUNCTION: GROUP DATASETS NAME LISTS AND UNITS (info.Groups.Datasets, info.Groups.Datasets.Attributes)
+function lists = group_dataset_lists(lists, info, layout)
+% "AEP_val" Is Only Set For AEP V1 Files With Group Dataset Attributes (read_grouped_storm_data Reads It)
+FileType = layout.FileType;
+File_version = layout.File_version;
 %% FIELD: GROUPS DATASETS (info.Groups.Datasets)
-if Has_Gdatasets
+if layout.Has_Gdatasets
     %%%% PROCESS NAME LISTS %%%%
     % Taking First Group As Model For Rest
     GDatasets = info.Groups(1).Datasets;
@@ -186,11 +268,10 @@ if Has_Gdatasets
 
 else
     GDatasets = {};
-    GDS_indx = [];
 end
 
 %% FIELD: GROUPS DATASETS ATTRIBUTES (info.Groups.Datasets.Attributes)
-if Has_Gdatasets_Attributes
+if layout.Has_Gdatasets_Attributes
 
     %%%% PROCESS NAME LISTS %%%%
     % Taking First Group As Model For Rest
@@ -201,216 +282,203 @@ if Has_Gdatasets_Attributes
     if (FileType == "AEP" && File_version == "V1")
         % Add AEP Values
         AEP_val = GDatasetsAttributes{1};
-        AEP_val = str2double(split(AEP_val(contains({AEP_val.Name},{'AEP'})).Value,','));
+        lists.AEP_val = str2double(split(AEP_val(contains({AEP_val.Name},{'AEP'})).Value,','));
         %
         GDA_units = [{'yr^-1'},GDA_units];
     end
 else
-    GDatasetsAttributes = {};
     GDA_units = {};
 end
+lists.GDatasets = GDatasets;
+lists.GDA_units = GDA_units;
+end
 
-%% BUILD DATA HEADERS
-if (File_version == "V1" || File_version == "V3")
-    if (SRR_special==0 && v1_special==0)
-        [cData.headers, cData.units] = build_headers_and_units(FileType, File_version, Has_Attributes, Has_Gattributes, Has_Datasets, Has_Gdatasets, FileAttributes, FA_indx, FA_units, GAttributes, GA_indx, GA_units, FileDatasets, FDS_units, GDatasets, GDA_units);
+%% AUX FUNCTION: READ STORM DATA STORED IN GROUPS (ONE GROUP PER STORM; V1/V3)
+function data = read_grouped_storm_data(Filein, info, layout, lists)
+FileType = layout.FileType;
+File_version = layout.File_version;
+FileAttributes = lists.FileAttributes;
+FA_indx = lists.FA_indx;
+FileGroups = lists.FileGroups;
+GAttributes = lists.GAttributes;
+GA_indx = lists.GA_indx;
+GDatasets = lists.GDatasets;
+% Initialize Data Storage Var
+data = {};
+%%%% FILE ATTRIBUTES %%%%%
+if layout.Has_Attributes
+    % Convert Any Character-Stored Numeric Values (e.g. Lat/Lon/Depth) To Numbers
+    dummy = numeric_convert_char_values({FileAttributes(FA_indx).Value});
+    % Allocate Attributes To Data Matrix (Assuming: SP spatial coords are constant for all storms in dataset)
+    data = [data,repmat(dummy,length(FileGroups),1)];
+end
+%%%% GROUPS ATTRIBUTES %%%%
+if layout.Has_Gattributes
+    % Find Save Point Depth Location In Group Attributes (Assuming: constant for all storms in dataset)
+    % (Index Into GAttributes, Not Into The GA_indx Subset)
+    dummy_indx = GA_indx(strcmp({GAttributes(GA_indx).Name},'Save Point Depth'));
+    % Change Save Point Depth To Number
+    if ~isempty(dummy_indx) && (ischar(GAttributes(dummy_indx).Value) || isstring(GAttributes(dummy_indx).Value))
+        GAttributes(dummy_indx).Value = str2double(GAttributes(dummy_indx).Value);
+    end
+    % Repeate Save Point Depth For All Storms In Dataset
+    dummy = repmat({GAttributes(dummy_indx).Value},length(FileGroups),1);
+    % If Save Point Depth Was Found Then Add It To Output Var
+    if ~isempty(dummy)
+        data = [data,dummy];
+    end
 
-        %% EXTRACT DATA FROM HDF5
-        %%%% DATA IS STORED IN GROUPS %%%%
-        if Has_Groups
-            % Initialize Data Storage Var
-            data = {};
-            %%%% FILE ATTRIBUTES %%%%%
-            if Has_Attributes
-                % Convert Any Character-Stored Numeric Values (e.g. Lat/Lon/Depth) To Numbers
-                dummy = numeric_convert_char_values({FileAttributes(FA_indx).Value});
-                % Allocate Attributes To Data Matrix (Assuming: SP spatial coords are constant for all storms in dataset)
-                data = [data,repmat(dummy,length(FileGroups),1)];
-            end
-            %%%% GROUPS ATTRIBUTES %%%%
-            if Has_Gattributes
-                % Find Save Point Depth Location In Group Attributes (Assuming: constant for all storms in dataset)
-                % (Index Into GAttributes, Not Into The GA_indx Subset)
-                dummy_indx = GA_indx(strcmp({GAttributes(GA_indx).Name},'Save Point Depth'));
-                % Change Save Point Depth To Number
-                if ~isempty(dummy_indx) && (ischar(GAttributes(dummy_indx).Value) || isstring(GAttributes(dummy_indx).Value))
-                    GAttributes(dummy_indx).Value = str2double(GAttributes(dummy_indx).Value);
-                end
-                % Repeate Save Point Depth For All Storms In Dataset
-                dummy = repmat({GAttributes(dummy_indx).Value},length(FileGroups),1);
-                % If Save Point Depth Was Found Then Add It To Output Var
-                if ~isempty(dummy)
-                    data = [data,dummy];
-                end
+end
+%%%% READ MISSING FIELDS %%%%
+%%%%%%%%%%%                       % Define Group Attributes To Look For
+GA = {GAttributes(GA_indx).Name};
+GA = GA(strcmp('Save Point Depth',GA)==0);
+%%%%%%%                     % Initialize Dummy Storage Vars
+nStorms = length(FileGroups(:,1));
+DScat = cell(nStorms, length(GDatasets));
+GAcat = cell(nStorms, length(GA));
+for stm = 1:nStorms
+    % Get Location In HDF5 File Attributes Name List
+    [GA_found2, GA_indx2_raw] = ismember(GA, {FileGroups(stm).Attributes.Name});
+    % Get Storm Dependant Group Attributes
+    GA_dummy = {FileGroups(stm).Attributes(GA_indx2_raw(GA_found2)).Value};
 
-            end
-            %%%% READ MISSING FIELDS %%%%
-            %%%%%%%%%%%                       % Define Group Attributes To Look For
-            GA = {GAttributes(GA_indx).Name};
-            GA = GA(strcmp('Save Point Depth',GA)==0);
-            %%%%%%%                     % Initialize Dummy Storage Vars
-            nStorms = length(FileGroups(:,1));
-            DScat = cell(nStorms, length(GDatasets));
-            GAcat = cell(nStorms, length(GA));
-            for stm = 1:nStorms
-                % Get Location In HDF5 File Attributes Name List
-                [GA_found2, GA_indx2_raw] = ismember(GA, {FileGroups(stm).Attributes.Name});
-                % Get Storm Dependant Group Attributes
-                GA_dummy = {FileGroups(stm).Attributes(GA_indx2_raw(GA_found2)).Value};
-
-                % Get Storm Group Attributes
-                GAcat(stm, :) = GA_dummy;
-                % Loop Through ALl Datasets
-                for DS = 1:length(GDatasets)
-                    % Datasets
-                    try
-                        if strcmp(GDatasets(DS).Name,'yyyymmddHHMM')
-                            raw = h5_read_typed(Filein,[info.Groups(stm).Name,'/',GDatasets(DS).Name],GDatasets(DS));
-                            DScat(stm,DS) = cellfun(@(x) datetime(num2str(x,'%012d'),'InputFormat','yyyyMMddHHmm'), raw, 'un',false);
-                        else
-                            DScat(stm,DS) = h5_read_typed(Filein,[info.Groups(stm).Name,'/',GDatasets(DS).Name],GDatasets(DS));
-                        end
-                    catch % Missing Data Filler
-                        if strcmp(GDatasets(DS).Name,'yyyymmddHHMM')
-                            DScat(stm,DS) = {NaT};
-                        else
-                            DScat(stm,DS) = {'NaN'};
-                        end
-                    end
-                    %
-                end
-            end
-
-            if (FileType == "AEP" && File_version == "V1")
-                % Add To Output Var (replicate AEP_val across rows unless there's only one)
-                if size(DScat,1) == 1
-                    data = [data,GAcat,{AEP_val},DScat];
-                else
-                    data = [data,GAcat,repmat({AEP_val},size(DScat,1),1),DScat];
-                end
+    % Get Storm Group Attributes
+    GAcat(stm, :) = GA_dummy;
+    % Loop Through ALl Datasets
+    for DS = 1:length(GDatasets)
+        % Datasets
+        try
+            if strcmp(GDatasets(DS).Name,'yyyymmddHHMM')
+                raw = h5_read_typed(Filein,[info.Groups(stm).Name,'/',GDatasets(DS).Name],GDatasets(DS),FileType);
+                DScat(stm,DS) = cellfun(@(x) datetime(num2str(x,'%012d'),'InputFormat','yyyyMMddHHmm'), raw, 'un',false);
             else
-                % Add To Output Var
-                data = [data,GAcat,DScat];
+                DScat(stm,DS) = h5_read_typed(Filein,[info.Groups(stm).Name,'/',GDatasets(DS).Name],GDatasets(DS),FileType);
             end
-        end % END Has Groups If
-
-    else
-        %% SPECIAL CASES
-        switch FileType
-            case 'Peaks'
-                [cData,data] = read_flat_dataset_entry(cData, Filein, info, FileType, File_version, Has_Attributes, Has_Gattributes, Has_Datasets, Has_Gdatasets, FileAttributes, FA_indx, FA_units, GAttributes, GA_indx, GA_units, FileDatasets, FDS_units, GDatasets, GDA_units);
-            otherwise
-                [data,cData] = chs_h5_special_cases_importer(Filein,info,FA_units,FileDatasets,FileType);
+        catch % Missing Data Filler
+            if strcmp(GDatasets(DS).Name,'yyyymmddHHMM')
+                DScat(stm,DS) = {NaT};
+            else
+                DScat(stm,DS) = {'NaN'};
+            end
         end
-    end % END V1 Special (NLR) or SRR (Special)
-    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    %% FORMAT EXPORT DATA
-    % Store Extracted Data Into Output Data Structure
-    cData.StormData = data;
-    if ismember(FileType,{'AEP','AEF','AEFcond'}) && size(data,1) > 1
-        % V2 Hazard Curves (SWL,Hm0, Tp in same file) -- genuinely multi-row, no V2-path equivalent
-        % Repeat cData  for each dataset
-        for ll = 2:length(data(:,1))
-            cData(ll).Attributes = cData(1).Attributes;
-            cData(ll).units = cData(1).units;
-            cData(ll).headers = cData(1).headers;
-            cData(ll).StormData = cData(1).StormData(ll,:);
-        end
-        % Remove Extra Entries
-        cData(1).StormData = cData(1).StormData(1,:);
-        % Loop Through Hazard Curve Files
-        for ll = 1:length(data(:,1))
-            % Store Table Data
-            cData(ll).Table_StormData = cell2table(expand_aep_cells(data(ll,:)),'VariableNames',cData(ll).headers);
-            % Group Attributes
-            cData(ll).StormData_Description = info.Groups(ll).Attributes;
-            % Fix Units
-            cData(ll).units(5:end) = repmat({info.Groups(ll).Datasets(3).Attributes(2).Value},1,length(cData(ll).units(5:end)));
-            % Add Parameter Field
-            cData(ll).Parameter = info.Groups(ll).Name;
-        end
-    else
-        cData = format_single_entry_export(cData, data, info, FileType);
+        %
     end
-else % V2
-    if (SRR_special==0 && v1_special==0) || (File_version=="V2" && SRR_special==0)
-        [cData,data] = read_flat_dataset_entry(cData, Filein, info, FileType, File_version, Has_Attributes, Has_Gattributes, Has_Datasets, Has_Gdatasets, FileAttributes, FA_indx, FA_units, GAttributes, GA_indx, GA_units, FileDatasets, FDS_units, GDatasets, GDA_units);
-    else
-        [data,cData] = chs_h5_special_cases_importer(Filein,info,FA_units,FileDatasets,FileType);
-    end
-end % END V1 or V2 If
+end
 
-%% DEAL WITH LADFALL TIME
-if length(cData) == 1
-    if any(contains(cData.headers, {'Landfall Time'})) || File_version == "V3"
-        % Find Peak Time Index
-        p_indx = find(strcmp(cData.headers, 'Storm Name'));
+if (FileType == "AEP" && File_version == "V1")
+    AEP_val = lists.AEP_val;
+    % Add To Output Var (replicate AEP_val across rows unless there's only one)
+    if size(DScat,1) == 1
+        data = [data,GAcat,{AEP_val},DScat];
+    else
+        data = [data,GAcat,repmat({AEP_val},size(DScat,1),1),DScat];
+    end
+else
+    % Add To Output Var
+    data = [data,GAcat,DScat];
+end
+end
+
+%% AUX FUNCTION: SPLIT A MULTI-ROW HAZARD CURVE FILE (AEP/AEF/AEFcond) INTO ONE cData ENTRY PER GROUP
+function cData = split_hazard_curve_entries(cData, data, info)
+% V2 Hazard Curves (SWL,Hm0, Tp in same file) -- genuinely multi-row, no V2-path equivalent
+% Repeat cData  for each dataset
+for ll = 2:length(data(:,1))
+    cData(ll).Attributes = cData(1).Attributes;
+    cData(ll).units = cData(1).units;
+    cData(ll).headers = cData(1).headers;
+    cData(ll).StormData = cData(1).StormData(ll,:);
+end
+% Remove Extra Entries
+cData(1).StormData = cData(1).StormData(1,:);
+% Loop Through Hazard Curve Files
+for ll = 1:length(data(:,1))
+    % Store Table Data
+    cData(ll).Table_StormData = cell2table(expand_aep_cells(data(ll,:)),'VariableNames',cData(ll).headers);
+    % Group Attributes
+    cData(ll).StormData_Description = info.Groups(ll).Attributes;
+    % Fix Units
+    cData(ll).units(5:end) = repmat({info.Groups(ll).Datasets(3).Attributes(2).Value},1,length(cData(ll).units(5:end)));
+    % Add Parameter Field
+    cData(ll).Parameter = info.Groups(ll).Name;
+end
+end
+
+%% AUX FUNCTION: STORM DATE-TIME COLUMN (yyyymmddHHMM) FROM THE LANDFALL / REFERENCE TIME
+function cData = add_storm_reference_time(cData, File_version, storm_type, FileType)
+if any(contains(cData.headers, {'Landfall Time'})) || File_version == "V3"
+    % Find Peak Time Index
+    p_indx = find(strcmp(cData.headers, 'Storm Name'));
+    % Find Reference Time Header Index
+    l_indx = find(strcmp(cData.headers, 'Landfall Time'));
+    % Timeseries Flag
+    if isempty(l_indx)
         % Find Reference Time Header Index
-        l_indx = find(strcmp(cData.headers, 'Landfall Time'));
-        % Timeseries Flag
-        if isempty(l_indx)
-            % Find Reference Time Header Index
-            l_indx = find(strcmp(cData.headers, 'Time'));
-        end
-        % Grab Reference Time
-        switch File_version
-            case "V2"
-                ref_time = strsplit(lower(cData.units{l_indx}), {'hrs since ', 'z', 'utc'});
-                time_f = @(x) hours(x);
-            case "V3"
-                ref_time = strsplit(lower(cData.units{l_indx}), {'seconds since ', 'z','utc'});
-                time_f = @(x) second(x);
-        end
-        if any(strcmp(cData.headers, 'Peak Time'))
-            peak_time = cellfun(@(x) time_f(x), cData.StormData(:, string(cData.headers)=="Peak Time"),'un',false);
-        else
-            peak_time =  cellfun(@(x) zeros(size(x)), cData.StormData(:, l_indx),'un',false);
-        end
-        ref_time = datetime(ref_time{2},'InputFormat','yyyy-MM-dd HH:mm:SS','Format', 'yyyyMMddHHmm');
+        l_indx = find(strcmp(cData.headers, 'Time'));
+    end
+    % Grab Reference Time
+    switch File_version
+        case "V2"
+            ref_time = strsplit(lower(cData.units{l_indx}), {'hrs since ', 'z', 'utc'});
+            time_f = @(x) hours(x);
+        case "V3"
+            ref_time = strsplit(lower(cData.units{l_indx}), {'seconds since ', 'z','utc'});
+            time_f = @(x) second(x);
+    end
+    if any(strcmp(cData.headers, 'Peak Time'))
+        peak_time = cellfun(@(x) time_f(x), cData.StormData(:, string(cData.headers)=="Peak Time"),'un',false);
+    else
+        peak_time =  cellfun(@(x) zeros(size(x)), cData.StormData(:, l_indx),'un',false);
+    end
+    ref_time = datetime(ref_time{2},'InputFormat','yyyy-MM-dd HH:mm:SS','Format', 'yyyyMMddHHmm');
 
-        % Grab Peak Time
-        switch storm_type
-            case {'XH','XC'}
-                switch FileType
-                    case 'Peaks'
-                        total_time = datetime([char(cData.Table_StormData.("Storm Name")), repmat('00', height(cData.Table_StormData), 1)], 'InputFormat', 'yyyyMMddHHmm');
-                    case 'Timeseries'
-                        total_time =  cellfun(@(x,y) ref_time+time_f(x)-time_f(y), cData.StormData(:, l_indx), peak_time, 'UniformOutput', false);
-                end
-            otherwise
-                total_time =  cellfun(@(x,y) ref_time+time_f(x)-time_f(y), cData.StormData(:, l_indx), peak_time, 'UniformOutput', false);
-        end
-
-        cData.headers = [cData.headers(1:p_indx), {'yyyymmddHHMM'}, cData.headers(p_indx+1:end)];
-        cData.units = [cData.units(1:p_indx), {''}, cData.units(p_indx+1:end)];
-        cData.StormData = [cData.StormData(:, 1:p_indx), num2cell(total_time), cData.StormData(:, p_indx+1:end)];
-        cData.Table_StormData = [cData.Table_StormData(:, 1:p_indx), table(total_time, 'VariableNames', {'yyyymmddHHMM'}), cData.Table_StormData(:, p_indx+1:end)];
+    % Grab Peak Time
+    switch storm_type
+        case 'XC'
+            switch FileType
+                case 'Peaks'
+                    total_time = datetime([char(cData.Table_StormData.("Storm Name")), repmat('00', height(cData.Table_StormData), 1)], 'InputFormat', 'yyyyMMddHHmm');
+                case 'Timeseries'
+                    total_time =  cellfun(@(x,y) ref_time+time_f(x)-time_f(y), cData.StormData(:, l_indx), peak_time, 'UniformOutput', false);
+            end
+        otherwise
+            total_time =  cellfun(@(x,y) ref_time+time_f(x)-time_f(y), cData.StormData(:, l_indx), peak_time, 'UniformOutput', false);
     end
 
-    %% STORM ID Wrong Format
-    if any(strcmp(cData.headers, "Storm ID"))
-        if ~ischar(cData.Table_StormData.("Storm ID")(1))
-            % Get Storm ID Col Index
-            col_indx = strcmp('Storm ID', cData.headers);
-            % Convert Form Number To Char (Table)
-            cData.Table_StormData.("Storm ID") = cellfun(@num2str, cData.StormData(:, col_indx), 'UniformOutput', false);
-            % Convert From Number To Char
-            cData.StormData(:, col_indx) = cellfun(@num2str, cData.StormData(:, col_indx), 'UniformOutput', false);
-        end
+    cData.headers = [cData.headers(1:p_indx), {'yyyymmddHHMM'}, cData.headers(p_indx+1:end)];
+    cData.units = [cData.units(1:p_indx), {''}, cData.units(p_indx+1:end)];
+    cData.StormData = [cData.StormData(:, 1:p_indx), num2cell(total_time), cData.StormData(:, p_indx+1:end)];
+    cData.Table_StormData = [cData.Table_StormData(:, 1:p_indx), table(total_time, 'VariableNames', {'yyyymmddHHMM'}), cData.Table_StormData(:, p_indx+1:end)];
+end
+end
+
+%% AUX FUNCTION: NUMERIC STORM IDs CONVERTED TO TEXT (StormData AND Table_StormData)
+function cData = storm_ids_as_text(cData)
+if any(strcmp(cData.headers, "Storm ID"))
+    if ~ischar(cData.Table_StormData.("Storm ID")(1))
+        % Get Storm ID Col Index
+        col_indx = strcmp('Storm ID', cData.headers);
+        % Convert Form Number To Char (Table)
+        cData.Table_StormData.("Storm ID") = cellfun(@num2str, cData.StormData(:, col_indx), 'UniformOutput', false);
+        % Convert From Number To Char
+        cData.StormData(:, col_indx) = cellfun(@num2str, cData.StormData(:, col_indx), 'UniformOutput', false);
     end
 end
+end
 
-%% STERIC WATER LEVEL ADJUSTMENTS  + DATUM SHIFT
-switch chs_region
-    case {'CHS-GLM', 'CHS-GLH'}
-        % Steric Adjustment
-        [cData] = steric_adjustment(cData, Filein);
-        % Datum Adjustment
-        [cData] = datum_adjustment(cData, 176.45,Filein);
+%% AUX FUNCTION: GREAT LAKES STERIC WATER LEVEL ADJUSTMENT + DATUM SHIFT (ADCIRC FILES)
+function cData = great_lakes_water_level_adjustments(cData, chs_region, Filein)
+lake_level = mean_lake_level(struct('region', chs_region));
+if lake_level ~= 0
+    % Steric Adjustment
+    [cData] = steric_adjustment(cData, Filein);
+    % Datum Adjustment
+    [cData] = datum_adjustment(cData, lake_level, Filein);
 end
 end
 
-%% AUX FUNCTIONS
+%% AUX FUNCTION: CHARACTER-STORED NUMERIC VALUES CONVERTED TO NUMBERS
 function vals = numeric_convert_char_values(vals)
 % Converts any char-valued entries in a cell array to double, leaving
 % already-numeric entries untouched -- content-driven, not positional
@@ -428,11 +496,28 @@ for kk = 1:length(vals)
 end
 end
 
-function [headers, units] = build_headers_and_units(FileType, File_version, Has_Attributes, Has_Gattributes, Has_Datasets, Has_Gdatasets, FileAttributes, FA_indx, FA_units, GAttributes, GA_indx, GA_units, FileDatasets, FDS_units, GDatasets, GDA_units)
+%% AUX FUNCTION: DATA HEADERS AND UNITS
+function [headers, units] = build_headers_and_units(layout, lists)
 % Assembles headers/units from whichever HDF5 fields are actually present
 % in this file (Has_* flags) -- shared by both the Groups-based (V1/V3)
 % and flat (V2) extraction paths, so header/units assembly no longer needs
 % its own File_version branch.
+FileType = layout.FileType;
+File_version = layout.File_version;
+Has_Attributes = layout.Has_Attributes;
+Has_Gattributes = layout.Has_Gattributes;
+Has_Datasets = layout.Has_Datasets;
+Has_Gdatasets = layout.Has_Gdatasets;
+FileAttributes = lists.FileAttributes;
+FA_indx = lists.FA_indx;
+FA_units = lists.FA_units;
+GAttributes = lists.GAttributes;
+GA_indx = lists.GA_indx;
+GA_units = lists.GA_units;
+FileDatasets = lists.FileDatasets;
+FDS_units = lists.FDS_units;
+GDatasets = lists.GDatasets;
+GDA_units = lists.GDA_units;
 if (FileType == "AEP" && File_version == "V1")
     headers = [{FileAttributes(FA_indx).Name},{GAttributes(GA_indx).Name},{'AEP Values'},{GDatasets.Name}];
     units = [FA_units,GA_units,GDA_units];
@@ -446,6 +531,7 @@ else
 end
 end
 
+%% AUX FUNCTION: CHS FILE VERSION (V1/V2/V3)
 function File_version = resolve_chs_file_version(info, FileType)
 % Determines the CHS file version ("V1"/"V2"/"V3") from the file's own
 % declared version attribute (CHS File Format / CHS Data Format), with a
@@ -478,6 +564,7 @@ if strcmp(FileType, 'Timeseries') & File_version ~= "V3"
 end
 end
 
+%% AUX FUNCTION: DATUM SHIFT OF THE WATER ELEVATION (ADCIRC FILES)
 function [CHS_Data] = datum_adjustment(CHS_Data, datum_shift, Filein)
 % Find Row For ADCIRC HDF5 File
 ad_bool = contains(Filein, 'ADCIRC');
@@ -494,6 +581,7 @@ if any(ad_bool)
 end
 end
 
+%% AUX FUNCTION: STERIC ADJUSTMENT OF THE WATER ELEVATION (ADCIRC FILES)
 function [CHS_Data] = steric_adjustment(CHS_Data, Filein)
 % Find Row For ADCIRC HDF5 File
 ad_bool = contains(Filein, 'ADCIRC');
@@ -513,7 +601,7 @@ if any(ad_bool)
 end
 end
 
-
+%% AUX FUNCTION: SINGLE-ENTRY EXPORT TABLE (Table_StormData)
 function cData = format_single_entry_export(cData, data, info, FileType)
 % Shared single-entry table-building tail for AEP/AEF/AEFcond files (V1/V2/V3 alike)
 % and for the plain (non-AEP-family) case. The V1/V3 multi-row Hazard Curve case
@@ -527,6 +615,7 @@ end
 cData.Table_StormData = cell2table(data,'VariableNames',cData.headers);
 end
 
+%% AUX FUNCTION: HAZARD CURVE ROW EXPANDED TO ONE ROW PER CURVE VALUE
 function expanded = expand_aep_cells(data_row)
 % Expands a 1-x-N cell row where some cols hold vectors and others hold
 % scalars into an nRows-x-N cell array ready for cell2table.
@@ -541,17 +630,13 @@ end
 expanded(:, scalar_cols) = repmat(data_row(scalar_cols), n_rows, 1);
 end
 
-function val = h5_read_typed(Filein, path, datasetInfo)
+%% AUX FUNCTION: HDF5 DATASET READ WITH ITS DECLARED TYPE
+function val = h5_read_typed(Filein, path, datasetInfo, FileType)
 % Reads an HDF5 dataset and casts it to double unless the dataset's own
 % declared HDF5 datatype is a string -- the double-vs-char decision is
 % driven entirely by datasetInfo.Datatype.Class (as reported by h5info),
 % not by which code path happens to call this.
 val = h5read(Filein, path);
-% Get CHS Identifiers
-[~, fname, ~] = fileparts(Filein);
-A = strsplit(fname,{'_'});
-% Get File Type
-FileType = A{1,end};
 switch datasetInfo.Datatype.Class
     case 'H5T_STRING'
         % Make Sure Its In Fact A String
@@ -577,8 +662,7 @@ switch FileType
 end
 end
 
-
-
+%% AUX FUNCTION: HDF5 ATTRIBUTE VALUES PER ELEMENT
 function vals = h5_attr_values(attributesList, attrName, data_type)
 % Applies h5_attr_value across a list of per-element Attributes struct
 % arrays (e.g. {FileDatasets.Attributes}), returning one value per element,
@@ -617,18 +701,24 @@ for kk = 1:length(attributesList)
 end
 end
 
-function [cData,data] = read_flat_dataset_entry(cData, Filein, info, FileType, File_version, Has_Attributes, Has_Gattributes, Has_Datasets, Has_Gdatasets, FileAttributes, FA_indx, FA_units, GAttributes, GA_indx, GA_units, FileDatasets, FDS_units, GDatasets, GDA_units)
+%% AUX FUNCTION: READ A FLAT DATASET FILE (V2, OR GROUPLESS V1 PEAKS)
+function [cData,data] = read_flat_dataset_entry(cData, Filein, info, layout, lists)
 % Shared by both genuinely-V2 files and flat/groupless V1 "Peaks" files --
 % both read datasets directly off the file's flat FileDatasets list.
+FileType = layout.FileType;
+Has_Attributes = layout.Has_Attributes;
+FileAttributes = lists.FileAttributes;
+FA_indx = lists.FA_indx;
+FileDatasets = lists.FileDatasets;
 % BUILD DATA HEADERS
-[cData.headers, cData.units] = build_headers_and_units(FileType, File_version, Has_Attributes, Has_Gattributes, Has_Datasets, Has_Gdatasets, FileAttributes, FA_indx, FA_units, GAttributes, GA_indx, GA_units, FileDatasets, FDS_units, GDatasets, GDA_units);
+[cData.headers, cData.units] = build_headers_and_units(layout, lists);
 
 % PULL DATA FROM HDF5 V2 FILE
 data = [];
 % Loop Through ALl Datasets
 for DS = 1:length(FileDatasets)
     % Read Datasets
-    dummy  = h5_read_typed(Filein,['/',FileDatasets(DS).Name],FileDatasets(DS));
+    dummy  = h5_read_typed(Filein,['/',FileDatasets(DS).Name],FileDatasets(DS),FileType);
 
     data = [data,dummy];
 end
@@ -643,6 +733,7 @@ cData.StormData = data;
 cData = format_single_entry_export(cData, data, info, FileType);
 end
 
+%% AUX FUNCTION: SPECIAL CASES (SRR, NLR)
 function [data,cData] = chs_h5_special_cases_importer(Filein,info,FA_units,FileDatasets,FileType)
 switch FileType
     case 'SRR'
@@ -664,7 +755,7 @@ switch FileType
         % Get Coordinate Data: Save Point ID, Latitude, Longitude
         [coord_pass, coord_idx] = ismember('Save Point Locations', {info.Datasets.Name});
         if any(coord_pass)
-            coord_data = h5_read_typed(Filein,'/Save Point Locations',info.Datasets(coord_idx))';
+            coord_data = h5_read_typed(Filein,'/Save Point Locations',info.Datasets(coord_idx),FileType)';
             ds_headers = h5_attr_values({info.Datasets(coord_idx).Attributes}, 'Columns', 'char');
             ds_headers = strsplit(ds_headers{:}, {' ',','});
             coord_units = {'','deg','deg'};
@@ -700,7 +791,7 @@ switch FileType
 
         for DS = 1:length(GDatasets1)
             % Read Datasets For Group
-            data(:, 3+DS)  = h5_read_typed(Filein,[srr_group.Name,'/',GDatasets1(DS).Name],GDatasets1(DS));
+            data(:, 3+DS)  = h5_read_typed(Filein,[srr_group.Name,'/',GDatasets1(DS).Name],GDatasets1(DS),FileType);
         end
 
         cData.StormData = data;
@@ -720,7 +811,7 @@ switch FileType
 
             for DS = 1:length(GDatasets2)
                 % Read Datasets For Group
-                data2(:, 3+DS)  = h5_read_typed(Filein,[srp_group.Name,'/',GDatasets2(DS).Name],GDatasets2(DS));
+                data2(:, 3+DS)  = h5_read_typed(Filein,[srp_group.Name,'/',GDatasets2(DS).Name],GDatasets2(DS),FileType);
             end
             cData.headers2 = headers2;
             cData.units2 = [coord_units,h5_attr_values({GDatasets2.Attributes}, 'Units', 'char')];
@@ -757,7 +848,7 @@ switch FileType
         % Loop Through ALl Datasets
         for DS = 1:length(FileDatasets)
             % Read Datasets
-            dummy = h5_read_typed(Filein,['/',FileDatasets(DS).Name],FileDatasets(DS));
+            dummy = h5_read_typed(Filein,['/',FileDatasets(DS).Name],FileDatasets(DS),FileType);
             data = [data,dummy];
         end
 end

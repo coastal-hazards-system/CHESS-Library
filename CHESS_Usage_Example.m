@@ -1,5 +1,5 @@
 clc;clear all;close all;
-addpath(genpath('CHESS_Library'));
+addpath('CHESS_Library'); chess_setup_path; % Library On The Path, Tools/ And Retired/ Kept Off
 % diary 'Log.txt';
 %% USER INPUTS
 %{
@@ -67,12 +67,14 @@ Outputs:
     1. config: Contains parsed information from CHESS input file | 1 x 1 | structure, with nFields 
 
     2. storm: Contains screened and formated CHS storm data. | 1 X 1 | structure, with nfields
-              Peaks storm data is formated in nStorms x 5 
-              array ([ SWL Hm0 Tp wave_dir stormID ]). 
-              Timeseries storm data is formated in nStorms x 2
-              cell array ([storm ID, storm hydrograph]) where,
-              storm hydrograph is a nStorms x 6 array 
-              ([datenum SWL Hm0 Tp wave_dir storm_duration])
+              Peaks storm data is formatted in an nStorms x 2
+              cell array ({storm ID, 1 x 5 [SWL Hm0 Tp wDir datenum]}).
+              Timeseries storm data is formatted in an nStorms x 2
+              cell array ({storm ID, storm hydrograph}) where the
+              storm hydrograph is an M x 6 array
+              ([SWL Hm0 Tp wDir datenum dt]). The storm duration is
+              not stored: it comes from config.storm_duration or is
+              computed from the SWL timeseries.
 
     3. prob_mass: Contains screened and formated CHS storm data probability masses. | 1 X 1 | structure, with nfields
                   For specified CHS region includes Param, TC_SRR, TC_Freq,
@@ -82,7 +84,7 @@ Outputs:
 %}
 t2 = tic;
 % Call CHS Set-up Function 
-[storm, ~, prob_mass, config] = call_chs_data_formater(config);
+[storm, ~, prob_mass, config] = call_chs_data_formatter(config);
 t2 = toc(t2);
 
 %% STEP 3: CREATE PROJECT FORCING (BOUNDARY CONDITIONS)

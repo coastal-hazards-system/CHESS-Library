@@ -16,12 +16,11 @@ classdef lcs_methods < CHESSPlotsBase
                 self
                 ax
                 ds_query struct
-                field_to_plot string  {mustBeMember(field_to_plot, [ ...
-                    "LSmax", "Smax",...
-                    "S_seaside_with_repairs","S_seaside_no_repairs",...
-                    "S_leeside_no_repairs", "S_leeside_with_repairs"])}
+                field_to_plot string
                 lc_index double {mustBeInteger, mustBePositive} = []
             end
+            % Registry Lists Cannot Be Called In Validators (R2022b)
+            mustBeMember(field_to_plot, response_registry('output', 'names', 'kind', 'armor_damage'));
 
 
             if self.structure.struc_type~=3
@@ -53,7 +52,7 @@ classdef lcs_methods < CHESSPlotsBase
                     ~,...
                     vname, y_label, ~] = response_library_headers(self.config, char(field_to_plot));
                 % Define Axes Fields
-                if ismember(field_to_plot, ["LSmax", "Smax"])
+                if ismember(field_to_plot, response_registry('output', 'names', 'damage_summary', 'yearly_mean_max'))
                     x_label = 'Simulation Year'; % Yearly Mean Curves
                 else
                     x_label = 'Cumulative Storm Hours'; % S_* Series: 1 Value Per Storm Time Step (Calm Time Excluded)
@@ -211,16 +210,10 @@ classdef lcs_methods < CHESSPlotsBase
             % Plot Yearly Mean Maximum Submergence Percentage Distribution
             ax2 = plot_pse_submergance_distribution(self, ax2, ds_query, false, false, false, []);
             % Yearly Mean Maximum Cumulative Mean Damage (S)
-            switch field_to_plot
-                case {'S_leeside_with_repairs', 'S_leeside_no_repairs'}
-                    ax3 = slope_armor_damage_plot(self, ax3, ds_query, 'LSmax');
-                    ax4 = plot_mound_final_damage_state(self, ax4, ds_query, 'S_leeside_no_repairs');
-                    side = 'Leeside';
-                case {'S_seaside_with_repairs', 'S_seaside_no_repairs'}
-                    ax3 = slope_armor_damage_plot(self, ax3, ds_query, 'Smax');
-                    ax4 = plot_mound_final_damage_state(self, ax4, ds_query, 'S_seaside_no_repairs');
-                    side = 'Seaside';
-            end
+            armor_side = response_registry('name', char(field_to_plot)).armor_side;
+            ax3 = slope_armor_damage_plot(self, ax3, ds_query, char(response_registry('output', 'names', 'armor_side', armor_side, 'damage_summary', 'yearly_mean_max')));
+            ax4 = plot_mound_final_damage_state(self, ax4, ds_query, char(response_registry('output', 'names', 'armor_side', armor_side, 'with_repairs', false, 'damage_summary', 'series')));
+            side = [upper(armor_side(1)) armor_side(2:end)];
             % Short Y Labels (The Standalone Labels Get Clipped In The Dashboard Tiles): The Titles Name The Quantity
             ylabel(ax3, 'Damage $\bar{\bar{S}}_{max}$', 'FontSize', self.base_fnt, 'FontWeight', 'bold', 'Interpreter', 'latex');
             title(ax3, ['Yearly Mean Maximum Cumulative Damage (' side ')'], 'FontSize', self.base_fnt + 2, 'FontWeight', 'bold', 'Interpreter', 'latex');
@@ -246,32 +239,7 @@ classdef lcs_methods < CHESSPlotsBase
             % Inputs: ax -> Figure, Grid Layout Or Axes (subplot_manager) | ds_query -> storm_type, data_type, match_type
             % Uses: self.project_forcing (LCS), self.config (mcs_nYears, Nstm_XC, Nyrs_XC, project_CLs, lcs_* Sampling Settings),
             %       self.dsw (TC), self.storm (Panel 5)
-
-            %% Sampled Life Cycles (Timeseries Rows Repeat Per Timestep: Keep Event Start Rows, Step Counter == 0)
-            cols = lcs_columns();
-            data = aux_methods.pull_data(ds_query, self.project_forcing);
-            if strcmp(ds_query.data_type, 'Timeseries')
-                data = cellfun(@(x) x(x(:, cols.step) == 0, :), data, 'un', false);
-            end
-            data = data(:);
-            n_lc = numel(data);
-            n_years = self.config.mcs_nYears;
-            lc_counts = cellfun(@(x) size(x, 1), data);
-            % Storm Rate [storms/yr]: XC From The Storm Record, TC From The Probability Masses (Else Estimated From The Samples)
-            switch ds_query.storm_type
-                case 'XC'
-                    lambda = self.config.Nstm_XC/self.config.Nyrs_XC;
-                otherwise
-                    if isstruct(self.dsw) && isfield(self.dsw, 'TC_SRR')
-                        lambda = self.dsw.TC_SRR(end);
-                    else
-                        lambda = mean(lc_counts)/n_years;
-                    end
-            end
-            m = lambda*n_years; % Expected Storms Per Life Cycle
-            lcs_mode = lcs_sampling_mode(self.config); % Mode The Life Cycles Were Sampled With (0 = Full Poisson, 1 = Rate Matched)
-            % Storms Per Simulation Year, One Column Per Life Cycle
-            yr_counts = cell2mat(cellfun(@(x) accumarray(x(:, cols.year), 1, [n_years 1]), data', 'un', false));
+            sampling = self.sampling_scheme_inputs(ds_query);
 
             %% Axes (2 x 3)
             [gl, subplot_flag] = subplot_manager(self, ax, 2, 3);
@@ -283,54 +251,126 @@ classdef lcs_methods < CHESSPlotsBase
                     axs(kk) = aux_methods.initiate_axes(gl, '', '', '', self.base_fnt, ceil(kk/3), mod(kk - 1, 3) + 1);
                 end
             end
-            c_bar = [0.17 0.43 0.61]; c_ref = [0.77 0.48 0.13]; c_win = [0.95 0.75 0.45];
 
+            self.plot_storms_per_life_cycle(axs(1), sampling, ds_query.storm_type);
+            self.plot_storms_per_simulation_year(axs(2), sampling);
+            %% (3) Event Type Mix
+            event_sampling_distribution(self, axs(3), ds_query);
+            self.plot_mean_storms_by_year(axs(4), sampling);
+            self.plot_storm_selection(axs(5), sampling, ds_query.storm_type);
+            self.plot_life_cycle_convergence(axs(6), sampling, ds_query.storm_type);
+        end
+    end
+
+    %% SAMPLING SCHEME DASHBOARD PANELS (Drawn By sampling_scheme_dashboard)
+    properties (Constant, Access=protected)
+        % Panel Colors: Sampled Bars/Lines, Poisson Reference, Rate-Matched / Tolerance Window
+        sampling_colors = struct('bar', [0.17 0.43 0.61], 'reference', [0.77 0.48 0.13], 'window', [0.95 0.75 0.45])
+    end
+
+    methods (Access=protected)
+        function sampling = sampling_scheme_inputs(self, ds_query)
+            % Sampled Life Cycles Of One Storm Type: data (Event Start Rows Per Life Cycle), cols, n_lc, n_years, lc_counts,
+            % lambda (Storm Rate [storms/yr]), m (Expected Storms Per Life Cycle), lcs_mode, yr_counts (n_years x n_lc)
+            %% Sampled Life Cycles (Timeseries Rows Repeat Per Timestep: Keep Event Start Rows, Step Counter == 0)
+            sampling.cols = lcs_columns();
+            data = aux_methods.pull_data(ds_query, self.project_forcing);
+            if strcmp(ds_query.data_type, 'Timeseries')
+                data = cellfun(@(x) x(x(:, sampling.cols.step) == 0, :), data, 'un', false);
+            end
+            sampling.data = data(:);
+            sampling.n_lc = numel(sampling.data);
+            sampling.n_years = self.config.mcs_nYears;
+            sampling.lc_counts = cellfun(@(x) size(x, 1), sampling.data);
+            % Storm Rate [storms/yr]: XC From The Storm Record, TC From The Probability Masses (Else Estimated From The Samples)
+            switch ds_query.storm_type
+                case 'XC'
+                    sampling.lambda = self.config.Nstm_XC/self.config.Nyrs_XC;
+                otherwise
+                    if isstruct(self.dsw) && isfield(self.dsw, 'TC_SRR')
+                        sampling.lambda = self.dsw.TC_SRR(end);
+                    else
+                        sampling.lambda = mean(sampling.lc_counts)/sampling.n_years;
+                    end
+            end
+            sampling.m = sampling.lambda*sampling.n_years; % Expected Storms Per Life Cycle
+            sampling.lcs_mode = lcs_sampling_mode(self.config); % Mode The Life Cycles Were Sampled With (0 = Full Poisson, 1 = Rate Matched)
+            % Storms Per Simulation Year, One Column Per Life Cycle
+            sampling.yr_counts = cell2mat(cellfun(@(x) accumarray(x(:, sampling.cols.year), 1, [sampling.n_years 1]), sampling.data', 'un', false));
+        end
+
+        function plot_storms_per_life_cycle(self, ax, sampling, storm_type)
             %% (1) Storms Per Life Cycle
-            k = 0:max([lc_counts; ceil(m + 4*sqrt(m) + 2)]);
-            share = histcounts(lc_counts, [k - 0.5, k(end) + 0.5])/n_lc;
+            m = sampling.m;
+            k = 0:max([sampling.lc_counts; ceil(m + 4*sqrt(m) + 2)]);
+            share = histcounts(sampling.lc_counts, [k - 0.5, k(end) + 0.5])/sampling.n_lc;
             y_top = 1.1*max([share, poisspdf(k, m)]);
-            if lcs_mode == 1
-                fill(axs(1), [m - 1, m + 1, m + 1, m - 1], [0 0 y_top y_top], c_win, 'EdgeColor', 'none', 'FaceAlpha', 0.35,...
+            if sampling.lcs_mode == 1
+                fill(ax, [m - 1, m + 1, m + 1, m - 1], [0 0 y_top y_top], self.sampling_colors.window, 'EdgeColor', 'none', 'FaceAlpha', 0.35,...
                     'DisplayName', 'Rate-matched window ($\lambda N \pm 1$)');
                 mode_txt = 'Rate Matched';
             else
                 mode_txt = 'Full Poisson';
             end
-            bar(axs(1), k, share, 0.8, 'FaceColor', c_bar, 'EdgeColor', 'none', 'DisplayName', 'Sampled life cycles');
-            plot(axs(1), k, poisspdf(k, m), 'o-', 'Color', c_ref, 'LineWidth', 1.2, 'MarkerFaceColor', c_ref, 'DisplayName', 'Poisson($\lambda N$)');
-            xline(axs(1), m, '--k', 'LineWidth', 1.2, 'DisplayName', sprintf('$\\lambda N$ = %.2f', m));
-            axs(1).YLim = [0 y_top];
-            title(axs(1), aux_methods.latex_escape({sprintf('Storms Per Life Cycle (%s, %s Sampling)', ds_query.storm_type, mode_txt),...
-                sprintf('$\\lambda$ = %.3f storms/yr, N = %d yr, %d life cycles', lambda, n_years, n_lc)}));
-            xlabel(axs(1), 'Storms per life cycle', 'FontSize', self.base_fnt); ylabel(axs(1), 'Share of life cycles', 'FontSize', self.base_fnt);
-            legend(axs(1), 'Interpreter', 'latex', 'Location', 'northeast');
+            bar(ax, k, share, 0.8, 'FaceColor', self.sampling_colors.bar, 'EdgeColor', 'none', 'DisplayName', 'Sampled life cycles');
+            plot(ax, k, poisspdf(k, m), 'o-', 'Color', self.sampling_colors.reference, 'LineWidth', 1.2, 'MarkerFaceColor', self.sampling_colors.reference, 'DisplayName', 'Poisson($\lambda N$)');
+            xline(ax, m, '--k', 'LineWidth', 1.2, 'DisplayName', sprintf('$\\lambda N$ = %.2f', m));
+            ax.YLim = [0 y_top];
+            title(ax, aux_methods.latex_escape({sprintf('Storms Per Life Cycle (%s, %s Sampling)', storm_type, mode_txt),...
+                sprintf('$\\lambda$ = %.3f storms/yr, N = %d yr, %d life cycles', sampling.lambda, sampling.n_years, sampling.n_lc)}));
+            xlabel(ax, 'Storms per life cycle', 'FontSize', self.base_fnt); ylabel(ax, 'Share of life cycles', 'FontSize', self.base_fnt);
+            legend(ax, 'Interpreter', 'latex', 'Location', 'northeast');
+        end
 
+        function plot_storms_per_simulation_year(self, ax, sampling)
             %% (2) Storms Per Simulation Year
-            k2 = 0:max([yr_counts(:); ceil(lambda + 4*sqrt(lambda) + 1)]);
-            share2 = histcounts(yr_counts(:), [k2 - 0.5, k2(end) + 0.5])/numel(yr_counts);
-            bar(axs(2), k2, share2, 0.8, 'FaceColor', c_bar, 'EdgeColor', 'none', 'DisplayName', 'Sampled years');
-            plot(axs(2), k2, poisspdf(k2, lambda), 'o-', 'Color', c_ref, 'LineWidth', 1.2, 'MarkerFaceColor', c_ref, 'DisplayName', 'Poisson($\lambda$)');
-            title(axs(2), 'Storms Per Simulation Year (All Life Cycles)');
-            xlabel(axs(2), 'Storms in a year', 'FontSize', self.base_fnt); ylabel(axs(2), 'Share of years', 'FontSize', self.base_fnt);
-            legend(axs(2), 'Interpreter', 'latex', 'Location', 'northeast');
+            lambda = sampling.lambda;
+            k2 = 0:max([sampling.yr_counts(:); ceil(lambda + 4*sqrt(lambda) + 1)]);
+            share2 = histcounts(sampling.yr_counts(:), [k2 - 0.5, k2(end) + 0.5])/numel(sampling.yr_counts);
+            bar(ax, k2, share2, 0.8, 'FaceColor', self.sampling_colors.bar, 'EdgeColor', 'none', 'DisplayName', 'Sampled years');
+            plot(ax, k2, poisspdf(k2, lambda), 'o-', 'Color', self.sampling_colors.reference, 'LineWidth', 1.2, 'MarkerFaceColor', self.sampling_colors.reference, 'DisplayName', 'Poisson($\lambda$)');
+            title(ax, 'Storms Per Simulation Year (All Life Cycles)');
+            xlabel(ax, 'Storms in a year', 'FontSize', self.base_fnt); ylabel(ax, 'Share of years', 'FontSize', self.base_fnt);
+            legend(ax, 'Interpreter', 'latex', 'Location', 'northeast');
+        end
 
-            %% (3) Event Type Mix
-            event_sampling_distribution(self, axs(3), ds_query);
-
+        function plot_mean_storms_by_year(self, ax, sampling)
             %% (4) Mean Storms By Simulation Year
-            plot(axs(4), 1:n_years, mean(yr_counts, 2), '-o', 'Color', c_bar, 'LineWidth', 1.2, 'MarkerFaceColor', c_bar, 'DisplayName', 'Mean over life cycles');
-            yline(axs(4), lambda, '--', 'Color', c_ref, 'LineWidth', 1.2, 'DisplayName', '$\lambda$');
-            axs(4).XLim = [0.5, n_years + 0.5];
-            title(axs(4), 'Mean Storms By Simulation Year');
-            xlabel(axs(4), 'Simulation year', 'FontSize', self.base_fnt); ylabel(axs(4), 'Storms per year', 'FontSize', self.base_fnt);
-            legend(axs(4), 'Interpreter', 'latex', 'Location', 'best');
+            plot(ax, 1:sampling.n_years, mean(sampling.yr_counts, 2), '-o', 'Color', self.sampling_colors.bar, 'LineWidth', 1.2, 'MarkerFaceColor', self.sampling_colors.bar, 'DisplayName', 'Mean over life cycles');
+            yline(ax, sampling.lambda, '--', 'Color', self.sampling_colors.reference, 'LineWidth', 1.2, 'DisplayName', '$\lambda$');
+            ax.XLim = [0.5, sampling.n_years + 0.5];
+            title(ax, 'Mean Storms By Simulation Year');
+            xlabel(ax, 'Simulation year', 'FontSize', self.base_fnt); ylabel(ax, 'Storms per year', 'FontSize', self.base_fnt);
+            legend(ax, 'Interpreter', 'latex', 'Location', 'best');
+        end
 
+        function plot_storm_selection(self, ax, sampling, storm_type)
             %% (5) Storm Selection: Sampled Vs Expected Share Per Storm
-            ids = cell2mat(cellfun(@(x) x(:, cols.id), data, 'un', false));
+            ids = cell2mat(cellfun(@(x) x(:, sampling.cols.id), sampling.data, 'un', false));
             [u_ids, ~, ic] = unique(ids);
             sampled = accumarray(ic, 1)/numel(ids);
+            expected = self.expected_storm_shares(u_ids, storm_type);
+            if all(isnan(expected))
+                aux_methods.display_no_data(ax, self.base_fnt);
+            else
+                lim = [0, 1.05*max([sampled; expected])];
+                plot(ax, lim, lim, '--k', 'LineWidth', 1, 'DisplayName', '1:1');
+                scatter(ax, expected, sampled, 18, self.sampling_colors.bar, 'filled', 'MarkerFaceAlpha', 0.6, 'DisplayName', 'Storm');
+                ax.XLim = lim; ax.YLim = lim;
+                % No x10^n Exponent Label (The Y One Collides With The 2-Line Title); Decimals Follow The Share Magnitude
+                fmt = sprintf('%%.%df', max(1, ceil(-log10(lim(2))) + 1));
+                ax.XAxis.Exponent = 0; ax.XAxis.TickLabelFormat = fmt;
+                ax.YAxis.Exponent = 0; ax.YAxis.TickLabelFormat = fmt;
+                legend(ax, 'Interpreter', 'latex', 'Location', 'northwest');
+            end
+            title(ax, {'Storm Selection', sprintf('%d sampled events, %d distinct storms', numel(ids), numel(u_ids))});
+            xlabel(ax, 'Expected share', 'FontSize', self.base_fnt); ylabel(ax, 'Sampled share', 'FontSize', self.base_fnt);
+        end
+
+        function expected = expected_storm_shares(self, u_ids, storm_type)
+            % Expected Sampling Share Per Sampled Storm ID (NaN Where The Storm Record / Probability Masses Are Missing)
             expected = nan(size(u_ids));
-            switch ds_query.storm_type
+            switch storm_type
                 case 'XC' % Storm IDs Are Drawn Uniformly From The Screened Pool (Nstm_XC Counts Storms Before Bad-Storm Removal)
                     n_pool = self.config.Nstm_XC;
                     if isstruct(self.storm) && isfield(self.storm, 'XC')
@@ -363,24 +403,14 @@ classdef lcs_methods < CHESSPlotsBase
                         expected(si > 0) = p_storm(si(si > 0));
                     end
             end
-            if all(isnan(expected))
-                aux_methods.display_no_data(axs(5), self.base_fnt);
-            else
-                lim = [0, 1.05*max([sampled; expected])];
-                plot(axs(5), lim, lim, '--k', 'LineWidth', 1, 'DisplayName', '1:1');
-                scatter(axs(5), expected, sampled, 18, c_bar, 'filled', 'MarkerFaceAlpha', 0.6, 'DisplayName', 'Storm');
-                axs(5).XLim = lim; axs(5).YLim = lim;
-                % No x10^n Exponent Label (The Y One Collides With The 2-Line Title); Decimals Follow The Share Magnitude
-                fmt = sprintf('%%.%df', max(1, ceil(-log10(lim(2))) + 1));
-                axs(5).XAxis.Exponent = 0; axs(5).XAxis.TickLabelFormat = fmt;
-                axs(5).YAxis.Exponent = 0; axs(5).YAxis.TickLabelFormat = fmt;
-                legend(axs(5), 'Interpreter', 'latex', 'Location', 'northwest');
-            end
-            title(axs(5), {'Storm Selection', sprintf('%d sampled events, %d distinct storms', numel(ids), numel(u_ids))});
-            xlabel(axs(5), 'Expected share', 'FontSize', self.base_fnt); ylabel(axs(5), 'Sampled share', 'FontSize', self.base_fnt);
+        end
 
+        function plot_life_cycle_convergence(self, ax, sampling, storm_type)
             %% (6) Convergence Of Storms Per Life Cycle (Same Targets As lcs_convergence_check)
             % Rate Matched: Running Statistics Only (Rate-Matched Counts Do Not Follow The Poisson Targets By Design)
+            n_lc = sampling.n_lc;
+            m = sampling.m;
+            lc_counts = sampling.lc_counts;
             prc = cellfun(@str2double, strsplit(self.config.project_CLs(2:end-1), {' '}));
             n = (1:n_lc)';
             run_mean = cumsum(lc_counts)./n;
@@ -392,15 +422,15 @@ classdef lcs_methods < CHESSPlotsBase
                 run_pct(jj, :) = prctile(lc_counts(1:n_pct(jj)), prc);
             end
             conv = [];
-            if lcs_mode == 0
+            if sampling.lcs_mode == 0
                 tol = self.config.lcs_convergence_tol;
                 x_p = poissinv(prc/100, m);
                 pct_tol = max(1, tol*x_p);
                 % Result Of The Check Run By chess_lcs When Available, Else Computed Here
-                if isfield(self.config, 'lcs_convergence_results') && isfield(self.config.lcs_convergence_results, ds_query.storm_type)
-                    conv = self.config.lcs_convergence_results.(ds_query.storm_type);
+                if isfield(self.config, 'lcs_convergence_results') && isfield(self.config.lcs_convergence_results, storm_type)
+                    conv = self.config.lcs_convergence_results.(storm_type);
                 else
-                    conv = lcs_convergence_check(lambda, n_years, n_lc, tol, self.config.lcs_convergence_confidence, prc, ds_query.storm_type, true);
+                    conv = lcs_convergence_check(sampling.lambda, sampling.n_years, n_lc, tol, self.config.lcs_convergence_confidence, prc, storm_type, true);
                 end
             end
             x_max = max(n_lc, 2);
@@ -409,26 +439,26 @@ classdef lcs_methods < CHESSPlotsBase
             end
             x_band = [1, x_max, x_max, 1];
             c_pct = lines(7);
-            c_pct = c_pct(mod(0:numel(prc) - 1, 4) + 4, :); % Colors 4-7: Distinct From c_bar / c_ref
-            fill(axs(6), [n; flipud(n)], [run_mean - half_ci; flipud(run_mean + half_ci)], [0.6 0.6 0.6], 'EdgeColor', 'none',...
+            c_pct = c_pct(mod(0:numel(prc) - 1, 4) + 4, :); % Colors 4-7: Distinct From The Bar / Reference Colors
+            fill(ax, [n; flipud(n)], [run_mean - half_ci; flipud(run_mean + half_ci)], [0.6 0.6 0.6], 'EdgeColor', 'none',...
                 'FaceAlpha', 0.15, 'DisplayName', '95\% CI of the mean');
-            if lcs_mode == 0
-                fill(axs(6), x_band, m*[1 - tol, 1 - tol, 1 + tol, 1 + tol], c_win, 'EdgeColor', 'none', 'FaceAlpha', 0.45,...
+            if sampling.lcs_mode == 0
+                fill(ax, x_band, m*[1 - tol, 1 - tol, 1 + tol, 1 + tol], self.sampling_colors.window, 'EdgeColor', 'none', 'FaceAlpha', 0.45,...
                     'DisplayName', sprintf('Tolerance: $\\lambda N (1 \\pm %g)$', tol));
             end
             for jj = 1:numel(prc)
-                if lcs_mode == 0
-                    fill(axs(6), x_band, x_p(jj) + pct_tol(jj)*[-1, -1, 1, 1], c_pct(jj, :), 'EdgeColor', 'none', 'FaceAlpha', 0.12,...
+                if sampling.lcs_mode == 0
+                    fill(ax, x_band, x_p(jj) + pct_tol(jj)*[-1, -1, 1, 1], c_pct(jj, :), 'EdgeColor', 'none', 'FaceAlpha', 0.12,...
                         'HandleVisibility', 'off');
-                    yline(axs(6), x_p(jj), '--', 'Color', c_pct(jj, :), 'LineWidth', 1, 'HandleVisibility', 'off');
+                    yline(ax, x_p(jj), '--', 'Color', c_pct(jj, :), 'LineWidth', 1, 'HandleVisibility', 'off');
                     pct_name = sprintf('P%g (Poisson: %g)', prc(jj), x_p(jj));
                 else
                     pct_name = sprintf('P%g', prc(jj));
                 end
-                plot(axs(6), n_pct, run_pct(:, jj), '-', 'Color', c_pct(jj, :), 'LineWidth', 1.2, 'DisplayName', pct_name);
+                plot(ax, n_pct, run_pct(:, jj), '-', 'Color', c_pct(jj, :), 'LineWidth', 1.2, 'DisplayName', pct_name);
             end
-            plot(axs(6), n, run_mean, '-', 'Color', c_bar, 'LineWidth', 1.5, 'DisplayName', 'Running mean');
-            yline(axs(6), m, '--', 'Color', c_ref, 'LineWidth', 1.2, 'DisplayName', '$\lambda N$');
+            plot(ax, n, run_mean, '-', 'Color', self.sampling_colors.bar, 'LineWidth', 1.5, 'DisplayName', 'Running mean');
+            yline(ax, m, '--', 'Color', self.sampling_colors.reference, 'LineWidth', 1.2, 'DisplayName', '$\lambda N$');
             % Rate Matched: No Convergence Check | Full Poisson: Verdict Of lcs_convergence_check
             k0 = min(n_lc, 10);
             if isempty(conv)
@@ -439,7 +469,7 @@ classdef lcs_methods < CHESSPlotsBase
                     req_txt = ['$>$ ' regexprep(num2str(conv.nLC_cap), '(\d)(?=(\d{3})+$)', '$1,')];
                 else
                     req_txt = sprintf('%d', conv.nLC_req);
-                    xline(axs(6), conv.nLC_req, '-.k', 'LineWidth', 1.2, 'DisplayName', 'nLC\_req');
+                    xline(ax, conv.nLC_req, '-.k', 'LineWidth', 1.2, 'DisplayName', 'nLC\_req');
                 end
                 if conv.converged
                     verdict = sprintf('Converged: mcs\\_nLC = %d $\\geq$ nLC\\_req = %s', n_lc, req_txt);
@@ -451,12 +481,12 @@ classdef lcs_methods < CHESSPlotsBase
             % Y Limits From The Targets (Mode 0) And The Running Statistics (The Early CI Is Left Clipped)
             y_vals = [y_vals, run_mean(k0:end)', reshape(run_pct(n_pct >= k0, :), 1, [])];
             y_pad = 0.08*max(max(y_vals) - min(y_vals), 1);
-            axs(6).YLim = [max(0, min(y_vals) - y_pad), max(y_vals) + y_pad];
-            axs(6).XScale = 'log';
-            axs(6).XLim = [1, x_max];
-            title(axs(6), aux_methods.latex_escape({'Convergence Of Storms Per Life Cycle', verdict}));
-            xlabel(axs(6), 'Number of life cycles', 'FontSize', self.base_fnt); ylabel(axs(6), 'Storms per life cycle', 'FontSize', self.base_fnt);
-            legend(axs(6), 'Interpreter', 'latex', 'Location', 'best', 'FontSize', max(axs(6).FontSize - 2, 6));
+            ax.YLim = [max(0, min(y_vals) - y_pad), max(y_vals) + y_pad];
+            ax.XScale = 'log';
+            ax.XLim = [1, x_max];
+            title(ax, aux_methods.latex_escape({'Convergence Of Storms Per Life Cycle', verdict}));
+            xlabel(ax, 'Number of life cycles', 'FontSize', self.base_fnt); ylabel(ax, 'Storms per life cycle', 'FontSize', self.base_fnt);
+            legend(ax, 'Interpreter', 'latex', 'Location', 'best', 'FontSize', max(ax.FontSize - 2, 6));
         end
     end
 
@@ -504,10 +534,10 @@ classdef lcs_methods < CHESSPlotsBase
             arguments
                 self
                 ds_query struct
-                field_to_plot string  {mustBeMember(field_to_plot, [ ...
-                    "S_seaside_with_repairs","S_seaside_no_repairs",...
-                    "S_leeside_with_repairs","S_leeside_no_repairs"])}
+                field_to_plot string
             end
+            % Registry Lists Cannot Be Called In Validators (R2022b)
+            mustBeMember(field_to_plot, response_registry('output', 'names', 'damage_summary', 'series'));
             % Load Simulation Data
             sim_data = aux_methods.pull_data(ds_query, self.Resp);
             stm_data = aux_methods.pull_data(ds_query, self.project_forcing);
@@ -523,7 +553,7 @@ classdef lcs_methods < CHESSPlotsBase
 
             % Find Unique Damagin Instances
             switch char(field_to_plot)
-                case {'S_seaside_with_repairs','S_leeside_with_repairs'}
+                case response_registry('output', 'names', 'damage_summary', 'series', 'with_repairs', true)
                     % Repair Vectors Require Unique Damages To Be Analyzed
                     % on the storm by storm basis for each LC
                     num_LC = length(stm_data);
@@ -589,10 +619,10 @@ classdef lcs_methods < CHESSPlotsBase
                 self
                 ax
                 ds_query struct
-                field_to_plot string  {mustBeMember(field_to_plot, [ ...
-                    "S_seaside_with_repairs","S_seaside_no_repairs",...
-                    "S_leeside_with_repairs","S_leeside_no_repairs"])}
+                field_to_plot string
             end
+            % Registry Lists Cannot Be Called In Validators (R2022b)
+            mustBeMember(field_to_plot, response_registry('output', 'names', 'damage_summary', 'series'));
             % Load Simulation Data
             sim_data = aux_methods.pull_data(ds_query, self.Resp);
             stm_data = aux_methods.pull_data(ds_query, self.project_forcing);
@@ -694,10 +724,10 @@ classdef lcs_methods < CHESSPlotsBase
                 self
                 ax
                 ds_query struct
-                field_to_plot string  {mustBeMember(field_to_plot, [ ...
-                    "S_seaside_no_repairs",...
-                    "S_leeside_no_repairs"])}
+                field_to_plot string
             end
+            % Registry Lists Cannot Be Called In Validators (R2022b)
+            mustBeMember(field_to_plot, response_registry('output', 'names', 'damage_summary', 'series', 'with_repairs', false));
             %
             switch ds_query.data_type
                 case 'Peaks'
@@ -738,29 +768,15 @@ classdef lcs_methods < CHESSPlotsBase
                 self
                 ax
                 ds_query struct
-                field_to_plot string  {mustBeMember(field_to_plot, [ ...
-                    "Hm0t", ...
-                    "R2p", "R2p_SWL", ...
-                    "Dn50", "Dn50_Lee", ...
-                    "p1", ...
-                    "q", "q_overflow", "q_wave_ot", ...
-                    "Q_vol", "Q_vol_overflow", "Q_vol_wave_ot", ...
-                    "DamDepthElev", "DamDepth", ...
-                    "p2dyn", "p2sta", "p2total", ...
-                    "p3dyn", "p3sta", "p3total", ...
-                    "pu", ...
-                    "X_low", "X_up", "X_c_surge", "Bx", ...
-                    "theta_low", "theta_up", "theta_center", ...
-                    "Bjet", "Vjet", "Fjet",...
-                    "S_seaside_with_repairs","S_seaside_no_repairs",...
-                    "S_leeside_no_repairs", "S_leeside_with_repairs"
-                    ])}
+                field_to_plot string
                 bin_edges double
                 norm_type string {mustBeMember(norm_type, ["count","percent"])}
                 cb_lim double
                 grid_on logical
                 cb_log logical
             end
+            % Registry Lists Cannot Be Called In Validators (R2022b)
+            mustBeMember(field_to_plot, response_registry('output', 'names', 'per_event', true));
             % lcs_bin_plot Generates a binned distribution plot over simulation years.
             % This version handles overflow bins automatically and supports log colorbars.
             %
@@ -794,7 +810,7 @@ classdef lcs_methods < CHESSPlotsBase
             resp_data = aux_methods.pull_data(ds_query, self.Resp);
 
             % Handle Nested Structure Case (S Parameters)
-            if ismember(field_to_plot,["LSmax", "Smax","S_seaside_with_repairs","S_seaside_no_repairs","S_leeside_no_repairs", "S_leeside_with_repairs"])
+            if ismember(field_to_plot, response_registry('output', 'names', 'kind', 'armor_damage'))
                 resp_fields = fieldnames(resp_data.S);
                 if ~any(contains(field_to_plot, resp_fields))
                     error('Requested field is not present on simulation outputs (Resp)');
@@ -1116,7 +1132,7 @@ classdef lcs_methods < CHESSPlotsBase
             end
             if isfield(R, 'S') && isstruct(R.S)
                 for f = fieldnames(R.S)'
-                    if startsWith(f{1}, 'S_')
+                    if ismember(f{1}, response_registry('output', 'names', 'damage_summary', 'series'))
                         add_response(f{1}, R.S.(f{1}));
                     end
                 end

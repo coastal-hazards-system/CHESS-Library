@@ -2,8 +2,8 @@ function dur = timeseries_storm_durations(storm_data, storm_duration, compute_st
 %{
     %% DESCRIPTION
         Event length (storm_duration) of each Timeseries storm of the storm
-        database, set when the project forcing is built (chess_pros_formater.m,
-        chess_det_formater.m, chess_lcs.m):
+        database, set when the project forcing is built (chess_pros_formatter.m,
+        chess_det_formatter.m, chess_lcs.m):
             compute_storm_duration ~= 1: storm_duration (config) for every storm.
             compute_storm_duration == 1: SWL hydrograph duration of the storm
                 (estimate_storm_durations.m: 98% of the amplitude, shifted

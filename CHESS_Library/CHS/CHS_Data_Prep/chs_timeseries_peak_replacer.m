@@ -4,9 +4,9 @@ stypes = fieldnames(storm);
 % For Each Storm Type
 for ii = 1:length(stypes)
     % Grab Peaks Dataset
-    dPeaks = storm.(stypes{ii}).('Peaks').('Default'); % [SWL Hm0 Tp wDir stmID timeStamp]
-    proxy_data.(stypes{ii}) = zeros(length(dPeaks), 6);
-    proxy_data.(stypes{ii})(:,5:6) = cell2mat(cellfun(@(x) x(5:6), dPeaks(:, 2), 'un', false));
+    dPeaks = storm.(stypes{ii}).('Peaks').('Default'); % [SWL Hm0 Tp wDir peak_datenum]
+    proxy_data.(stypes{ii}) = zeros(length(dPeaks), 5);
+    proxy_data.(stypes{ii})(:,5) = cell2mat(cellfun(@(x) x(5), dPeaks(:, 2), 'un', false));
     % For Each Storm ID
     for kk = 1:length(dPeaks(:,1))
         for jj = 1:4 % For Each Column SWL, Hm0, Tp, wDir

@@ -72,7 +72,6 @@ classdef CHSStormDBImportUI < handle
         create_wlp logical
         create_whp logical
         gravity_constant double
-        storm_duration double % [hrs] Stamped On Peaks Column 6 As hours/24 (datenum Days)
         overwrite_flag logical
         study char
         study_datum char
@@ -88,7 +87,6 @@ classdef CHSStormDBImportUI < handle
         sp_ids
         outpath_dirlist
         unc_applied logical
-        f_adjusted logical
         dlgObj
         project_datum
         project_unitsys
@@ -135,7 +133,6 @@ classdef CHSStormDBImportUI < handle
             obj.auxLib = auxUIFunctions();
             obj.outpath_dirlist = dir(outpath);
             obj.unc_applied = false;
-            obj.f_adjusted = false;
             obj.gravity_constant = gravity_constant;
             obj.project_datum = project_datum;
             obj.project_unitsys = project_unitsys;
@@ -430,7 +427,7 @@ classdef CHSStormDBImportUI < handle
            obj.VerticalDatumLabel.WordWrap = 'on';
            obj.VerticalDatumLabel.Layout.Row = 1;
            obj.VerticalDatumLabel.Layout.Column = 1;
-           obj.VerticalDatumLabel.Text = 'MSLLL To NAVD88 Vertical Offset:';
+           obj.VerticalDatumLabel.Text = 'MSL To NAVD88 Vertical Offset:';
 
             % Create VerticalOffsetEditField
            obj.VerticalOffsetEditField = uieditfield(obj.GridLayout2_5, 'numeric');
@@ -672,10 +669,12 @@ classdef CHSStormDBImportUI < handle
         function createStormDbButtonPressed(obj, event)
             % Process Provided CHS Modeling zip folder
             obj.import_chs_modeling(obj.CHSZipFolderEditField.Value);
+            storm = [];
             if obj.modeling_imported
-                % storm_duration 1 h: Placeholder Stamped On Peaks Column 6 And WLP/WHP. Not Used As Is: Runs Restamp It With
-                % config.storm_duration (Library build_boundary_conditions) Or Read The Config (Dn50, CSR, FB, LCS)
-                [storm, ~] = obj.create_storm_database(obj.create_wlp, obj.create_whp, 1, 0);
+                [storm, ~] = obj.create_storm_database(obj.create_wlp, obj.create_whp, 0);
+            end
+            % Empty storm: Import Failed, Storm File Requirements Not Met Or Creation Cancelled
+            if ~isempty(storm)
                 obj.layout = CHSStormDBImportUI.storm_layout(storm);
                 %
                 obj.PlotControlsPanel.Enable = 'on';
@@ -818,7 +817,7 @@ classdef CHSStormDBImportUI < handle
                 % Inspect provided CHS zip folder
                 obj.chs_zip_inspect(fullfile(sel_pth, sel_file));
                 obj.region_ok();
-                % WLP/WHP: Built From CHS Files With Both Peaks And Timeseries (Library call_chs_data_formater) | Fixed By A
+                % WLP/WHP: Built From CHS Files With Both Peaks And Timeseries (Library call_chs_data_formatter) | Fixed By A
                 % storm + prob_mass .mat
                 storm_file = ~isempty(obj.storm_data_input);
                 can_build = ~storm_file && isequal(obj.has_peaks, true) && isequal(obj.has_timeseries, true);
@@ -1089,17 +1088,17 @@ classdef CHSStormDBImportUI < handle
                 % File Names As Stored (.h5 Extension Case Kept: Matched To The Zip Entries By Name)
                 [~, h5_base, h5_ext] = fileparts(file_list);
                 obj.h5_names = strcat(h5_base, h5_ext);
-                % Determine File Types Available
-                chs_identifiers = cellfun(@(x) strsplit(x, '_'), h5_base, 'un', false);
+                % Determine File Types Available (Library CHS File Name Rule: chs_file_name_parts.m)
+                name_parts = chs_file_name_parts(obj.h5_names);
                 % Grab CHS Study (Library chs_study_identity.m: Region & Save Points From The Storm File Names)
                 obj.study = chs_id.region;
-                obj.has_peaks = any(contains(obj.h5_names, {'Peaks'}));
-                obj.has_timeseries = any(contains(obj.h5_names, {'Timeseries'}));
+                obj.has_peaks = any(strcmp({name_parts.data_type}, 'Peaks'));
+                obj.has_timeseries = any(strcmp({name_parts.data_type}, 'Timeseries'));
                 % Savepoint Ids (One ADCIRC & One Wave Save Point: Library Storm File Check)
                 obj.sp_ids.adcirc = chs_id.sp_ID;
                 obj.sp_ids.wave = chs_id.sp_ID_wave;
                 % Grab Study Vertical Datum
-                ad_file = obj.h5_names(contains(obj.h5_names, 'ADCIRC'));
+                ad_file = obj.h5_names([name_parts.is_adcirc]);
                 try
                     switch fext
                         case '.zip' % Attributes Of The First ADCIRC File (Only That Entry Is Extracted)
@@ -1112,10 +1111,8 @@ classdef CHSStormDBImportUI < handle
                     reset_db_state(obj);
                     return;
                 end
-                % Define Storm Sampling Based On Storm Types Available
-                obj.storm_types = unique(cellfun(@(x) x(2), chs_identifiers, 'un', true));
-                % Correct Storm Type Naming
-                obj.storm_types = unique(strrep(strrep(obj.storm_types, 'TS', 'TC'), 'XH', 'XC'));
+                % Define Storm Sampling Based On Storm Types Available (Storm Flags TS/TC -> TC, XH/XC -> XC)
+                obj.storm_types = unique(reshape({name_parts.storm_type}, size(name_parts)));
             else
                 obj.auxLib.error_dlgbox('Nothing to process: no CHS storm files (Peaks/Timeseries .h5) in the CHS modeling data.');
                 reset_db_state(obj);
@@ -1124,7 +1121,6 @@ classdef CHSStormDBImportUI < handle
         end
 
         function reset_db_state(obj)
-            obj.f_adjusted = false;
             obj.unc_applied =false;
             obj.output_paths = [];
             keep_path = obj.source_paths.chs_dependencies_path;
@@ -1157,12 +1153,6 @@ classdef CHSStormDBImportUI < handle
                 return;
             end
             obj.db_info = bnu;
-            % TC SWL Bias Correction Files (Library call_chs_storm_quality_check Applies It When Both Exist)
-            BnU_dir = dir(fullfile(obj.source_paths.chs_dependencies_path, 'Bias_and_Uncertainty', obj.study, '*.mat'));
-            circ = find(contains({BnU_dir.name}, {'Comb','WL'}), 1);
-            wave = find(contains({BnU_dir.name}, {'STWAVE','SWAN'}), 1);
-            obj.source_paths.BnU_circulation = fullfile(BnU_dir(circ).folder, BnU_dir(circ).name);
-            obj.source_paths.BnU_waves = fullfile(BnU_dir(wave).folder, BnU_dir(wave).name);
             ok = true;
         end
 
@@ -1172,24 +1162,12 @@ classdef CHSStormDBImportUI < handle
             end
         end
 
-        function [storm, removed_storms, XC_Nyrs, XC_Nstm, prob_mass, tc_bias_corrected] = call_chs_storm_quality_check(obj, step_start, CHS_Data, prob_mass, storm_type)
-            % Storm QA/QC & Matching Through The Library (Progress Printed To Command Window)
-            [obj.dlgObj] = obj.auxLib.progress_window(step_start/9, ['Matching ' storm_type ' modeling results (surge+waves)'],...
-                'Storm Database Creation Progress', obj.dlgObj, false);
-            % Library Config For The Quality Check (storm_duration In Hours)
-            config = struct('use_peaks', +obj.has_peaks, 'use_timeseries', +obj.has_timeseries,...
-                'create_wlp', +obj.create_wlp, 'create_whp', +obj.create_whp,...
-                'region', obj.study, 'sp_ID', obj.sp_ids.adcirc,...
-                'storm_duration', obj.storm_duration, 'print_progress', true);
-            % TC SWL Bias Correction: The Library Decides (Applied When Both Bias Files Exist), With The Database Bias
-            config.in_files = struct('BnU_circulation', obj.source_paths.BnU_circulation, 'BnU_waves', obj.source_paths.BnU_waves);
-            config.chs_swl_b_a = obj.get_model_bias('swl', 'absolute');
-            config.chs_swl_b_r = obj.get_model_bias('swl', 'relative');
-            [config, storm, removed_storms, XC_Nyrs, XC_Nstm, prob_mass] = call_chs_storm_quality_check(config, CHS_Data, prob_mass, storm_type);
-            % TC Bias Correction State (db_info; Plots Apply The Same Correction To Raw CHS SWL)
-            tc_bias_corrected = 0;
-            if strcmp(storm_type, 'TC')
-                tc_bias_corrected = config.tc_bias_corrected;
+        function storm_database_progress(obj, fraction, message)
+            % Storm Database Creation Progress (build_storm_database.m progress_fcn, Wizard Dialog); A Cancel (Seen Here,
+            % Between Build Steps) Stops The Creation
+            obj.dlgObj = obj.auxLib.progress_window(fraction, message, 'Storm Database Creation Progress', obj.dlgObj, true);
+            if obj.auxLib.dialog_answer
+                error('CHESS:importCancelled', 'Storm database creation cancelled.');
             end
         end
 
@@ -1294,22 +1272,12 @@ classdef CHSStormDBImportUI < handle
             obj.dlgObj = []; % .zip: Progress Dialog In The Wizard (Unzip, H5 Conversion, Raw Files Write); Cancel Between Files
             % Convert CHS Data
             switch fext
-                case '.zip' % Library H5 Conversion (Progress Also Printed To Command Window)
-                    % Unzipped Into A System Temp Folder Removed On Every Exit (Success, Converter Error, Cancel)
-                    temp_path = tempname;
-                    temp_cleanup = onCleanup(@() CHSStormDBImportUI.remove_temp_folder(temp_path));
+                case '.zip' % Library H5 Conversion (convert_chs_zip: System Temp Unzip Removed On Every Exit, Cancel Included;
+                    % File Names Only; Progress Also Printed To Command Window)
                     try
                         obj.import_progress(NaN, 'Unzipping CHS modeling files...');
-                        unzip(chs_modeling, temp_path);
-                        % .h5 Extension In Any Case (dir '*.h5' Is Case-Sensitive Off Windows)
-                        h5_dir = dir(fullfile(temp_path, '**', '*'));
-                        h5_dir = h5_dir(~[h5_dir.isdir]' & endsWith({h5_dir.name}', '.h5', 'IgnoreCase', true));
-                        [~, h5_loc] = ismember(lower(obj.h5_names), lower({h5_dir.name}'));
-                        if any(h5_loc == 0)
-                            error('%s not found in the unzipped folder', strjoin(obj.h5_names(h5_loc == 0), ', '));
-                        end
                         % Bar Shows Files Done ((jj - 1)/n): jj/n Would Close The Dialog Before The Last File
-                        CHS_Data = call_chs_h5_converter(fullfile({h5_dir(h5_loc).folder}', {h5_dir(h5_loc).name}'), true,...
+                        CHS_Data = convert_chs_zip(chs_modeling, obj.h5_names, true,...
                             @(jj, n, file_name) obj.import_progress((jj - 1)/n, sprintf('Converting CHS .h5 files (%d of %d): %s', jj, n, file_name)));
                         obj.import_progress(NaN, ['Writing ' obj.db_name '_raw_files.mat...']);
                     catch me
@@ -1321,15 +1289,10 @@ classdef CHSStormDBImportUI < handle
                         end
                         return;
                     end
-                    clear temp_cleanup;
-                case '.mat' % Already Converted (Loaded During Inspection)
-                    CHS_Data = obj.load_chs_data_mat(chs_modeling);
+                case '.mat' % Already Converted (Loaded During Inspection); Keep File Names Only (Drop Source Folders)
+                    CHS_Data = strip_chs_data_folders(obj.load_chs_data_mat(chs_modeling));
                     obj.chs_data_cache = [];
             end
-            % Keep File Names Only (Drop Temp/Source Folders)
-            [~, fnames, fexts] = cellfun(@fileparts, {CHS_Data.Filename}, 'un', false);
-            fnames = strcat(fnames, fexts);
-            [CHS_Data.Filename] = fnames{:};
             % Write Out File And Store Pointer
             % Staged Until Import (commit_staged Gives It The Name <db>_raw_files.mat)
             disp(['Writing CHS_Data to ' obj.db_name, '_raw_files.mat....']);
@@ -1378,13 +1341,11 @@ classdef CHSStormDBImportUI < handle
                 obj.auxLib.error_dlgbox(me.message);
                 return;
             end
-            % Region & Savepoint Defaults From File Name (Library Naming Rule)
-            [~, fname] = fileparts(chs_modeling);
-            tokens = strsplit(fname, '_');
-            region = tokens(startsWith(tokens, 'CHS-'));
-            sp_id = tokens(~cellfun(@isempty, regexp(tokens, '^SP\d+$', 'once')));
-            if isempty(region), region = 'Custom_Modeling'; else, region = region{1}; end
-            if isempty(sp_id), sp_id = []; else, sp_id = str2double(strrep(sp_id{1}, 'SP', '')); end
+            % Region & Savepoint Defaults From File Name (Library Naming Rule: storm_mat_name_parts)
+            name_parts = storm_mat_name_parts(chs_modeling);
+            region = name_parts.region;
+            sp_id = name_parts.sp_ID;
+            if isempty(region), region = 'Custom_Modeling'; end
             % User Provides Region, Savepoint (And Uncertainties For Custom Modeling); Offshore Elevation: Study Grid (By
             % Savepoint ID: No Coordinates In A storm .mat), Else The Run Tab Inputs Table
             details = obj.storm_data_dialog(region, sp_id);
@@ -1417,12 +1378,8 @@ classdef CHSStormDBImportUI < handle
         function details = storm_data_dialog(obj, region, sp_id)
             details = [];
             % CHS Regions Available In CHS_Dependencies + Custom Modeling
-            regions = {};
-            grid_dir = dir(fullfile(obj.source_paths.chs_dependencies_path, 'Grid_Files'));
-            if ~isempty(grid_dir)
-                regions = {grid_dir([grid_dir.isdir] & ~startsWith({grid_dir.name}, '.')).name};
-            end
-            regions = [regions(:)', {'Custom_Modeling'}];
+            chs_files = chs_dependency_files(obj.source_paths.chs_dependencies_path, '');
+            regions = [chs_files.available_regions, {'Custom_Modeling'}];
             if ~any(strcmp(regions, region))
                 region = 'Custom_Modeling';
             end
@@ -1532,10 +1489,9 @@ classdef CHSStormDBImportUI < handle
         end
 
         % Create storm & prob_mass
-        function [storm, prob_mass] = create_storm_database(obj, create_wlp, create_whp, storm_duration, study_datum_offset)
+        function [storm, prob_mass] = create_storm_database(obj, create_wlp, create_whp, study_datum_offset)
             obj.dlgObj = [];
             obj.auxLib.dialog_answer = false;
-            obj.storm_duration = storm_duration;
             obj.create_wlp = create_wlp;
             obj.create_whp = create_whp;
             fields_to_del = fieldnames(obj.output_paths);
@@ -1582,74 +1538,57 @@ classdef CHSStormDBImportUI < handle
                     obj.create_whp = false;
                 end
                 % Storm File Slots (Library chs_storm_file_slots): Every Storm Type & Data Type Imported, WLP/WHP As Selected
-                [~, slot_errors] = chs_storm_file_slots(obj.h5_names, struct('storm_sampling', storm_sampling,...
+                [slots, slot_errors] = chs_storm_file_slots(obj.h5_names, struct('storm_sampling', storm_sampling,...
                     'use_peaks', +obj.has_peaks, 'use_timeseries', +obj.has_timeseries,...
                     'create_wlp', +obj.create_wlp, 'create_whp', +obj.create_whp));
                 if isempty(slot_errors)
-                    % No Probability Masses Unless TCs Are Present (XC Only)
-                    prob_mass = [];
-                    [tc_bias_corrected, Nyrs_XC, Nstm_XC] = deal(0, [], []);
-                    % Process Tropical Cyclones
-                    if contains(storm_sampling, {'TC','CC'})
-                        %
-                        [obj.dlgObj] = obj.auxLib.progress_window(1/9, 'Setting-up TC modeling suite regional statistics',...
-                            'Storm Database Creation Progress', obj.dlgObj, false);
-                        % Load DSW's & SRRs
-                        [prob_mass.Param, prob_mass.TC_SRR,...
-                            prob_mass.TC_Freq, prob_mass.TotalFreq,...
-                            prob_mass.smpl1, prob_mass.smpl2, prob_mass.smpl3] = chs_probability_mass_loader(obj.source_paths.chs_dependencies_path,...
-                            obj.study, obj.sp_ids.adcirc);
-                        % Match ADCIRC & Wave Modeling Datasets
-                        [storm.('TC'), storm.('TC').removed_storms,...
-                            ~, ~, prob_mass, tc_bias_corrected] = obj.call_chs_storm_quality_check(2, CHS_Data, prob_mass, 'TC');
+                    % Library Storm Database Builder (Same As call_chs_data_formatter): Data Types And WLP/WHP Per Storm Type
+                    % From The Slots; Bias & Uncertainty Set At Import; Progress And Cancel Through The Wizard Dialog
+                    if ismember('TC', obj.storm_types)
+                        dependency_files = chs_dependency_files(obj.source_paths.chs_dependencies_path, obj.study);
+                        if ~dependency_files.tropical_statistics_available
+                            obj.auxLib.error_dlgbox(chs_dependencies_message(storm_sampling, obj.study));
+                            storm = [];
+                            prob_mass = [];
+                            return;
+                        end
                     end
-                    % Process Extra-tropical Storms
-                    if contains(storm_sampling, {'XC','CC'})
-                        [storm.('XC'), storm.('XC').removed_storms,...
-                            Nyrs_XC, Nstm_XC, ~] = obj.call_chs_storm_quality_check(4, CHS_Data, [], 'XC');
+                    [~, src_name, src_ext] = fileparts(obj.source_paths.chs_zip);
+                    build_options = struct('chs_dependencies', obj.source_paths.chs_dependencies_path, 'region', obj.study,...
+                        'sp_ID', obj.sp_ids.adcirc, 'storm_types', {obj.storm_types}, 'storm_file_slots', slots,...
+                        'create_wlp', +obj.create_wlp, 'create_whp', +obj.create_whp, 'bias_uncertainty', obj.db_info,...
+                        'source_file', [src_name src_ext], 'print_progress', true,...
+                        'progress_fcn', @(fraction, message) obj.storm_database_progress(fraction, message));
+                    try
+                        [storm, prob_mass, db_info] = build_storm_database(CHS_Data, build_options); %#ok<PROPLC> Saved By Name
+                        obj.storm_database_progress(8.9/9, ['Writing storm & prob_mass to ' obj.db_name '.mat']);
+                    catch me
+                        obj.close_progress();
+                        if strcmp(me.identifier, 'CHESS:importCancelled')
+                            obj.auxLib.error_dlgbox('Storm database creation cancelled.');
+                        else
+                            obj.auxLib.error_dlgbox(['Could not create the storm database: ' me.message]);
+                        end
+                        storm = [];
+                        prob_mass = [];
+                        return;
                     end
-                    % Replace Hydrograph Peaks
-                    if obj.has_timeseries && obj.has_peaks
-                        [obj.dlgObj] = obj.auxLib.progress_window(7/9, 'Adjusting hydrographs peak responses',...
-                            'Storm Database Creation Progress', obj.dlgObj, false);
-                        [storm, ~] = chs_timeseries_peak_replacer(storm);
-                    end
+                    obj.db_info = db_info; %#ok<PROPLC>
                     % Save Out And Store Pointer
-                    [obj.dlgObj] = obj.auxLib.progress_window(8.9/9, ['Writting storm & prob_mass to ' obj.db_name '.mat'],...
-                        'Storm Database Creation Progress', obj.dlgObj, false);
                     obj.create_dir(obj.staging_dir());
                     storm = obj.study_datum_adjustment(storm, study_datum_offset);
-                    % Storm Database Details (Library storm_db_info.m): Bias & Uncertainty Set At Import, TC Bias Correction, XC Record
-                    [~, src_name, src_ext] = fileparts(obj.source_paths.chs_zip);
-                    obj.db_info = storm_db_info('create', obj.db_info, tc_bias_corrected, Nyrs_XC, Nstm_XC, [src_name src_ext]);
-                    db_info = obj.db_info; %#ok<PROPLC> Saved By Name
                     % Staged Until Import (commit_staged Gives It The Name <db>.mat)
                     obj.output_paths.storm_db = fullfile(obj.staging_dir(), 'staged.mat');
                     save(obj.output_paths.storm_db, 'storm', 'prob_mass', 'db_info', '-v7.3');
                     [obj.dlgObj] = obj.auxLib.progress_window(9/9, 'Complete',...
                         'Storm Database Creation Progress', obj.dlgObj);
+                    obj.auxLib.dialog_answer = false;
                 else
                     obj.auxLib.error_dlgbox(['Imported CHS modeling data does not meet the storm file requirements: ' strjoin(slot_errors, '; ') '.']);
                     storm = [];
                     prob_mass = [];
                     return;
                 end
-            end
-        end
-
-        function out = get_model_bias(obj, field, component)
-            arguments
-                obj
-                field {mustBeMember(field, {'swl','hm0'})}
-                component {mustBeMember(component, {'relative','absolute','combined'})}
-            end
-            switch component
-                case 'relative'
-                    out = obj.db_info.(['chs_' field '_b_r']);
-                case 'absolute'
-                    out = obj.db_info.(['chs_' field '_b_a']);
-                case 'combined'
-                    out = [[{'Ba'};{'Br'}],[{obj.db_info.(['chs_' field '_b_a'])};{obj.db_info.(['chs_' field '_b_r'])}]];
             end
         end
     end
@@ -1670,7 +1609,7 @@ classdef CHSStormDBImportUI < handle
         function fields = record_fields()
             % Fields Of A Storm DB Record (to_record), In Order
             fields = {'db_name', 'output_paths', 'outpath', 'source_paths', 'study', 'study_datum', 'db_info', 'sp_coords',...
-                'sp_ids', 'create_wlp', 'create_whp', 'storm_duration', 'gravity_constant', 'db_created', 'layout'};
+                'sp_ids', 'create_wlp', 'create_whp', 'gravity_constant', 'db_created', 'layout'};
         end
 
         function recs = empty_records()
@@ -1719,23 +1658,6 @@ classdef CHSStormDBImportUI < handle
             sp_id = [];
             if isstruct(rec.sp_ids) && isfield(rec.sp_ids, 'adcirc')
                 sp_id = rec.sp_ids.adcirc;
-            end
-        end
-
-        function out = get_model_uncertainty(rec, field, component)
-            % Modeling Uncertainty Of A Storm DB Record (db_info)
-            arguments
-                rec
-                field {mustBeMember(field, {'swl','hm0'})}
-                component {mustBeMember(component, {'relative','absolute','combined'})}
-            end
-            switch component
-                case 'relative'
-                    out = rec.db_info.(['chs_' field '_u_r']);
-                case 'absolute'
-                    out = rec.db_info.(['chs_' field '_u_a']);
-                case 'combined'
-                    out = [[{'Ua'};{'Ur'}],[{rec.db_info.(['chs_' field '_u_a'])};{rec.db_info.(['chs_' field '_u_r'])}]];
             end
         end
     end

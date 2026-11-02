@@ -1,7 +1,7 @@
 NOTE TO ALL: CHESS (Coastal Hazards, Engineering and Structures System) is in active development. Current release: **v2.0.0**. Make sure to check for version updates.
 
 
-![CHESS logo](CHESS_Library/GUI/CHESS_logo_NOAA.png)
+![CHESS logo](CHESS_Library/GUI/CHESS_logo_NOAA_white-outline.png)
 ## 👋 Welcome
 Thank you for your interest in CHG's probabilistic tool suite, the Coastal Hazards, Engineering and Structures System (CHESS) library (CHESS-Library), formerly StormSim. Version 2.0.0 is a major release: the library was renamed to CHESS and now ships with the CHESS GUI, a deterministic workflow, multi-line transects and a class-based plotting library. A few reminders:
 
@@ -26,7 +26,7 @@ The following figure summarizes the CHS data download process; 1) choose a regio
 </p>
 
 ### 2. Tidal prediction file
-File can be created by running auxiliary routine "create_tide_file.m" with the specification of a NOAA water level station ID. Active stations can be found at: https://tidesandcurrents.noaa.gov/stations.html?type=Water+Levels File must be a 2 column csv file with headers [Date, Prediction]. 
+File can be created with the GUI (Tides window) or by running "create_tide_file.m" (CHESS_Library/External_API/NOAA_COOPS) with a NOAA harmonic tide prediction station ID, a datum and a start date: one year of hourly predictions. Harmonic stations can be found at: https://tidesandcurrents.noaa.gov/tide_predictions.html (subordinate stations are not supported). File must be a 2 column csv file with headers [Date, Prediction [m]]. 
 
 ## Getting Started  
 Project conceptualization within the CHESS library is achived through 4 main components: 1) configuration file, 2) Protective System Elements (PSEs), 3) wave and water level storm forcing events, and 4) associated parameter aleatory and epistemic uncertainty. The configuration file holds project details, identifies directory paths to the other three components, and governs toolkit behavior. PSEs represent 1-D coastal structure transects. Storm forcing and associated uncertainties are downloaded from CHS as spatially distributed data containing peak and time series files.
@@ -34,7 +34,7 @@ Project conceptualization within the CHESS library is achived through 4 main com
 ![image](https://github.com/Coastal-Hazards-System/StormSim-Library/assets/51959561/09ff69a1-ba3b-4214-a6d3-4b63ab608b32)
 
 ### Available CHESS Modules
-The Example_Usage_Script.m provided with the CHESS library allows the seamless execution of several computational modules. Hosted modules include:
+The CHESS_Usage_Example.m script (or the CHESS GUI, launched with CHESS_UI_Call.m) provided with the CHESS library allows the seamless execution of several computational modules. Hosted modules include:
 #### 1. CHESS: Probabilistic Responses  Of Structures (PROS)
 CHESS-PROS probabilistically estimates structure response hazards using response-based methods. Coastal structure responses include floodwall, levee, and rubble mound overtopping and volume discharge, levee and rubble mound runup, floodwall hydrodynamic and hydrostatic pressures, and rubble mound stone stability. CHESS is a component of the Coastal Hazards System (CHS https://chs.erdc.dren.mil/, Nadal-Caraballo et al. 2020) which is a national-scale initiative to quantify coastal storm hazards. Results from high-fidelity, physics-informed numerical modeling of coastal storm events spanning the practical probability space for the U.S. coastline are stored on an online database (CHS-DB). Synthetic TCs and XCs were modeled in a high-fidelity coupled hydrodynamic framework (Massey et al. 2012) for regional studies to produce coastal wave and water level responses. This was completed for multiple sea level rise conditions. Discrete storm weights (DSW) define TC storm probability and are used to estimate hazards. Both peak and timeseries values are available. CHESS can evaluate responses over entire timeseries within a probabilistic framework with relatively small computational costs. Tides can be either randomly sampled, applied as uncertainty, or applied as a skew tide to account for nonlinearities. Structure responses are computed for hundreds of thousands of storm realizations following the CHESS-JPM and CHESS-PST workflows. Exceedance probabilities of the structure responses themselves are estimated. CHESS-PROS maintains the high fidelity multivariate statistical and physical interdependencies between storm forcing parameters without assuming identical probabilities of forcing parameters and structure responses (Stehno and Melby, in review). Epistemic uncertainties associated with storm response and empirical equations are applied as confidence limits to the BE response hazards. Results from CHESS-PROS are used for coastal structure designs when designs require non-exceedance of a structure response hazard at a given probability.
 #### 2. CHESS: Life Cycle Simulation (LCS)
@@ -56,31 +56,33 @@ The CHESS-Library is fully controlled trhough the configuration file (CHESS_<str
 8. CHESS Module Specific 
  
 ## Project Folder Structure (Outputs)
-<img align="right" width="33%" src="https://github.com/Coastal-Hazards-System/StormSim-Library/assets/51959561/0c1d96cb-1b13-4e1a-b444-907d47cab3fe](https://github.com/Coastal-Hazards-System/StormSim-Library/assets/51959561/6d82b958-c5a6-48f6-b5f1-17b9711498bf">
-CHESS stablishes and keeps track of all associated project files by storing outputs in a folder heirarchy built with: 
+CHESS keeps track of all project files by storing outputs in one folder hierarchy (defined in `chess_paths.m`, shared by the library and the GUI):
 
-1. project name: CHESS project parent folder. 
-2. transect id: Second level in the CHESS project output folder. Represents the PSE being designed/evaluated
-3. case name: Third level in the CHESS project output folder. Used to evaluate different alternatives for the same transect.
+```
+<outfolder>\<project_name>\
+    Event_Database\
+        <db>.mat                 storm database (storm, prob_mass, db_info)
+        <db>_raw_files.mat       converted CHS files (CHS_Data)
+    PSE\<struc_id>\<case_name>\<PROS|DET|LCS>\
+        <db>_<workflow>_config_file.mat
+        <db>_<workflow>_project_forcing.mat
+        <db>_<workflow>_project_responses.mat
+```
 
-The files stored within these folders serve as checkpoints or points of reference for the CHESS library. These checkpoints help reduce computational times across all workflows when iterating different alternatives for a project.
+- `<db>` is the storm database name (by default `<region>_SP<sp_ID>`, e.g. `CHS-NA_SP5572`). Storm databases sit at project level and are shared by every PSE and alternative.
+- `<struc_id>` is the PSE (Protective System Element, a 1-D structure transect) and `<case_name>` the alternative being evaluated for it.
+- `<workflow>` is `PROS-RB`, `DET`, `LCS` or `PROS-FB` (workflows 1-4). PROS-RB and PROS-FB share the `PROS` folder.
+
+Every run file of an alternative starts with `<db>_<workflow>`, so runs with different storm databases never share a file. The files serve as checkpoints (hotstart): when iterating alternatives, CHESS reuses whatever stage is still valid instead of recomputing it.
 
 ## Project Files (Outputs)
-Files created/exported by the CHESS library will have a prefix appended to them that is built by using project_name, struc_id, and case_name from provided configuration file. Most files follow the same organizational scheme where information is sorted by storm type, data type and data matching type (Maxima, WLP or WHP). Currently, CHESS only exports 5 types of files:
+Storm data are sorted by storm type (`TC`, `XC`), data type (`Peaks`, `Timeseries`) and matching type (`Default`, `WLP` water level priority, `WHP` wave height priority); e.g. `storm.XC.Peaks.Default`.
 
-1. *_CHS_NACCS_SP15104_raw_files.mat: Created in “call_chs_data_formater.m”. Contains  raw CHS files that have been converted using CHESS’s native CHS h5 converter. Information extracted includes storm data, attributes , headers and units.Created workspace variables: CHS_data.
-
-2. *_CHS_NACCS_SP15104.mat: Created in “call_chs_data_formater.m”. Contains processed CHS data and the associated storm probability masses. Data processing includes:
-ADCIRC/STWAVE storm data matching
-Storm hydrograph QA/QC (timestep matching and correction)
-Incomplete/Bad storms flagging and removal
-Storm data is stored by storm type, data type, and data matching type. Forexample storm.XC.Peaks.Maxima refers to the extratropical storm data contained within the CHS “Peaks” files and matched using the Maxima concept. Created workspace variables: storm, prob_mass.
-
-3. *_XX_project_forcing.mat: XX represents the workflow called to create this file (LCS or RB). This file is created in “call_project_forcing_formater.m”. Contains the formated project forcing data. In the context of an LCS workflow this implies sampling storms using the Monte Carlo Statistical framework. For RB workflows this implies reshaping storm data to have n replicates (depends on storm type) to cover 3 standard deviations. Created workspace variables: project_forcing. This dataset does not include any adjustments (SLR, tides, depth limitation or uncertainty)
-
-4. *_config_file.mat: This file is created in “call_input_parser.m”. This file contains the parsed CHESS configuration file. Additionally, it may also include the structure geometry being evaluated for the specified case. Config also gets some additional information appended to it in “call_chs_data_formater.m”. Config serves as the central schema for the whole CHESS library.
-
-5. XX_project_responses.mat: XX represents the workflow called to create this file (LCS or RB). This file is created in “call_project_response.m”. Contains the project responses computed by the CHESS library based on user specified workflow.
+1. `Event_Database\<db>_raw_files.mat`: created by `call_chs_data_formatter.m`. Raw CHS files converted with CHESS's native CHS h5 converter (storm data, attributes, headers and units). Variable: `CHS_Data`.
+2. `Event_Database\<db>.mat`: created by `call_chs_data_formatter.m` (or the GUI storm database wizard). Processed CHS data and the TC storm probability masses. Processing includes ADCIRC/wave model storm matching, hydrograph QA/QC (time step matching and correction) and removal of incomplete/bad storms. Variables: `storm`, `prob_mass`, `db_info`.
+3. `<db>_<workflow>_config_file.mat`: the parsed configuration (`call_input_parser.m`, completed by `call_environment_setup.m`), including the structure geometry. Config is the central schema of the CHESS library.
+4. `<db>_<workflow>_project_forcing.mat`: created by `call_chess_boundary_conditions.m`. The workflow's project forcing: storm replicates for PROS/DET, sampled life cycles for LCS, with the forcing adjustments (SLR, tides, depth limitation) and uncertainty applied. Variable: `project_forcing`.
+5. `<db>_<workflow>_project_responses.mat`: created by `call_project_response.m`. The structure responses computed for the workflow.
 
 ## Bug Reporting 
 Create an issue with the following information:

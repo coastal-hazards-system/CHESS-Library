@@ -7,7 +7,7 @@ function check_offshore_elevation(config)
         only overwritten when it has one, storm_db_info.m 'apply') and the
         PSE geometry gives none (input file row / GUI PSE table; field missing,
         empty or NaN). Shared by the
-        library (call_chs_data_formater.m, after the storm database's
+        library (call_chs_data_formatter.m, after the storm database's
         db_info is applied) and the GUI (create_resp_config, Run).
 
     %% INPUTS
@@ -36,11 +36,12 @@ chs_dependencies = '';
 if isfield(config, 'chs_dependencies')
     chs_dependencies = config.chs_dependencies;
 end
+chs_files = chs_dependency_files(chs_dependencies, region);
 if ~startsWith(region, 'CHS-')
     reason = 'Custom Modeling storm data, no CHS study grid';
-elseif ismember(region, {'CHS-TX', 'CHS-PR'})
+elseif chs_files.region_supported && ~chs_files.study_grid_has_elevation
     reason = sprintf('the %s study grid has no value column', region);
-elseif ~isempty(chs_dependencies) && ~chs_dependencies_available(chs_dependencies, region)
+elseif ~isempty(chs_dependencies) && ~chs_files.study_grid_available
     reason = sprintf('no CHS_Dependencies for %s', region);
 else
     reason = 'grid fill value at the savepoint, no CHS_Dependencies, or a storm database built before offshore elevations were stored';

@@ -50,7 +50,7 @@ end
 
 %% Interpolate to compute ARI for each y-value for tropical storms
 switch resp_var
-    case {'q', 'q_wave_ot', 'Q_vol', 'Q_vol_wave_ot'}
+    case response_registry('output', 'names', 'cc_confidence_limit_method', 'als_relative')
         % ALS CL Method
         for ii = 2:size(tc_prob,2)
             z = norminv(prc(ii)/100); % Compute Normal Z Scores

@@ -272,21 +272,16 @@ classdef CHESSPlotsBase
                 % Raw Timeseries From CHS_Data: ADCIRC For SWL, Wave Model For Hm0/Tp
                 t_raw = datetime.empty(0, 1);
                 y_raw = zeros(0, 1);
-                switch storm_type
-                    case 'TC'
-                        type_tokens = {'_TS_', '_TC_'};
-                    case 'XC'
-                        type_tokens = {'_XC_', '_XH_'};
-                    otherwise
-                        return
+                if ~ismember(storm_type, {'TC', 'XC'})
+                    return
                 end
-                file_names = {chs_data.Filename};
-                is_ts = contains(file_names, 'Timeseries') & contains(file_names, type_tokens);
-                is_adcirc = contains(file_names, 'ADCIRC');
+                file_parts = chs_file_name_parts({chs_data.Filename});
+                is_ts = strcmp({file_parts.data_type}, 'Timeseries') & strcmp({file_parts.storm_type}, storm_type);
+                is_adcirc = [file_parts.is_adcirc];
                 if field_to_plot == "SWL"
                     file_indx = find(is_ts & is_adcirc, 1);
                     col_name = 'Water Elevation';
-                    flag_value = -90; % ADCIRC No-Data Flag (chs_timeseries_formater)
+                    flag_value = -90; % ADCIRC No-Data Flag (chs_timeseries_formatter)
                 else
                     file_indx = find(is_ts & ~is_adcirc, 1);
                     if isempty(file_indx)
@@ -294,7 +289,7 @@ classdef CHESSPlotsBase
                     end
                     wave_headers = chs_wave_model_header_locator(chs_data(file_indx));
                     col_name = wave_headers.(char(field_to_plot));
-                    flag_value = -400; % Wave Model No-Data Flag (chs_timeseries_formater)
+                    flag_value = -400; % Wave Model No-Data Flag (chs_timeseries_formatter)
                 end
                 if isempty(file_indx)
                     return
@@ -326,26 +321,13 @@ classdef CHESSPlotsBase
                 self
                 parent
                 ds_query struct
-                response_to_view string  {mustBeMember(response_to_view, [ ...
-                    "Hm0t", ...
-                    "R2p", "R2p_SWL", ...
-                    "Dn50", "Dn50_Lee", ...
-                    "p1", ...
-                    "q", "q_overflow", "q_wave_ot", ...
-                    "Q_vol", "Q_vol_overflow", "Q_vol_wave_ot", ...
-                    "DamDepthElev", "DamDepth", ...
-                    "p2dyn", "p2sta", "p2total", ...
-                    "p3dyn", "p3sta", "p3total", ...
-                    "pu", ...
-                    "X_low", "X_up", "X_c_surge", "Bx", ...
-                    "theta_low", "theta_up", "theta_center", ...
-                    "Bjet", "Vjet", "Fjet", ...
-                    "S_seaside_with_repairs", "S_seaside_no_repairs", "S_leeside_with_repairs", "S_leeside_no_repairs" ...
-                    ])}
+                response_to_view string
                 sel = []
                 datum_offset double = 0
                 on_change = []
             end
+            % Registry Lists Cannot Be Called In Validators (R2022b)
+            mustBeMember(response_to_view, response_registry('output', 'names', 'per_event', true));
             if isempty(datum_offset)
                 datum_offset = 0;
             end
@@ -354,69 +336,11 @@ classdef CHESSPlotsBase
             sel = self.event_selection(sel, choices);
             ser = self.event_series_defaults(self.event_series(ds_query, response_to_view, sel));
 
-            switch self.structure.struc_type
-                case 1
-                    supported_resp = ["Hm0t", ...
-                        "R2p", "R2p_SWL", ...
-                        "q", "q_overflow", "q_wave_ot", ...
-                        "Q_vol", "Q_vol_overflow", "Q_vol_wave_ot", ...
-                        "DamDepthElev", "DamDepth"];
-                case 2
-                    supported_resp = ["p1",...
-                        "q", "q_overflow", "q_wave_ot", ...
-                        "Q_vol", "Q_vol_overflow", "Q_vol_wave_ot", ...
-                        "DamDepthElev", "DamDepth", ...
-                        "p2dyn", "p2sta", "p2total", ...
-                        "p3dyn", "p3sta", "p3total", ...
-                        "pu", ...
-                        "X_low", "X_up", "X_c_surge", "Bx", ...
-                        "theta_low", "theta_up", "theta_center", ...
-                        "Bjet", "Vjet", "Fjet" ...
-                        ];
-                case 3
-                    supported_resp = ["Hm0t", ...
-                        "R2p", "R2p_SWL", ...
-                        "Dn50", "Dn50_Lee", ...
-                        "q", "q_overflow", "q_wave_ot", ...
-                        "Q_vol", "Q_vol_overflow", "Q_vol_wave_ot", ...
-                        "DamDepthElev", "DamDepth", ...
-                        "S_seaside_with_repairs", "S_seaside_no_repairs", "S_leeside_with_repairs", "S_leeside_no_repairs"];
-            end
+            supported_resp = response_registry('output', 'names', 'per_event', true, 'structure_type', self.structure.struc_type);
             if ~any(ismember(response_to_view, supported_resp))
-                error(['Requested response is not supported by pse type. Please call: ' supported_resp]);
+                error(['Requested response is not supported by pse type. Please call: ' strjoin(supported_resp, ', ')]);
             end
-            [~, ~, ~,...
-                ~,...
-                ~, y_label, y_scale_log] = response_library_headers(self.config, char(response_to_view));
-            %
-            [~, ~, ~,...
-                ~,...
-                ~, y_label2, ~] = response_library_headers(self.config, 'SWL');
-            y_label2 = strrep(y_label2, 'SWL','Elevation');
-            % Datum Offset Is Subtracted From SWL And Crest Below: Reflect It In The Label
-            y_label2_base = y_label2;
-            lake_level = mean_lake_level(self.config);
-            total_offset = datum_offset;
-            if sel.lake_removed
-                total_offset = datum_offset + lake_level;
-            end
-            y_label2 = elevation_label(total_offset);
-            is_peaks = strcmp(ser.x_kind, 'event');
-            x_str = ser.x_label;
-            if isempty(x_str)
-                switch ser.x_kind
-                    case 'event'
-                        x_str = 'Event #';
-                    case 'hours'
-                        x_str = 'Storm Duration [hrs]';
-                    otherwise
-                        x_str = 'Date';
-                end
-            end
-            % Define Title
-            title_label = [{['PSE ID: ' self.config.struc_id ' | Alternative ID: ' self.config.case_name]};...
-                {['CHS Region: ' self.config.region ' | Savepoint: ' num2str(self.config.sp_ID) ' | Event: ' ser.event_str]}];
-            title_label = strrep(title_label, '_', ' ');
+            labels = self.event_viewer_labels(response_to_view, sel, ser, datum_offset);
             % Container: Own uifigure, Else Built Inside The Caller's Figure, Panel Or Grid
             if isempty(parent) || ~isvalid(parent)
                 parent = uifigure('Name', 'CHESS Figure', 'Position', [100 100 1000 600]);
@@ -427,112 +351,16 @@ classdef CHESSPlotsBase
             % Control Row (Per Workflow)
             self.event_controls(gl, 1, sel, choices, @emit);
             % Axes
-            ax = aux_methods.initiate_axes(gl, x_str, y_label2, title_label, self.base_fnt, 2, 1);
-            ax2 = aux_methods.initiate_axes(gl, x_str, y_label, ['Response Variable: ' y_label], self.base_fnt, 3, 1);
-            if y_scale_log == 1
+            ax = aux_methods.initiate_axes(gl, labels.x_label, labels.elevation_label, labels.title, self.base_fnt, 2, 1);
+            ax2 = aux_methods.initiate_axes(gl, labels.x_label, labels.response_label, ['Response Variable: ' labels.response_label], self.base_fnt, 3, 1);
+            if labels.response_log == 1
                 ax2.YScale = 'log';
             end
 
-            % Storm Segments (Rows Of One Storm Each): Lines Break Between Storms (NaN Gap), Storm ID Data Tips Per Row
-            x = ser.x;
-            segs = ser.segments;
-            xg = gapped(x);
-            tip_ids = [];
-            if numel(ser.storm_ids) == numel(x) && (is_peaks || numel(x) > 1)
-                tip_ids = gapped(ser.storm_ids);
-            end
-
-            % No Data: Empty, Or No Finite Non-Zero (Positive On A Log Axis) Values; Overlay Lines Count As Data
-            resp_signal = ser.resp;
-            if y_scale_log == 1
-                has_resp_line = any(isfinite(resp_signal(:)) & resp_signal(:) > 0);
-            else
-                has_resp_line = any(isfinite(resp_signal(:)) & resp_signal(:) ~= 0);
-            end
-            has_overlay = ~isempty(ser.overlay);
-            has_resp_data = has_resp_line || has_overlay;
-
-            % Plots: Top Axes (Elevations Shifted By The Datum Offset, Mean Lake Level When Removed)
-            hm0_off_label = 'Hm0 (offshore)';
-            if isfield(self.config, 'multiline') && isstruct(self.config.multiline) % Multi-Line Stage 2: Saved Forcing Is Already Transmitted
-                hm0_off_label = ['Hm0 (offshore, behind ' strrep(self.config.multiline.stage1_alt, '_', '\_') ')']; % Legend: TeX
-            end
-            swl_line = add_series(ax, ser.swl - total_offset, [1 0 0], false, true, 'SWL');
-            crest_line = yline(ax, self.structure.crest_elevation - total_offset, '--c','LineWidth', 1.2,'DisplayName','PSE Crest');
-            add_series(ax, ser.hm0_off, [0 0 0], true, false, hm0_off_label);
-            add_series(ax, ser.hm0_toe, [0 0 0], false, true, 'Hm0 (at toe)');
-            add_series(ax, ser.h, [0 0 1], true, false, 'h');
-            if ~isempty(ser.hb)
-                add_series(ax, ser.hb, [1 0 1], true, false, 'h (berm)');
-            end
-            add_series(ax, ser.rc, [0 1 0], false, true, 'Freeboard (Rc)');
-            lg = legend(ax, 'Location', 'northoutside','Orientation','horizontal','NumColumns',7);
-            lg.ItemHitFcn = @toggleLine;
-            % Mean Lake Level Option (Regions With A Mean Lake Level Only)
-            if lake_level ~= 0
-                lake_menu = uicontextmenu(fig);
-                uimenu(lake_menu, 'Text', 'Remove mean lake level from SWL & Crest', ...
-                    'Checked', aux_methods.tern(sel.lake_removed, 'on', 'off'), 'MenuSelectedFcn', @(~, ~) emit('lake_removed', ~sel.lake_removed));
-                ax.ContextMenu = lake_menu;
-                ax.DeleteFcn = @(~, ~) delete(lake_menu);
-                set(ax.Children, 'ContextMenu', lake_menu);
-            end
-            % Bottom Axes: Response (Markers, One Line, Or One Color Per Storm) And Overlay Lines (Horizontal)
-            if ~has_resp_data
-                aux_methods.display_no_data(ax2, self.base_fnt);
-            else
-                if is_peaks && has_resp_line
-                    resp_line = plot(ax2, xg, resp_signal, 'ok', 'MarkerSize', 5, 'MarkerFaceColor', 'k');
-                    add_tips(resp_line, tip_ids);
-                elseif ser.color_segments && ~isempty(segs) && has_resp_line
-                    palette = lines(7);
-                    for ss = 1:numel(segs)
-                        rows = segs{ss};
-                        resp_line = plot(ax2, x(rows), resp_signal(rows), '-', 'LineWidth', 1.2, 'Color', palette(mod(ss - 1, 7) + 1, :));
-                        if ~isempty(tip_ids)
-                            add_tips(resp_line, ser.storm_ids(rows));
-                        end
-                    end
-                elseif has_resp_line
-                    resp_line = plot(ax2, xg, gapped(resp_signal), '-k','LineWidth', 1.2);
-                    add_tips(resp_line, tip_ids);
-                end
-                if has_overlay
-                    if ~has_resp_line % Empty Line Gives This Axes The Type Of The Forcing X Axis (Link)
-                        plot(ax2, xg, NaN(size(xg)), 'HandleVisibility', 'off');
-                    end
-                    for ss = 1:numel(ser.overlay)
-                        yline(ax2, ser.overlay(ss).y, '-', ser.overlay(ss).label, 'Color', ser.overlay(ss).color, 'LineWidth', 1.5, ...
-                            'LabelHorizontalAlignment', 'left', 'FontWeight', 'bold');
-                    end
-                    if ~has_resp_line
-                        aux_methods.pad_limits(ax2, 'Y', [ser.overlay.y]);
-                    end
-                end
-            end
-            if numel(x) > 1 && max(x) > min(x)
-                ax.XLim = [min(x) max(x)];
-                if has_resp_data
-                    ax2.XLim = [min(x) max(x)];
-                end
-            end
-            if has_resp_data % No Data: ax2 Keeps Numeric Limits, Cannot Link To A Datetime Axis
-                linkaxes([ax,ax2],'x');
-            end
-            % Storm Start/End Lines And Custom X Ticks (e.g. Simulation Years)
-            axes_drawn = ax;
-            if has_resp_data
-                axes_drawn = [ax, ax2];
-            end
-            for a = axes_drawn
-                if ~isempty(ser.bounds)
-                    xline(a, ser.bounds(:), '-', 'Color', [0.65 0.65 0.65], 'LineWidth', 0.5, 'HandleVisibility', 'off');
-                end
-                if ~isempty(ser.xticks)
-                    a.XTick = ser.xticks.pos;
-                    a.XTickLabel = ser.xticks.labels;
-                end
-            end
+            event_view = self.event_viewer_view(ser, labels.response_log);
+            self.plot_event_forcing(ax, fig, ser, event_view, sel, labels, @emit);
+            self.plot_event_response(ax2, ser, event_view);
+            self.finish_event_axes(ax, ax2, ser, event_view);
 
             % --- New Selection: Caller Redraws (on_change), Else This Viewer Rebuilds In Place ---
             function emit(field_name, value)
@@ -544,59 +372,6 @@ classdef CHESSPlotsBase
                     kids = container.Children;
                     delete(kids(~isa(kids, 'matlab.ui.container.ContextMenu')));
                     self.storm_event_viewer(container, ds_query, response_to_view, new_sel, datum_offset, on_change);
-                end
-            end
-            function v = gapped(v)
-                % Segments Joined With A NaN Between Them (One Line Object, Broken Between Storms)
-                if isempty(segs)
-                    return
-                end
-                v = v(:);
-                parts = cellfun(@(r) [v(r); NaN], segs(:), 'un', false);
-                v = vertcat(parts{:});
-            end
-            function ln = add_series(a, y, color, dashed, filled, name)
-                y = gapped(y);
-                if is_peaks % Markers Only, Storm ID In The Data Tip (Open Markers = Dashed Lines Of The Timeseries View)
-                    ln = plot(a, xg, y, 'o', 'Color', color, 'MarkerSize', 5, 'DisplayName', name);
-                    if filled
-                        ln.MarkerFaceColor = color;
-                    end
-                else
-                    ln = plot(a, xg, y, 'Color', color, 'LineStyle', aux_methods.tern(dashed, '--', '-'), 'LineWidth', 1.2, 'DisplayName', name);
-                end
-                add_tips(ln, tip_ids);
-            end
-            function add_tips(ln, ids)
-                % Storm ID Data Tip: Replaces The X Row Of Event Markers, Added After The Others On Lines
-                if isempty(ids)
-                    return
-                end
-                tip_row = dataTipTextRow('Storm ID', ids);
-                if is_peaks
-                    ln.DataTipTemplate.DataTipRows(1) = tip_row;
-                else
-                    ln.DataTipTemplate.DataTipRows(end+1) = tip_row;
-                end
-            end
-            % --- Callback Function ---
-            function toggleLine(~, event)
-                % event.Peer is the specific line object associated with the clicked legend text
-                if strcmp(event.Peer.Visible, 'on')
-                    event.Peer.Visible = 'off'; % Hide the line
-                else
-                    event.Peer.Visible = 'on';  % Show the line
-                end
-            end
-            function label_out = elevation_label(offset)
-                label_out = y_label2_base;
-                if offset ~= 0
-                    offset_sign = '-';
-                    if offset < 0
-                        offset_sign = '+';
-                    end
-                    label_out = strrep(label_out, [self.config.project_datum ']'],...
-                        sprintf('%s %s %g]', self.config.project_datum, offset_sign, abs(offset)));
                 end
             end
         end
@@ -821,10 +596,227 @@ classdef CHESSPlotsBase
         end
     end
 
+    %% STORM EVENT VIEWER PARTS (Drawn By storm_event_viewer)
+    methods (Access=protected)
+        function labels = event_viewer_labels(self, response_to_view, sel, ser, datum_offset)
+            % Axis Labels, Title And Elevation Offset Of The Storm Event Viewer:
+            %   title, x_label, elevation_label (Top Axes), response_label, response_log (Bottom Axes),
+            %   lake_level (Mean Lake Level, 0 Outside The Great Lakes), elevation_offset (Subtracted From SWL And Crest)
+            [~, ~, ~,...
+                ~,...
+                ~, labels.response_label, labels.response_log] = response_library_headers(self.config, char(response_to_view));
+            %
+            [~, ~, ~,...
+                ~,...
+                ~, elevation_base_label, ~] = response_library_headers(self.config, 'SWL');
+            elevation_base_label = strrep(elevation_base_label, 'SWL','Elevation');
+            % Datum Offset Is Subtracted From SWL And Crest Below: Reflect It In The Label
+            labels.lake_level = mean_lake_level(self.config);
+            labels.elevation_offset = datum_offset;
+            if sel.lake_removed
+                labels.elevation_offset = datum_offset + labels.lake_level;
+            end
+            labels.elevation_label = self.offset_elevation_label(elevation_base_label, labels.elevation_offset);
+            labels.x_label = ser.x_label;
+            if isempty(labels.x_label)
+                switch ser.x_kind
+                    case 'event'
+                        labels.x_label = 'Event #';
+                    case 'hours'
+                        labels.x_label = 'Storm Duration [hrs]';
+                    otherwise
+                        labels.x_label = 'Date';
+                end
+            end
+            % Define Title
+            title_label = [{['PSE ID: ' self.config.struc_id ' | Alternative ID: ' self.config.case_name]};...
+                {['CHS Region: ' self.config.region ' | Savepoint: ' num2str(self.config.sp_ID) ' | Event: ' ser.event_str]}];
+            labels.title = strrep(title_label, '_', ' ');
+        end
+
+        function label_out = offset_elevation_label(self, base_label, offset)
+            % Elevation Label With The Offset Next To The Project Datum (e.g. [IGLD85 - 176.45])
+            label_out = base_label;
+            if offset ~= 0
+                offset_sign = '-';
+                if offset < 0
+                    offset_sign = '+';
+                end
+                label_out = strrep(label_out, [self.config.project_datum ']'],...
+                    sprintf('%s %s %g]', self.config.project_datum, offset_sign, abs(offset)));
+            end
+        end
+
+        function event_view = event_viewer_view(~, ser, response_log)
+            % What The Viewer Draws: segs, xg (Gapped X), tip_ids, is_peaks, has_resp_line, has_overlay, has_resp_data
+            % Storm Segments (Rows Of One Storm Each): Lines Break Between Storms (NaN Gap), Storm ID Data Tips Per Row
+            event_view.is_peaks = strcmp(ser.x_kind, 'event');
+            event_view.segs = ser.segments;
+            event_view.xg = CHESSPlotsBase.gapped(ser.x, event_view.segs);
+            event_view.tip_ids = [];
+            if numel(ser.storm_ids) == numel(ser.x) && (event_view.is_peaks || numel(ser.x) > 1)
+                event_view.tip_ids = CHESSPlotsBase.gapped(ser.storm_ids, event_view.segs);
+            end
+
+            % No Data: Empty, Or No Finite Non-Zero (Positive On A Log Axis) Values; Overlay Lines Count As Data
+            resp_signal = ser.resp;
+            if response_log == 1
+                event_view.has_resp_line = any(isfinite(resp_signal(:)) & resp_signal(:) > 0);
+            else
+                event_view.has_resp_line = any(isfinite(resp_signal(:)) & resp_signal(:) ~= 0);
+            end
+            event_view.has_overlay = ~isempty(ser.overlay);
+            event_view.has_resp_data = event_view.has_resp_line || event_view.has_overlay;
+        end
+
+        function plot_event_forcing(self, ax, fig, ser, event_view, sel, labels, emit)
+            % Plots: Top Axes (Elevations Shifted By The Datum Offset, Mean Lake Level When Removed)
+            %   emit(field, value): The Viewer's Selection Callback (Lake Level Context Menu)
+            hm0_off_label = 'Hm0 (offshore)';
+            if isfield(self.config, 'multiline') && isstruct(self.config.multiline) % Multi-Line Stage 2: Saved Forcing Is Already Transmitted
+                hm0_off_label = ['Hm0 (offshore, behind ' strrep(self.config.multiline.stage1_alt, '_', '\_') ')']; % Legend: TeX
+            end
+            CHESSPlotsBase.add_series(ax, ser.swl - labels.elevation_offset, [1 0 0], false, true, 'SWL', event_view);
+            yline(ax, self.structure.crest_elevation - labels.elevation_offset, '--c','LineWidth', 1.2,'DisplayName','PSE Crest');
+            CHESSPlotsBase.add_series(ax, ser.hm0_off, [0 0 0], true, false, hm0_off_label, event_view);
+            CHESSPlotsBase.add_series(ax, ser.hm0_toe, [0 0 0], false, true, 'Hm0 (at toe)', event_view);
+            CHESSPlotsBase.add_series(ax, ser.h, [0 0 1], true, false, 'h', event_view);
+            if ~isempty(ser.hb)
+                CHESSPlotsBase.add_series(ax, ser.hb, [1 0 1], true, false, 'h (berm)', event_view);
+            end
+            CHESSPlotsBase.add_series(ax, ser.rc, [0 1 0], false, true, 'Freeboard (Rc)', event_view);
+            lg = legend(ax, 'Location', 'northoutside','Orientation','horizontal','NumColumns',7);
+            lg.ItemHitFcn = @CHESSPlotsBase.toggle_legend_line;
+            % Mean Lake Level Option (Regions With A Mean Lake Level Only)
+            if labels.lake_level ~= 0
+                lake_menu = uicontextmenu(fig);
+                uimenu(lake_menu, 'Text', 'Remove mean lake level from SWL & Crest', ...
+                    'Checked', aux_methods.tern(sel.lake_removed, 'on', 'off'), 'MenuSelectedFcn', @(~, ~) emit('lake_removed', ~sel.lake_removed));
+                ax.ContextMenu = lake_menu;
+                ax.DeleteFcn = @(~, ~) delete(lake_menu);
+                set(ax.Children, 'ContextMenu', lake_menu);
+            end
+        end
+
+        function plot_event_response(self, ax2, ser, event_view)
+            % Bottom Axes: Response (Markers, One Line, Or One Color Per Storm) And Overlay Lines (Horizontal)
+            x = ser.x;
+            segs = event_view.segs;
+            resp_signal = ser.resp;
+            if ~event_view.has_resp_data
+                aux_methods.display_no_data(ax2, self.base_fnt);
+            else
+                if event_view.is_peaks && event_view.has_resp_line
+                    resp_line = plot(ax2, event_view.xg, resp_signal, 'ok', 'MarkerSize', 5, 'MarkerFaceColor', 'k');
+                    CHESSPlotsBase.add_tips(resp_line, event_view.tip_ids, event_view.is_peaks);
+                elseif ser.color_segments && ~isempty(segs) && event_view.has_resp_line
+                    palette = lines(7);
+                    for ss = 1:numel(segs)
+                        rows = segs{ss};
+                        resp_line = plot(ax2, x(rows), resp_signal(rows), '-', 'LineWidth', 1.2, 'Color', palette(mod(ss - 1, 7) + 1, :));
+                        if ~isempty(event_view.tip_ids)
+                            CHESSPlotsBase.add_tips(resp_line, ser.storm_ids(rows), event_view.is_peaks);
+                        end
+                    end
+                elseif event_view.has_resp_line
+                    resp_line = plot(ax2, event_view.xg, CHESSPlotsBase.gapped(resp_signal, segs), '-k','LineWidth', 1.2);
+                    CHESSPlotsBase.add_tips(resp_line, event_view.tip_ids, event_view.is_peaks);
+                end
+                if event_view.has_overlay
+                    if ~event_view.has_resp_line % Empty Line Gives This Axes The Type Of The Forcing X Axis (Link)
+                        plot(ax2, event_view.xg, NaN(size(event_view.xg)), 'HandleVisibility', 'off');
+                    end
+                    for ss = 1:numel(ser.overlay)
+                        yline(ax2, ser.overlay(ss).y, '-', ser.overlay(ss).label, 'Color', ser.overlay(ss).color, 'LineWidth', 1.5, ...
+                            'LabelHorizontalAlignment', 'left', 'FontWeight', 'bold');
+                    end
+                    if ~event_view.has_resp_line
+                        aux_methods.pad_limits(ax2, 'Y', [ser.overlay.y]);
+                    end
+                end
+            end
+        end
+
+        function finish_event_axes(~, ax, ax2, ser, event_view)
+            % Shared X Limits And Link, Storm Start/End Lines And Custom X Ticks (e.g. Simulation Years)
+            x = ser.x;
+            if numel(x) > 1 && max(x) > min(x)
+                ax.XLim = [min(x) max(x)];
+                if event_view.has_resp_data
+                    ax2.XLim = [min(x) max(x)];
+                end
+            end
+            if event_view.has_resp_data % No Data: ax2 Keeps Numeric Limits, Cannot Link To A Datetime Axis
+                linkaxes([ax,ax2],'x');
+            end
+            axes_drawn = ax;
+            if event_view.has_resp_data
+                axes_drawn = [ax, ax2];
+            end
+            for a = axes_drawn
+                if ~isempty(ser.bounds)
+                    xline(a, ser.bounds(:), '-', 'Color', [0.65 0.65 0.65], 'LineWidth', 0.5, 'HandleVisibility', 'off');
+                end
+                if ~isempty(ser.xticks)
+                    a.XTick = ser.xticks.pos;
+                    a.XTickLabel = ser.xticks.labels;
+                end
+            end
+        end
+    end
+
+    methods (Static, Access=protected)
+        function v = gapped(v, segs)
+            % Segments Joined With A NaN Between Them (One Line Object, Broken Between Storms)
+            if isempty(segs)
+                return
+            end
+            v = v(:);
+            parts = cellfun(@(r) [v(r); NaN], segs(:), 'un', false);
+            v = vertcat(parts{:});
+        end
+
+        function ln = add_series(a, y, color, dashed, filled, name, event_view)
+            y = CHESSPlotsBase.gapped(y, event_view.segs);
+            if event_view.is_peaks % Markers Only, Storm ID In The Data Tip (Open Markers = Dashed Lines Of The Timeseries View)
+                ln = plot(a, event_view.xg, y, 'o', 'Color', color, 'MarkerSize', 5, 'DisplayName', name);
+                if filled
+                    ln.MarkerFaceColor = color;
+                end
+            else
+                ln = plot(a, event_view.xg, y, 'Color', color, 'LineStyle', aux_methods.tern(dashed, '--', '-'), 'LineWidth', 1.2, 'DisplayName', name);
+            end
+            CHESSPlotsBase.add_tips(ln, event_view.tip_ids, event_view.is_peaks);
+        end
+
+        function add_tips(ln, ids, is_peaks)
+            % Storm ID Data Tip: Replaces The X Row Of Event Markers, Added After The Others On Lines
+            if isempty(ids)
+                return
+            end
+            tip_row = dataTipTextRow('Storm ID', ids);
+            if is_peaks
+                ln.DataTipTemplate.DataTipRows(1) = tip_row;
+            else
+                ln.DataTipTemplate.DataTipRows(end+1) = tip_row;
+            end
+        end
+
+        % --- Callback Function ---
+        function toggle_legend_line(~, event)
+            % event.Peer is the specific line object associated with the clicked legend text
+            if strcmp(event.Peer.Visible, 'on')
+                event.Peer.Visible = 'off'; % Hide the line
+            else
+                event.Peer.Visible = 'on';  % Show the line
+            end
+        end
+    end
+
     %% EVENT TABLE HELPERS (STORM EVENT VIEWER / RESPONSE TABLE)
     properties (Constant, Access=protected)
         % Datum-Referenced Elevations (Left yyaxis On Hydrographs)
-        elevation_fields = {'SWL', 'R2p_SWL', 'DamDepthElev'}
+        elevation_fields = response_registry('output', 'names', 'datum_elevation', true)
         % Table Columns That Identify Rows (Never Plotted)
         table_id_cols = {'StormID', 'Time', 'Year', 'Order'}
     end
