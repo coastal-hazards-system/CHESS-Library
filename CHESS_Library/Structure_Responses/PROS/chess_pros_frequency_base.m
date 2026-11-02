@@ -171,10 +171,10 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                              sprintf('%s | %s [%s]', storm_name, lbl_name, unit_label)};
                 out_name  = sprintf('%s_%s_%s_Hazard_Curve.png', save_name, v_name, storm_name);
                 
-                % Append
-                Output = response_appender(Output, vv, v_name, y_label, title_str, ...
+                % Append (No PST/JPM Fit: Count Fields Kept For Concatenation With The RB Entries)
+                Output = set_hazard_curve_entry(Output, vv, v_name, y_label, title_str, ...
                     x_plt, [Resp.y_plot.(v_name)], x_tbl, [Resp.y_table.(v_name)], ...
-                    {'Computed using frequency base approach.'}, y_scale_log, cl, out_name);
+                    {'Computed using frequency base approach.'}, y_scale_log, cl, out_name, [], 0, 0);
             end
             
             % Clean up inputs and merge
@@ -193,29 +193,6 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
     % ==========================================
     % HELPER FUNCTIONS
     % ==========================================
-    function Output = response_appender(Output, rIndx, sVar, y_label, title_str, x_plt, y_plt, x_tbl, y_tbl, POT, y_log_scale, CL, outName)
-        % Create boolean masks once to avoid evaluating logic 4 separate times
-        idx_tbl = x_tbl >= 0.001;
-        idx_plt = x_plt >= 0.001 & x_plt <= max(x_tbl);
-        
-        Output(rIndx).var         = sVar;
-        Output(rIndx).CL          = CL; 
-        Output(rIndx).x_plot      = x_plt(idx_plt, :);
-        Output(rIndx).y_plot      = y_plt(idx_plt, :);
-        Output(rIndx).x_table     = x_tbl(idx_tbl, :);
-        Output(rIndx).y_table     = y_tbl(idx_tbl, :);
-        Output(rIndx).x_table_ARI = x_tbl;
-        Output(rIndx).POT         = POT;
-        Output(rIndx).y_label     = y_label;
-        Output(rIndx).title       = title_str;
-        Output(rIndx).y_log_scale = y_log_scale; 
-        Output(rIndx).save_name   = outName;
-        % No PST/JPM Fit: Count Fields Kept For Concatenation With The RB Entries
-        Output(rIndx).n_events    = [];
-        Output(rIndx).n_dropped   = 0;
-        Output(rIndx).lake_offset = 0;
-    end
-
     function [var_out, pass_indx] = get_hc_data(data, varname, field_get)
         var_indx = strcmp(varname, {data.var});
         if any(var_indx)

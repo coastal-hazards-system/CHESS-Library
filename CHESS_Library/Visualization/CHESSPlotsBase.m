@@ -29,10 +29,11 @@ classdef CHESSPlotsBase
 
     %% INPUT SCREENING METHODS
     methods (Access=public)
-        function [ax, Geo] = pse_transect_plot(self, ax, ~)
-            % Third Input (Former datum) Is Kept For Call Compatibility And Ignored:
-            % Elevations Are Plotted Signed, So No Tick Relabeling Is Needed.
-            warning('off');
+        function [ax, Geo] = pse_transect_plot(self, ax)
+            % polyshape Repairs The Transect Polygons On Creation And Warns Each Time
+            w_state = warning;
+            warning('off', 'MATLAB:polyshape:repairedBySimplify');
+            w_cleanup = onCleanup(@() warning(w_state));
             pse_geo     = self.structure;
             % Horizontal Space Before The First Toe And After The Leeside Toe
             x_shift     = 8;
@@ -152,7 +153,6 @@ classdef CHESSPlotsBase
             ax.Children = ax.Children([end, 1:end-1]);
             xlim(ax, [0, x_f]);
             ylim(ax, [toe_elevation-y_shift, crest_elevation+y_top]);
-            warning('on');
 
             function result = solvePointSlope(y2, y1, m, x2, x1)
                 % Pass the known variables as numbers, and the unknown as []

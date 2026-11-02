@@ -1,7 +1,5 @@
 function HC_out = chess_pros(config, project_forcing, structure, outPath)
 %% INITIALIZE FIELDS AND PROMT USER
-% Turn Off Warnings
-warning('off');
 % Get AEP vs AEF Flag
 use_aep = config.pros_use_aep;
 % Display PROS Message
@@ -75,9 +73,6 @@ if any(fb_responses) || config.workflow == 4
     % Run CHESS PROS-FB
     HC_out = chess_pros_frequency_base(config, structure, HC_out, outPath, config.workflow);
 end
-
-% Enable Warnings Again
-warning('on');
 
 %% AUX FUNCTION
     function config_out = config_editor(config_out, var_to_look, value)

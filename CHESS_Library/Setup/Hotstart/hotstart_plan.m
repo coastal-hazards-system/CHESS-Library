@@ -41,19 +41,16 @@ if ~isfile(seed_file)
     return
 end
 S = load(seed_file);
-if strcmp(config.storm_sampling, 'CC')
-    types = {'XC', 'TC'};
-else
-    types = {config.storm_sampling};
-end
+types = storm_types_for_sampling(config.storm_sampling, {'XC', 'TC'});
 for kk = 1:numel(types)
     if ~isfield(S.sampled_ids, types{kk}) || numel(S.sampled_ids.(types{kk})) ~= config.mcs_nLC
         why_not = sprintf('the sampling seed file has no %s life cycles to reuse', types{kk});
         return
     end
 end
-% XC WLP/WHP Life Cycles Are Copies Of The Default Ones (chess_lcs.m): Only xc_peaks.Default Is Needed
-if ismember('XC', types) && (~isfield(S, 'xc_peaks') || ~isfield(S.xc_peaks, 'Default'))
+% XC WLP/WHP Life Cycles Are Copies Of The Default Ones (chess_lcs.m): Only xc_peaks.Default Is Needed.
+% use_peaks = 0 Builds No Peaks Life Cycles (Its Seed Holds No xc_peaks)
+if config.use_peaks == 1 && ismember('XC', types) && (~isfield(S, 'xc_peaks') || ~isfield(S.xc_peaks, 'Default'))
     why_not = 'the sampling seed file lacks the sampled XC peak values';
 end
 end

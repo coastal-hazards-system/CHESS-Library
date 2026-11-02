@@ -15,7 +15,7 @@ function Resp = chess_det(config, project_forcing, structure)
     %% INPUTS
         config: CHESS configuration. | struc
         project_forcing: One dataset, project_forcing.(data).(match). | struc
-            Fields per storm type, from chess_det_formatter and
+            Fields per storm type, from chess_forcing_formatter and
             adjust_project_forcing.
         structure: CHESS structure geometry. | struc
 

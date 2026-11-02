@@ -48,12 +48,17 @@ if pst_options.stat_print == 1
     disp([newline '*** Step 1: Processing input arguments ']);
 end
 
-% Turn off all warnings
-warning('off','all');
+% Silence The Known Fit Warnings (GPD Fit Boundary/Evaluation Limit, MRL Table Rows) Until The Function Exits
+w_state = warning;
+warning('off', 'stats:gpfit:ConvergedToBoundary1');
+warning('off', 'stats:gpfit:ConvergedToBoundary2');
+warning('off', 'stats:gpfit:EvalLimit');
+warning('off', 'MATLAB:table:RowsAddedExistingVars');
+w_cleanup = onCleanup(@() warning(w_state));
 
 %% PARAMETER INITIALIZATION
 % Error Handeling For Inputs
-[response_data, pst_options, plot_options] = error_handeling(response_data, pst_options, plot_options);
+[response_data, pst_options, plot_options] = error_handling(response_data, pst_options, plot_options);
 % Define Output Path For PST
 plot_options.('path_out') = fullfile(plot_options.('path_out'), 'PST_outputs');
 % Check path to output folder
@@ -167,7 +172,7 @@ if pst_options.stat_print == 1
 end
 
 %% ERROR HANDELING FUNCTION
-    function [response_data, pst_options, plot_options] = error_handeling(response_data, pst_options, plot_options)
+    function [response_data, pst_options, plot_options] = error_handling(response_data, pst_options, plot_options)
         % Define Boolean Fields To Inspect
         field_to_check = ["pst_options.use_AEP","plot_options.create_plots",...
             "plot_options.y_log", "pst_options.apply_GPD_to_SS",...

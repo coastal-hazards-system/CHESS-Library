@@ -51,7 +51,7 @@ classdef det_methods < CHESSPlotsBase
                 return
             end
             scatter(ax, T.(x_field)(ok), T.(y_field)(ok), 40, T.(c_field)(ok), 'filled', 'MarkerEdgeColor', [.3 .3 .3]);
-            colormap(ax, parula);
+            chess_colormap(ax);
             ax.ColorScale = aux_methods.tern(c_log == 1, 'log', 'linear');
             colorbar(ax);
             % Color Field Named In A Subtitle, Not The Colorbar Label: UIAxes Layout Lets Labels Longer Than The Bar Spill Out

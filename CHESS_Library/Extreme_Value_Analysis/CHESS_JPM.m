@@ -95,12 +95,9 @@ if jpm_options.stat_print == 1
 
     disp([newline '*** Step 1: Processing input arguments ']);
 end
-% Turn off all warnings
-warning('off','all');
-
 %% PARAMETER INITIALIZATION
 % Error Handeling For Inputs
-[response_data, jpm_options, plot_options] = error_handeling(response_data, jpm_options, plot_options);
+[response_data, jpm_options, plot_options] = error_handling(response_data, jpm_options, plot_options);
 % Define Output Path For PST
 plot_options.('path_out') = fullfile(plot_options.('path_out'), 'JPM_outputs');
 % Check path to output folder
@@ -158,7 +155,7 @@ if jpm_options.stat_print == 1
 end
 
 %% AUXIALIARY FUNCTIONS (ERROR HANDELING)
-    function [response_data, jpm_options, plot_options] = error_handeling(response_data, jpm_options, plot_options)
+    function [response_data, jpm_options, plot_options] = error_handling(response_data, jpm_options, plot_options)
         % Response Data Matrix
         if ~isnumeric(response_data.data) || size(response_data.data, 2) ~= 4 % [ time, response, skew_tides, dsw ]
             error('Error: response_data.data must be a N x 4 numerical matrix where columns represent: [ time, response, skew_tides, dsw ]')

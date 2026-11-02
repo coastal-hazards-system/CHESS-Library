@@ -144,9 +144,10 @@ if strcmp(data_case, 'chs_data')
             % Savepoint Coordinates On Converted HDF5 Attributes (Study Grid Lookup When The Storm Database Is Built)
             [~, sp_coords] = chs_data_attributes(CHS_Data);
             config = set_sp_coords(config, sp_coords, 'CHS_Data attributes');
-            % Copy File To Add Naming Convention
+            % Save The Raw File With File Names Only (Naming Convention; Same As The GUI Wizard)
             if ~chess_raw
-                copyfile(config.chs_zip, paths.chs_data);
+                CHS_Data = strip_chs_data_folders(CHS_Data);
+                save(paths.chs_data, 'CHS_Data', '-v7.3');
             end
         case '.zip'
             if chess_raw
@@ -166,7 +167,15 @@ if strcmp(data_case, 'chs_data')
                 config.chs_files_2_convert = [repmat({''}, numel(file_list), 1), file_list(:)];
                 % Savepoint Coordinates On The HDF5 Attributes Of The First ADCIRC Storm File (Only That Entry Extracted)
                 file_parts = chs_file_name_parts(file_list);
-                sp_coords = zip_sp_coords(config.chs_zip, file_list([file_parts.is_adcirc]));
+                adcirc_files = file_list([file_parts.is_adcirc]);
+                sp_coords = [];
+                if ~isempty(adcirc_files)
+                    try
+                        [~, sp_coords] = zip_h5_attributes(config.chs_zip, adcirc_files{1});
+                    catch
+                        % Entry Not Readable: set_sp_coords Falls Back To The Savepoint ID
+                    end
+                end
                 config = set_sp_coords(config, sp_coords, 'h5 attributes');
             end
     end
@@ -260,37 +269,7 @@ config = finalize_config(config);
 end % End of Function
 
 %% LOCAL FUNCTIONS
-% Savepoint Coordinates ('Save Point Latitude'/'Save Point Longitude' Root Attributes, [lat lon]) Of The First ADCIRC .h5
-% File Of A CHS Zip Folder. Only That Entry Is Extracted, Into A System Temp Folder Removed On Return; [] When The File
-% Or An Attribute Is Missing
-function sp_coords = zip_sp_coords(zip_name, adcirc_files)
-sp_coords = [];
-if isempty(adcirc_files)
-    return
-end
-temp_path = tempname;
-temp_cleanup = onCleanup(@() remove_temp_folder(temp_path));
-try
-    h5_path = zip_extract_entry(zip_name, adcirc_files{1}, temp_path);
-    sp_coords = [attr_to_double(h5readatt(h5_path, '/', 'Save Point Latitude')),...
-        attr_to_double(h5readatt(h5_path, '/', 'Save Point Longitude'))];
-catch
-    sp_coords = [];
-end
-end
-
-% HDF5 Attribute Value (Text Or Numeric) To Double
-function val = attr_to_double(val)
-if iscell(val)
-    val = val{1};
-end
-if ischar(val) || isstring(val)
-    val = str2double(val);
-end
-val = double(val(1));
-end
-
-% Savepoint Coordinates Into config (sp_lat/sp_lon, NaN When Not Found: The Storm Database Build Matches The Savepoint ID)
+% Savepoint Coordinates Into config (sp_lat/sp_lon, NaN When Not Found: The Storm Database Build Needs A Unique Savepoint ID Match In The Study Grid)
 function config = set_sp_coords(config, sp_coords, where)
 if numel(sp_coords) == 2 && all(isfinite(sp_coords))
     config.sp_lat = sp_coords(1);
@@ -299,12 +278,5 @@ else
     config.sp_lat = NaN;
     config.sp_lon = NaN;
     fprintf('Warning: could not find ADCIRC savepoint coordinates on %s. The storm database build will match the savepoint ID in the study grid instead....\n', where);
-end
-end
-
-% Remove A Temp Folder (If Created)
-function remove_temp_folder(temp_path)
-if isfolder(temp_path)
-    rmdir(temp_path, 's');
 end
 end

@@ -7,20 +7,16 @@ function bnu = storm_db_bias_uncertainty(chs_dependencies, region, sp_ID, sp_coo
         database wizard.
         CHS_Dependencies files come from chs_dependency_files.m (read when
         the folder exists and the region is supported).
-        Study grid (Grid_Files/<region>: <region>_nodeID* file if present,
-        else <region>_staID*): one lookup gives the grid row and the
-        offshore elevation (value column of that row). The row is the grid
-        point nearest to the savepoint coordinates (great-circle distance,
-        no threshold; a distance above 0.5 m is printed: the CHS-NA grid
-        holds mesh nodes while the data are at savepoints). Without
-        coordinates (e.g. storm + prob_mass .mat input) the savepoint ID is
-        matched instead (CHS-LA: savepoint -> ADCIRC node through the
-        savepoint node map file), with a printed warning; an ID missing from the
-        grid is then an error when the SWL values need the row
-        (storm_db_bias_uncertainty:spNotFound, naming the file searched).
-        No study grid file in Grid_Files/<region> (or no CHS-LA savepoint
-        node map when it is needed) is an error
-        (storm_db_bias_uncertainty:gridNotFound, naming the folder).
+        Study grid row (savepoint_grid_row.m, shared with the TC
+        probability masses): one lookup gives the grid row and the offshore
+        elevation (value column of that row). The savepoint ID is matched
+        when the match is unique (CHS-LA: savepoint -> ADCIRC node through
+        the savepoint node map file), else the grid point nearest to the
+        savepoint coordinates is used (CHS-NA: nearest only, the grid holds
+        mesh nodes). Printed: a grid point more than 0.5 m from the
+        coordinates, an ID matched without coordinates. Lookup errors
+        (savepoint_grid_row:gridNotFound | noCoordinates | spNotFound) are
+        raised there.
         Offshore elevation: the grid stores depth, positive down (study
         datum); it is negated to an elevation, positive up. None for grids
         without a value column (CHS-TX, CHS-PR), NaN or fill values
@@ -42,7 +38,7 @@ function bnu = storm_db_bias_uncertainty(chs_dependencies, region, sp_ID, sp_coo
         region: CHS region (config.region). | char
         sp_ID: CHS ADCIRC savepoint ID (config.sp_ID). | double
         sp_coords: Savepoint [latitude longitude] in degrees ([] or NaN: | double | 1 x 2
-                   not available, the savepoint ID is matched instead).
+                   not available).
         prev_info: Optional. db_info of the database being rebuilt ([]: none). | struct
         prompt: Optional (default true). false: never prompts; values not | logical
                 available stay empty with an empty source (GUI wizard).
@@ -54,8 +50,8 @@ function bnu = storm_db_bias_uncertainty(chs_dependencies, region, sp_ID, sp_coo
              | prev_info's 'manual'/'provided' | '' when not prompted),
              offshore_elevation (minus the grid depth, positive up; [] when none),
              offshore_elevation_source ('chs_dependencies' | ''),
-             grid_distance_m (distance to the nearest grid point [m]; []
-             when the ID was matched or no grid was read), sp_lat, sp_lon
+             grid_distance_m (distance from the savepoint coordinates to the
+             grid point [m]; [] without coordinates or grid), sp_lat, sp_lon
              (savepoint coordinates; [] when not available).
 
     %% DEV SIGNATURE
@@ -82,17 +78,17 @@ files = chs_dependency_files(chs_dependencies, region);
 if files.folder_exists && files.region_supported
     w_state = warning('off');
     w_cleanup = onCleanup(@() warning(w_state));
-    % Study Grid Row (Nearest Point, Else Savepoint ID) And Offshore Elevation
-    [grid_row, grid_name, bnu.offshore_elevation, bnu.grid_distance_m] = savepoint_row(files, sp_ID, sp_coords);
-    if ~isempty(bnu.offshore_elevation)
+    % Study Grid Row (savepoint_grid_row.m) And Offshore Elevation (Grid Depth, Positive Down, Negated)
+    loc = savepoint_grid_row(files, sp_ID, sp_coords);
+    grid_row = loc.row;
+    bnu.grid_distance_m = loc.distance_m;
+    report_grid_point(loc, sp_ID, region);
+    if ~isempty(loc.value) && ~isnan(loc.value) && loc.value > -99999
+        bnu.offshore_elevation = -loc.value;
         bnu.offshore_elevation_source = 'chs_dependencies';
     end
     % SWL: Study Grid Row
     if files.exists.water_level_bias_uncertainty_file
-        if ~isscalar(grid_row)
-            error('storm_db_bias_uncertainty:spNotFound', 'Save point SP%d not found in the %s study grid file %s.',...
-                sp_ID, region, grid_name);
-        end
         circ_file = files.water_level_bias_uncertainty_file;
         [~, circ_name, circ_ext] = fileparts(circ_file);
         circ_name = [circ_name circ_ext];
@@ -105,7 +101,7 @@ if files.folder_exists && files.region_supported
         end
         if grid_row > numel(u_data.U_a)
             error('storm_db_bias_uncertainty:spNotFound', 'Save point SP%d (row %d of the %s study grid file %s) not found in the %s bias/uncertainty file %s.',...
-                sp_ID, grid_row, region, grid_name, region, circ_name);
+                sp_ID, grid_row, region, loc.grid_name, region, circ_name);
         end
         bnu.chs_swl_b_a = u_data.B_a(grid_row);
         bnu.chs_swl_b_r = u_data.B_r(grid_row);
@@ -160,67 +156,18 @@ if isempty(bnu.chs_hm0_bu_source)
 end
 end
 
-%% AUX FUNCTION: STUDY GRID ROW OF THE SAVEPOINT AND ITS OFFSHORE ELEVATION
-% Grid Columns: [ID Node Lat Lon Value] (5), [ID Lat Lon Value] (4) Or [ID Lat Lon] (3, No Value); Longitudes In -180..180.
-% grid_row: Row Of The Grid Point Nearest To sp_coords, Else Of The Savepoint ID ([] If Not Found).
-% grid_name: Study Grid File Name Where The Lookup Ended. elevation: Minus The Depth Of grid_row ([] If None).
-% distance_m: Distance To The Nearest Grid Point ([] When The ID Was Matched).
-function [grid_row, grid_name, elevation, distance_m] = savepoint_row(files, sp_ID, sp_coords)
-region = files.region;
-if ~files.study_grid_available
-    error('storm_db_bias_uncertainty:gridNotFound', 'No %s study grid file (%s_nodeID*.mat or %s_staID*.mat) found in %s.',...
-        region, region, region, files.folders.study_grid);
-end
-grid_row = [];
-elevation = [];
-distance_m = [];
-grid_name = file_name(files.study_grid_file);
-grid_data = load(files.study_grid_file, files.study_grid_variable); grid_data = grid_data.(files.study_grid_variable);
-lat_col = 2 + (size(grid_data, 2) == 5);
-if ~isempty(sp_coords)
-    [distance_m, grid_row] = min(haversine_m(sp_coords(1), sp_coords(2), grid_data(:, lat_col), grid_data(:, lat_col + 1)));
-    if distance_m > 0.5
-        fprintf('Warning: Nearest grid point found was %.1f m away. This is caused by using SP data.\n', distance_m);
-    end
-else
+%% AUX FUNCTION: PRINT A GRID POINT FAR FROM THE SAVEPOINT COORDINATES, OR AN ID MATCHED WITHOUT COORDINATES
+function report_grid_point(loc, sp_ID, region)
+if isempty(loc.distance_m)
     fprintf('Warning: Savepoint coordinates not found. Savepoint ID SP%d matched in the %s study grid instead.\n', sp_ID, region);
-    if strcmp(region, 'CHS-LA') % Statistics Use Nodal Indexing: Savepoint -> ADCIRC Node
-        if ~files.exists.savepoint_node_map_file
-            error('storm_db_bias_uncertainty:gridNotFound', 'No %s savepoint node map file (%s_ADCIRC_SPs.mat) found in %s.',...
-                region, region, files.folders.study_grid);
-        end
-        sp_name = file_name(files.savepoint_node_map_file);
-        load(files.savepoint_node_map_file, 'SPs');  % SPs
-        adcirc_node_id = SPs(SPs(:,1) == sp_ID, 2);
-        if isscalar(adcirc_node_id)
-            grid_row = find(grid_data(:,2) == adcirc_node_id);
-        else
-            grid_name = sp_name;
-        end
-    else
-        grid_row = find(grid_data(:,1) == sp_ID);
+elseif loc.distance_m > 0.5
+    switch loc.method
+        case 'nearest'
+            fprintf('Warning: Nearest grid point found was %.1f m away. This is caused by using SP data.\n', loc.distance_m);
+        case 'id'
+            fprintf('Warning: Savepoint SP%d grid point (ID match) is %.1f m from the savepoint coordinates.\n', sp_ID, loc.distance_m);
     end
 end
-% Grid Stores Depth, Positive Down (Study Datum); Negated To An Elevation, Positive Up
-if isscalar(grid_row) && size(grid_data, 2) >= lat_col + 2
-    value = grid_data(grid_row, lat_col + 2);
-    if ~isnan(value) && value > -99999
-        elevation = -value;
-    end
-end
-end
-
-%% AUX FUNCTION: GREAT-CIRCLE (HAVERSINE) DISTANCE [m] BETWEEN POINTS GIVEN IN DEGREES
-function d = haversine_m(lat1, lon1, lat2, lon2)
-r_earth = 6371008.8; % Mean Earth Radius [m]
-a = sind((lat2 - lat1)/2).^2 + cosd(lat1).*cosd(lat2).*sind((lon2 - lon1)/2).^2;
-d = 2*r_earth*asin(min(1, sqrt(a)));
-end
-
-%% AUX FUNCTION: FILE NAME (WITH EXTENSION) OF A FULL PATH
-function name = file_name(file)
-[~, name, ext] = fileparts(file);
-name = [name ext];
 end
 
 %% AUX FUNCTION: GLOBAL WAVE VALUE (Average Field When Values Are Given Per Savepoint; [] If Absent)

@@ -36,7 +36,9 @@ function [storm, prob_mass, db_info] = build_storm_database(CHS_Data, options)
             create_whp: Build the Wave Height Priority dataset. (0/1)          | double | 1 x 1
             bias_uncertainty: Bias & uncertainty and savepoint location of     | struct
                               the database (storm_db_bias_uncertainty.m);
-                              chs_swl_b_a/_b_r drive the TC bias correction.
+                              chs_swl_b_a/_b_r drive the TC bias correction;
+                              sp_lat/sp_lon locate the savepoint for the TC
+                              probability masses (chs_probability_mass_loader.m).
             source_file: Input the database is built from (name + extension). | char
             print_progress: Print progress to the command window. (0/1)        | double | 1 x 1
             progress_fcn: Called before each step as                            | function_handle | 1 x 1
@@ -83,7 +85,8 @@ for tt = 1:numel(storm_types)
             report_progress(options, 1/9, 'Setting-up TC modeling suite regional statistics');
             [prob_mass.Param, prob_mass.TC_SRR,...
                 prob_mass.TC_Freq, prob_mass.TotalFreq,...
-                prob_mass.smpl1, prob_mass.smpl2, prob_mass.smpl3] = chs_probability_mass_loader(options.chs_dependencies, options.region, options.sp_ID);
+                prob_mass.smpl1, prob_mass.smpl2, prob_mass.smpl3] = chs_probability_mass_loader(options.chs_dependencies, options.region, options.sp_ID,...
+                [options.bias_uncertainty.sp_lat options.bias_uncertainty.sp_lon]);
             report_progress(options, 2/9, 'Matching TC modeling results (surge+waves)');
             [tc_checked_config, storm.('TC'), storm.('TC').removed_storms,...
                 ~, ~, prob_mass] = call_chs_storm_quality_check(quality_check_config, CHS_Data, prob_mass, 'TC');
@@ -99,8 +102,7 @@ end
 if any(has_peaks_and_timeseries)
     report_progress(options, 7/9, 'Adjusting hydrographs peak responses');
     for storm_type = storm_types(has_peaks_and_timeseries)
-        one_type = chs_timeseries_peak_replacer(struct(storm_type{1}, storm.(storm_type{1})));
-        storm.(storm_type{1}) = one_type.(storm_type{1});
+        storm.(storm_type{1}) = chs_timeseries_peak_replacer(storm.(storm_type{1}));
     end
 end
 

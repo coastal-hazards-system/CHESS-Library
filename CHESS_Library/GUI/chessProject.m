@@ -178,7 +178,7 @@ classdef chessProject < handle
             end
             % Library Transect Plot (Base Class: No Workflow Needed)
             chessPlot = CHESSPlotsBase(config, [], [], [], [], structure, base_fnt, obj.unitsys);
-            ax = chessPlot.pse_transect_plot(ax, []);
+            ax = chessPlot.pse_transect_plot(ax);
             % Remove Library Annotation Text Box (Offshore Slope/Elevation) Unless Requested
             if ~keep_text_box
                 delete(findobj(ax.Children, 'flat', 'Type', 'text'));

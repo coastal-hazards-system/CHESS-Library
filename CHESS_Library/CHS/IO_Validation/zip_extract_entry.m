@@ -2,9 +2,9 @@ function out_file = zip_extract_entry(zip_name, entry_file, out_dir)
 %{
     %% DESCRIPTION
         Extract one entry of a zip folder, by file name (any zip
-        subfolder, case-insensitive), into out_dir without decompressing the rest. Shared by
-        call_input_parser.m (savepoint depth) and the GUI storm database
-        wizard (study datum & savepoint depth).
+        subfolder, case-insensitive), into out_dir without decompressing the rest. Used by
+        zip_h5_attributes.m (study datum & savepoint coordinates for
+        call_input_parser.m and the GUI storm database wizard).
 
     %% INPUTS
         zip_name: Zip folder (relative or full path). | char

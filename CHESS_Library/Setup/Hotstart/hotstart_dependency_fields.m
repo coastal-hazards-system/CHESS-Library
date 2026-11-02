@@ -30,10 +30,10 @@ dataset_coverage_fields: Fields consumed by project_forcing_coverage.m (via
     "does the cached data/sampling cover the request" check, where a
     cache having MORE than requested (e.g. cached CC data satisfying an
     XC-only request) is valid and must not be invalidated. A request the
-    cache does not cover draws new life cycles. use_peaks is deliberately
-    NOT in this list: it only matters for PROS, and project_forcing_coverage.m
-    / hotstart_level.m branch on config.workflow to decide whether to
-    check it at all.
+    cache does not cover draws new life cycles. use_peaks applies to every
+    workflow: LCS builds Peaks life cycles only with use_peaks = 1
+    (chess_lcs.m), so use_peaks 0 -> 1 draws new life cycles, while 1 -> 0
+    is covered (the cached Peaks are ignored).
 
 forcing_build_fields: Fields baked into the generated forcing that do not
     change which storms are sampled (storm_duration of every dataset:
@@ -63,7 +63,7 @@ forcing_uncertainty_fields (the uncertainty step,
 Developed by: Fabian A. Garcia Moreno ERDC-CHL
 %}
 dependency_fields.lcs_sampling_fields = {'mcs_nYears','mcs_nLC','lcs_restrict_sampling_rate','storm_db_build_date'};
-dependency_fields.dataset_coverage_fields = {'create_wlp','create_whp','use_timeseries','storm_sampling'};
+dependency_fields.dataset_coverage_fields = {'use_peaks','create_wlp','create_whp','use_timeseries','storm_sampling'};
 dependency_fields.forcing_build_fields = {'storm_duration', 'compute_storm_duration', 'multiline'};
 dependency_fields.forcing_adjustment_fields = {'apply_depth_limitation','apply_random_tides','tide_file','swl_slr', ...
     'toe_elevation','wall_bottom_elevation','berm_crest_elevation','berm_seaward_slope','berm_crest_width', ...

@@ -63,6 +63,9 @@ function files = chs_dependency_files(chs_dependencies_folder, region)
                               high_intensity | all_intensities: Full paths.
             study_grid_variable: 'nodeID' | 'staID' | '' (variable to load
                               from study_grid_file).
+            uses_savepoint_node_map: Study grid rows are ADCIRC nodes,
+                              savepoints are mapped through the savepoint
+                              node map file (CHS-LA).
             study_grid_has_elevation: The region's study grid has a value
                               column (false for CHS-TX, CHS-PR and
                               unsupported regions).
@@ -105,6 +108,7 @@ files.water_level_bias_uncertainty_file = region_part.water_level_bias_uncertain
 files.wave_height_bias_uncertainty_file = region_part.wave_height_bias_uncertainty_file;
 files.study_grid_file = region_part.study_grid_file;
 files.study_grid_variable = region_part.study_grid_variable;
+files.uses_savepoint_node_map = uses_node_map(region);
 files.study_grid_has_elevation = files.region_supported && ~ismember(region, {'CHS-TX', 'CHS-PR'});
 files.savepoint_node_map_file = region_part.savepoint_node_map_file;
 files.tc_discrete_storm_weights_file = region_part.tc_discrete_storm_weights_file;

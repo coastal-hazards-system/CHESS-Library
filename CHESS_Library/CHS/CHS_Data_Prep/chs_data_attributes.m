@@ -2,7 +2,7 @@ function [vertical_datum, sp_coords] = chs_data_attributes(CHS_Data)
 %{
     %% DESCRIPTION
         Pulls the CHS study vertical datum and ADCIRC save point coordinates
-        from converted CHS data (output of call_chs_h5_converter). Lets
+        from converted CHS data (output of convert_chs_zip). Lets
         callers that only have a CHS_Data .mat (no .h5 files) recover the
         same details read from the .h5 root attributes ('Vertical Datum',
         'Save Point Latitude', 'Save Point Longitude'). Read from the first

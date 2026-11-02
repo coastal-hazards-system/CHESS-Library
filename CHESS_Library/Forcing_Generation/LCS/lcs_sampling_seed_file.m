@@ -5,8 +5,9 @@ function seed_file = lcs_sampling_seed_file(pf_file)
         file (<prefix>_sampling_seed.mat): effective sampling mode
         (lcs_restrict_sampling_rate), sampled life cycles per storm type
         (sampled_ids.XC/.TC: identity columns [storm_ID, intensity_bin, Sim_Year,
-        order], empty life cycles included) and raw XC Default peaks
-        (xc_peaks.Default; XC WLP/WHP life cycles are copies of it).
+        order], empty life cycles included) and, with use_peaks = 1, raw XC
+        Default peaks (xc_peaks.Default; XC WLP/WHP life cycles are copies
+        of it).
 
     %% INPUTS
         pf_file: Project forcing file (<prefix>_project_forcing.mat). | char

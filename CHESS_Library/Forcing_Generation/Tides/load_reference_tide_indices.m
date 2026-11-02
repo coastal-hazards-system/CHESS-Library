@@ -51,7 +51,7 @@ if ~isfield(ref, 'tide_file') || ~strcmp(char(ref.tide_file), char(config.tide_f
 end
 % Storm Types Whose Life Cycles Were Reused From The Reference (Same Rule As chess_lcs.m)
 reuse = lcs_reference_reuse(config);
-for st = {'TC', 'XC'}
+for st = storm_types_for_sampling(config.storm_sampling, {'TC', 'XC'})
     fld = ['tide_indx_' lower(st{1})];
     if ~isfield(ref, fld) || isempty(ref.(fld)) || (isfield(config, fld) && ~isempty(config.(fld)))
         continue
@@ -74,10 +74,13 @@ for st = {'TC', 'XC'}
 end
 end
 
-%% AUX FUNCTION: STORMS PER LIFE CYCLE (PEAKS ROWS; chess_lcs ALWAYS BUILDS Peaks.Default)
+%% AUX FUNCTION: STORMS PER LIFE CYCLE (PEAKS ROWS; WITHOUT PEAKS (use_peaks = 0) TIMESERIES FIRST-STEP ROWS, step == 0)
 function counts = lc_storm_counts(project_forcing, st_type)
 counts = [];
 if isfield(project_forcing, 'Peaks') && isfield(project_forcing.Peaks, 'Default') && isfield(project_forcing.Peaks.Default, st_type)
     counts = cellfun(@(x) size(x, 1), project_forcing.Peaks.Default.(st_type)(:));
+elseif isfield(project_forcing, 'Timeseries') && isfield(project_forcing.Timeseries.Default, st_type)
+    step = lcs_columns().step;
+    counts = cellfun(@(x) sum(x(:, step) == 0), project_forcing.Timeseries.Default.(st_type)(:));
 end
 end

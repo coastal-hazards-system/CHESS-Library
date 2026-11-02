@@ -8,13 +8,8 @@ coverage per config.storm_sampling). A cache having MORE than requested
 (e.g. cached CC data satisfying an XC-only request) is valid and is not
 flagged as missing.
 
-For LCS (config.workflow == 3), use_peaks/has_peaks is deliberately
-EXCLUDED from the comparison -- chess_lcs.m unconditionally builds a
-dummy Peaks dataset from Timeseries max() for sampling purposes even
-when use_peaks == 0, so has_peaks is true for every LCS cache regardless
-of what was requested; checking it there produces false "covered"
-results. PROS (chess_pros_formatter.m) has no such proxy, so
-use_peaks/has_peaks stays in the check for PROS exactly as it always has.
+Peaks are required exactly when use_peaks == 1, in every workflow (LCS
+builds Peaks life cycles only with use_peaks == 1: chess_lcs.m).
 
 %% INPUTS
 config: Current run's parsed config struct.
@@ -28,42 +23,23 @@ missing_desc: comma-joined string of human-readable labels for whichever
 %R DEV SIGNATURE
 Developed by: Fabian A. Garcia Moreno ERDC-CHL
 %}
-has_peaks = contains('Peaks', fieldnames(project_forcing));
-if ~has_peaks
-    has_wlp = false;
-    has_whp = false;
+has_peaks = isfield(project_forcing, 'Peaks');
+has_wlp = has_peaks && isfield(project_forcing.Peaks, 'WLP');
+has_whp = has_peaks && isfield(project_forcing.Peaks, 'WHP');
+has_timeseries = isfield(project_forcing, 'Timeseries');
+if has_peaks
+    storm_types = project_forcing.Peaks.Default;
 else
-    has_wlp = contains('WLP', fieldnames(project_forcing.Peaks));
-    has_whp = contains('WHP', fieldnames(project_forcing.Peaks));
+    storm_types = project_forcing.Timeseries.Default;
 end
-has_timeseries = contains('Timeseries', fieldnames(project_forcing));
-if ~has_peaks
-    has_xc = contains('XC', fieldnames(project_forcing.Timeseries.Default));
-    has_tc = contains('TC', fieldnames(project_forcing.Timeseries.Default));
-else
-    has_xc = contains('XC', fieldnames(project_forcing.Peaks.Default));
-    has_tc = contains('TC', fieldnames(project_forcing.Peaks.Default));
-end
-switch lower(config.storm_sampling)
-    case 'xc'
-        tc_conf = false;
-        xc_conf = true;
-    case 'tc'
-        tc_conf = true;
-        xc_conf = false;
-    case 'cc'
-        tc_conf = true;
-        xc_conf = true;
-end
-if config.workflow == 3
-    have = [has_wlp;has_whp;has_timeseries;has_tc;has_xc];
-    need = [cellfun(@(x) logical(config.(x)), {'create_wlp','create_whp','use_timeseries'}, 'un', true)';tc_conf;xc_conf];
-    labels = {'WLP';'WHP';'Timeseries';'TC';'XC'};
-else
-    have = [has_peaks;has_wlp;has_whp;has_timeseries;has_tc;has_xc];
-    need = [cellfun(@(x) logical(config.(x)), {'use_peaks','create_wlp','create_whp','use_timeseries'}, 'un', true)';tc_conf;xc_conf];
-    labels = {'Peaks';'WLP';'WHP';'Timeseries';'TC';'XC'};
-end
+has_xc = isfield(storm_types, 'XC');
+has_tc = isfield(storm_types, 'TC');
+sampled_types = storm_types_for_sampling(config.storm_sampling, {'TC', 'XC'});
+tc_conf = ismember('TC', sampled_types);
+xc_conf = ismember('XC', sampled_types);
+have = [has_peaks;has_wlp;has_whp;has_timeseries;has_tc;has_xc];
+need = [cellfun(@(x) logical(config.(x)), {'use_peaks','create_wlp','create_whp','use_timeseries'}, 'un', true)';tc_conf;xc_conf];
+labels = {'Peaks';'WLP';'WHP';'Timeseries';'TC';'XC'};
 missing_mask = need & ~have;
 covers = ~any(missing_mask);
 missing_desc = strjoin(labels(missing_mask), ', ');

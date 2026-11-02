@@ -171,7 +171,7 @@ for ii = 1:length(vars_to_process)
 
     %% STORE OUTPUTS
     % Append Results To Output Data Structure
-    Output =  rb_response_appender(Output, ctr, resp_var, y_label, title_str,...
+    Output = set_hazard_curve_entry(Output, ctr, resp_var, y_label, title_str,...
         dummy.HC_plt_x, dummy.HC_plt,...
         dummy.HC_tbl_x, dummy.HC_tbl, data_to_process.(resp_var),...
         y_scale_log, [50,prc], [save_name '_' resp_var '_' storm_type '_Hazard_Curve.png'],...
@@ -198,25 +198,4 @@ if ~isempty(Output)
 else
     return;
 end
-
-%% AUX FUNCTIONS (CONSOLIDATE LINES OF CODE)
-    function Output =  rb_response_appender(Output, rIndx, sVar, y_label, title_str, x_plt, y_plt, x_tbl, y_tbl, POT, y_log_scale, CL, outName, n_events, n_dropped, lake_offset)
-        % Replace Fields For P2
-        Output(rIndx).('var') = sVar;
-        Output(rIndx).CL = CL; % Percentiles (Cols)
-        % Only Grab Frequency Bound On The Table
-        Output(rIndx).('x_plot') = x_plt(x_plt >= 0.001 & x_plt <= max(x_tbl),:);
-        Output(rIndx).('y_plot') = y_plt(x_plt >= 0.001 & x_plt <= max(x_tbl),:);
-        Output(rIndx).('x_table') = x_tbl(x_tbl >= 0.001 & x_tbl <= max(x_tbl),:);
-        Output(rIndx).('y_table') = y_tbl(x_tbl >= 0.001 & x_tbl <= max(x_tbl),:);
-        Output(rIndx).('x_table_ARI') = x_tbl;
-        Output(rIndx).('POT') = POT;
-        Output(rIndx).('y_label') = y_label;
-        Output(rIndx).('title') = title_str;
-        Output(rIndx).y_log_scale = y_log_scale; % Y Log Scale For Overtopping
-        Output(rIndx).('save_name') = outName;
-        Output(rIndx).n_events = n_events; % Events Handed To PST/JPM
-        Output(rIndx).n_dropped = n_dropped; % Events PST/JPM Discarded (NaN, Inf, <= 0 After Shift)
-        Output(rIndx).lake_offset = lake_offset; % Mean Lake Level Removed Before Fitting
-    end
 end

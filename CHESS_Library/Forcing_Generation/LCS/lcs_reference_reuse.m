@@ -19,7 +19,8 @@ function reuse = lcs_reference_reuse(config)
             - Hotstart level 'reuse_sampling' (config.hotstart_level, set by
               resolve_hotstart_state.m): when no reference is used, this case's own
               cached sampling is reused instead (its sampling seed file: sampled_ids,
-              mode and raw XC peaks), the same way as a reference.
+              mode and, with use_peaks = 1, raw XC peaks), the same way as
+              a reference.
         Prints nothing: chess_lcs reports the outcome.
 
     %% INPUTS

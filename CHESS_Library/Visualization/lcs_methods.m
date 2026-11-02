@@ -107,7 +107,7 @@ classdef lcs_methods < CHESSPlotsBase
             %
             switch ds_query.data_type
                 case 'Timeseries'
-                    % Create Dummy Peaks Data (Single Datapoint Per Event)
+                    % Event Start Rows (Single Datapoint Per Event)
                     pull_indx = cellfun(@(x) x(:, lcs_columns().step) == 0, data, 'un', false);
                     % Pull Actual Event Sampling Information
                     lc_data = cellfun(@(x, y) x(y, :), data, pull_indx, 'un', false);
@@ -989,8 +989,7 @@ classdef lcs_methods < CHESSPlotsBase
 
 
             % 6. Colorbar & Styling
-            customColormap = chess_colormap;
-            colormap(ax, customColormap);
+            chess_colormap(ax);
             %
             hb = colorbar(ax);
             ylabel(hb, y_label_cb, 'FontSize', self.base_fnt);

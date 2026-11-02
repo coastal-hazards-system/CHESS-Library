@@ -44,6 +44,9 @@ INPUTS:
     |       lc      |   double    |  Number of life cycles                   |
     |---------------|-------------|------------------------------------------|
     |    TC_B1RT    |   Double    |  Extra tropical storm response variable  |
+    |  (storm_peaks)|             |  [ID SWL Hm0 Tp wDir ...]; the storm ID  |
+    |               |             |  column alone when only sample_storms is |
+    |               |             |  requested (use_peaks = 0)               |
     |---------------|-------------|------------------------------------------|
     |  storm_whp_peaks  |   Double    |  Extra tropical storm response variable  |
     |               |             |  - water level priority                  |
@@ -229,12 +232,14 @@ for j = 1:simulation_years
         end% for 
     end% if
 end% for j
+% Sampled Storm Indexes
+sample_storms = lcs_data(:, [C.id, C.bin, C.year, C.order]); % (Headers in script header)
+% Storm IDs Only (use_peaks = 0: storm_peaks Holds The Storm ID Column)
+if nargout < 2
+    return
+end
 [~, bi] = ismember(lcs_data(:, C.id), storm_peaks(:, 1));
 % Pull Storm Responses For Sampled Storms (Storm Database Columns: ID SWL Hm0 Tp wDir datenum)
 lcs_data(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir]) =  storm_peaks(bi, [2 3 3 4 5]);
 lcs_data(:, C.storm_duration) = storm_duration_days;
-
-%% STORE SAMPLED TROPICAL STORMS
-% Sampled Storm Indexes
-sample_storms = lcs_data(:, [C.id, C.bin, C.year, C.order]); % (Headers in script header)
 end

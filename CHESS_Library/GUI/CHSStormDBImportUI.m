@@ -1101,8 +1101,11 @@ classdef CHSStormDBImportUI < handle
                 ad_file = obj.h5_names([name_parts.is_adcirc]);
                 try
                     switch fext
-                        case '.zip' % Attributes Of The First ADCIRC File (Only That Entry Is Extracted)
-                            [obj.study_datum, obj.sp_coords] = CHSStormDBImportUI.zip_h5_attributes(chs_modeling, ad_file{1});
+                        case '.zip' % Attributes Of The First ADCIRC File (Only That Entry Is Extracted); The Datum Is Required
+                            [obj.study_datum, obj.sp_coords] = zip_h5_attributes(chs_modeling, ad_file{1});
+                            if isempty(obj.study_datum)
+                                error('no ''Vertical Datum'' root attribute');
+                            end
                         case '.mat' % Library: Datum & Savepoint Coordinates From Converted .h5 Attributes
                             [obj.study_datum, obj.sp_coords] = chs_data_attributes(obj.load_chs_data_mat(chs_modeling));
                     end
@@ -1140,7 +1143,7 @@ classdef CHSStormDBImportUI < handle
 
         function ok = set_study_dependencies(obj)
             % Storm Database Bias & Uncertainty And Offshore Elevation From The Library (storm_db_bias_uncertainty.m, No Prompt):
-            % Study Grid Point Nearest To The Savepoint (sp_coords; Savepoint ID Without Them), Hm0 Regional Values.
+            % Savepoint Study Grid Row (savepoint_grid_row.m: Unique Savepoint ID, Else Nearest To sp_coords), Hm0 Regional Values.
             % Errors (e.g. Savepoint Not In The Study Grid) Shown In The Error Dialog
             ok = false;
             try
@@ -1664,36 +1667,6 @@ classdef CHSStormDBImportUI < handle
 
     %% STATIC PRIVATE METHODS
     methods (Static, Access=private)
-        % Study Vertical Datum & Save Point [Latitude Longitude] (Root Attributes, Text Or Numeric; [] If Missing) Of One .h5
-        % Entry Of A CHS Zip Folder: Only That Entry Is Extracted, Into A System Temp Folder Removed On Return (Errors Included)
-        function [study_datum, sp_coords] = zip_h5_attributes(chs_zip, h5_file)
-            temp_path = tempname;
-            temp_cleanup = onCleanup(@() CHSStormDBImportUI.remove_temp_folder(temp_path));
-            h5_path = zip_extract_entry(chs_zip, h5_file, temp_path);
-            study_datum = h5readatt(h5_path, '/', 'Vertical Datum');
-            try
-                sp_coords = [CHSStormDBImportUI.attr_to_double(h5readatt(h5_path, '/', 'Save Point Latitude')),...
-                    CHSStormDBImportUI.attr_to_double(h5readatt(h5_path, '/', 'Save Point Longitude'))];
-            catch
-                % Could Not Find The Save Point Coordinates
-                sp_coords = [];
-            end
-            if any(isnan(sp_coords))
-                sp_coords = [];
-            end
-        end
-
-        % HDF5 Attribute Value (Text Or Numeric) To Double
-        function val = attr_to_double(val)
-            if iscell(val)
-                val = val{1};
-            end
-            if ischar(val) || isstring(val)
-                val = str2double(val);
-            end
-            val = double(val(1));
-        end
-
         % Remove A Temp Folder (If Created)
         function remove_temp_folder(temp_path)
             if isfolder(temp_path)

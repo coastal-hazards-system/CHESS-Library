@@ -28,8 +28,5 @@ function [data, config] = boundary_conditions_adjust(config, structure, data, st
 if isfield(config, 'multiline') && ~isempty(config.multiline)
     return
 end
-switch config.workflow
-    case {1,2,3,4} % CHESS: PROS, DET, LCS
-        [data, config] = adjust_project_forcing(config, structure, data, st);
-end
+[data, config] = adjust_project_forcing(config, structure, data, st);
 end

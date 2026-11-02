@@ -1,4 +1,4 @@
-function  [Param, TC_SRR, TC_Freq, TotalFreq, smpl1, smpl2, smpl3] = chs_probability_mass_loader(chs_dependencies_path, region, Nsvpt)
+function  [Param, TC_SRR, TC_Freq, TotalFreq, smpl1, smpl2, smpl3] = chs_probability_mass_loader(chs_dependencies_path, region, Nsvpt, sp_coords)
 %{
     %% DESCRIPTION
         This function is responsible for leading CHS TC storm probability
@@ -12,12 +12,17 @@ function  [Param, TC_SRR, TC_Freq, TotalFreq, smpl1, smpl2, smpl3] = chs_probabi
                                without tropical_statistics_available).
         region: CHS region being requested. | char | 1 x size_varies
         Nsvpt: CHS ADCIRC savepoint ID. | double | 1 x 1
+        sp_coords: Savepoint [latitude longitude] in degrees ([] or NaN:   | double | 1 x 2
+                   not available). The savepoint's study grid point
+                   (savepoint_grid_row.m: unique savepoint ID match, else
+                   the grid point nearest to sp_coords; CHS-NA nearest
+                   only) gives the nearest coastal reference location and
+                   the TC storms within 200 km.
 
     %% OUTPUTS
         Param:
         TC_SRR:
         TC_Freq:
-        dist:
         TotalFreq:
       
     %% DEV SIGNATURE
@@ -54,33 +59,10 @@ if files.tropical_statistics_available
                 storms passing within 200 km of the coastal reference location (CRL)
                 closest to save point
     %}
-    switch region
-        case 'CHS-LA'
-            % Load Savepoint -> ADCIRC Node Map
-            load(files.savepoint_node_map_file, 'SPs');  % SPs
-            % Load Selected Nodes List
-            load(files.study_grid_file, 'staID');
-            % Get Row
-            adcirc_node_id = SPs(SPs(:,1) == Nsvpt, 2);
-            % Find Correct Row ID For DSWs
-            bias_indx = find(staID(:,2) == adcirc_node_id); % Row INdex For Bias And Uncertainty
-            % Define Latitude Column
-            col_indx = 3;
-        otherwise
-            % Load Grid Files (nodeID -> [SP_ID Node_ID Lat Lon Depth]; staID -> [SP_ID Lat Lon Depth])
-            staID = load(files.study_grid_file, files.study_grid_variable);staID = staID.(files.study_grid_variable);
-            % Define Latitude Column
-            switch files.study_grid_variable
-                case 'nodeID'
-                    col_indx = 3;
-                case 'staID'
-                    col_indx = 2;
-            end
-            % Find Correct Row ID For DSWs
-            bias_indx = find(staID(:,1) == Nsvpt); % Row INdex For Bias And Uncertainty
-    end
+    % Savepoint Location: Study Grid Row (savepoint_grid_row.m)
+    loc = savepoint_grid_row(files, Nsvpt, sp_coords);
     % Find CRL closest to savepoint
-    [nearest_lat, nearest_lon, ~, dist, ic] = find_nearest_latlon(staID(bias_indx, col_indx), staID(bias_indx, col_indx+1), CRL(:,1), CRL(:,2), []);
+    [~, ic] = min(haversine_km(loc.lat, loc.lon, CRL(:,1), CRL(:,2)));
     % Convert LI SRR to storms/year using a 600 km diameter.
     TC_SRR = SRR_LI(ic)*radKm;
     % Convert MI SRR to storms/year using a 600 km diameter.
@@ -97,9 +79,7 @@ if files.tropical_statistics_available
     % Find storms within 200 km of savepoint
     trk_dist=200;
     trk_lat=Param(:,4); trk_lon=Param(:,5);
-    [~, ~, ~, dist, ~] = find_nearest_latlon(staID(bias_indx, col_indx), staID(bias_indx, col_indx+1),...
-        trk_lat, trk_lon, []);
-    dist200=find(dist<=trk_dist);
+    dist200=find(haversine_km(loc.lat, loc.lon, trk_lat, trk_lon)<=trk_dist);
     ReducedSet = Param(dist200, :);
     % Low Intensity Storm Population
     smpl1 = ReducedSet(ReducedSet(:,7)<28, 1);
@@ -113,7 +93,6 @@ else
     Param = [];
     TC_SRR = [];
     TC_Freq = [];
-    dist = [];
     TotalFreq=[];
     smpl1 = [];
     smpl3 = [];

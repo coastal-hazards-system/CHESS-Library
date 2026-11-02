@@ -321,7 +321,7 @@ classdef pros_methods < CHESSPlotsBase
 
     %% STORM EVENT VIEWER / RESPONSE TABLE (WORKFLOWS 1 AND 4)
     % Forcing: the saved, already adjusted project_forcing (cells per storm [nSteps x replicates]; storm_id, time:
-    % chess_pros_formatter.m). Workflow 1 draws one replicate column (z selector) and recomputes its responses with
+    % chess_forcing_formatter.m). Workflow 1 draws one replicate column (z selector) and recomputes its responses with
     % compute_structure_response on that column only (Resp holds hazard curves, not per-step responses). Workflow 4 draws
     % the z = 0 column and, instead of responses, the hazard curve values at the chosen AEF/AEP and CLs (overlay lines).
     methods (Access=public)

@@ -21,6 +21,9 @@ function config = draw_tide_indices(config, project_forcing)
           a storm) and keeps TC before XC on ties, so the Timeseries CC
           storms come in the same order as the Peaks CC rows. TC/XC
           without Timeseries are drawn here from their Peaks rows first.
+          Without Peaks (use_peaks = 0) the permutation comes from the
+          Timeseries first-step rows (step == 0: one row per storm, same
+          keys and order), so it equals the Peaks-based one.
           tide_indx_cc is always overwritten (never carried or reused), so
           the same storm has the same start hour in XC/TC and CC.
         Start hours already in config (hotstart carry: resolve_hotstart_state.m;
@@ -45,7 +48,9 @@ if config.apply_random_tides ~= 1 || exist(config.tide_file, 'file') ~= 2
     return
 end
 has_ts = isfield(project_forcing, 'Timeseries');
-is_cc = config.workflow == 3 && isfield(project_forcing, 'Peaks') && isfield(project_forcing.Peaks.Default, 'CC');
+has_peaks = isfield(project_forcing, 'Peaks');
+is_cc = config.workflow == 3 && ((has_peaks && isfield(project_forcing.Peaks.Default, 'CC')) ||...
+    (has_ts && isfield(project_forcing.Timeseries.Default, 'CC')));
 if ~has_ts && ~is_cc
     return
 end
@@ -56,11 +61,16 @@ if has_ts
     end
 end
 if is_cc
-    % Storms Already Drawn From Their Timeseries Fit, So The Peaks Pass Keeps Them As Given
-    for st = {'TC', 'XC'}
-        config = draw_type(config, st{1}, project_forcing.Peaks.Default.(st{1}), n_tide);
+    if has_peaks
+        % Storms Already Drawn From Their Timeseries Fit, So The Peaks Pass Keeps Them As Given
+        for st = storm_types_for_sampling('CC', {'TC', 'XC'})
+            config = draw_type(config, st{1}, project_forcing.Peaks.Default.(st{1}), n_tide);
+        end
+        storm_rows = project_forcing.Peaks.Default;
+    else
+        storm_rows = timeseries_first_step_rows(project_forcing.Timeseries.Default);
     end
-    config.tide_indx_cc = cc_tide_indices(config.tide_indx_tc, config.tide_indx_xc, project_forcing.Peaks.Default);
+    config.tide_indx_cc = cc_tide_indices(config.tide_indx_tc, config.tide_indx_xc, storm_rows);
 end
 end
 
@@ -73,12 +83,21 @@ end
 config.(fld) = tide_start_hours(n_tide, forcing_storm_lengths(config.workflow, data), config.(fld));
 end
 
+%% AUX FUNCTION: ONE ROW PER STORM OF THE TC / XC / CC TIMESERIES LIFE CYCLES (FIRST STEP, step == 0)
+function storm_rows = timeseries_first_step_rows(timeseries)
+step = lcs_columns().step;
+for st = {'TC', 'XC', 'CC'}
+    storm_rows.(st{1}) = cellfun(@(x) x(x(:, step) == 0, :), timeseries.(st{1}), 'un', false);
+end
+end
+
 %% AUX FUNCTION: CC START HOURS = TC-THEN-XC START HOURS IN THE CC ORDER OF chess_lcs.m
-function cc = cc_tide_indices(tc, xc, peaks)
-cc = cell(size(peaks.CC));
+% storm_rows: One Row Per Storm (Peaks Rows Or Timeseries First-Step Rows) Of TC, XC And CC
+function cc = cc_tide_indices(tc, xc, storm_rows)
+cc = cell(size(storm_rows.CC));
 for lc = 1:numel(cc)
     C = lcs_columns();
-    [~, p] = sortrows([peaks.TC{lc}; peaks.XC{lc}], [C.year, C.order, C.bin]);
+    [~, p] = sortrows([storm_rows.TC{lc}; storm_rows.XC{lc}], [C.year, C.order, C.bin]);
     stacked = [tc{lc}(:); xc{lc}(:)];
     cc{lc} = stacked(p);
 end

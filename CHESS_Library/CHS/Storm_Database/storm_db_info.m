@@ -13,12 +13,12 @@ function out = storm_db_info(action, varargin)
             chs_hm0_u_a/_u_r       Hm0 uncertainty (absolute [m] / relative [-]).
             chs_hm0_bu_source      Source of the Hm0 values.
             offshore_elevation     Offshore (savepoint) elevation [m, study datum, positive up]:
-                                   minus the depth (positive down) of the CHS_Dependencies
-                                   study grid point nearest to the savepoint ([] when the
-                                   grid has no value, no grid).
+                                   minus the depth (positive down) of the savepoint's
+                                   CHS_Dependencies study grid point (savepoint_grid_row.m;
+                                   [] when the grid has no value, no grid).
             offshore_elevation_source  'chs_dependencies' | ''.
-            grid_distance_m        Distance from the savepoint to that grid point [m]
-                                   ([] when the savepoint ID was matched, no grid).
+            grid_distance_m        Distance from the savepoint coordinates to that grid
+                                   point [m] ([] without coordinates, no grid).
             sp_lat, sp_lon         Savepoint coordinates [deg] ([] when not available).
             Nyrs_XC, Nstm_XC       XC record length [yrs] and XC storm count ([] without XC).
             source_file            Input the database was built from (name + extension).

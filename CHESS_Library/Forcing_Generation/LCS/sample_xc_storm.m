@@ -45,6 +45,9 @@ INPUTS:
     |       lc      |   double    |  Number of life cycles                   |
     |---------------|-------------|------------------------------------------|
     |    storm_peaks    |   Double    |  Extra tropical storm response variable  |
+    |               |             |  [ID SWL Hm0 Tp wDir ...]; the storm ID  |
+    |               |             |  column alone when only sampled_storms   |
+    |               |             |  is requested (use_peaks = 0)            |
     |---------------|-------------|------------------------------------------|
     |  storm_wlp_peaks  |   Double    |  Extra tropical storm response variable  |
     |               |             |  - water level priority                  |
@@ -72,6 +75,7 @@ OUTPUTS:
     |    INDEX_XC_TS   |   Double    |  Sampled Storm Indexes                   |
     |------------------|-------------|------------------------------------------|
     | LC_MCSimOUT_XC   |   Double    |  Life Cycle Data Structure - Maximums    |
+    |                  |             |  (copula draw; only when requested)      |
     |------------------|-------------|------------------------------------------|
     |LC_MCSimOUT_XC_WHP|   Double    |  Life Cycle Data Structure               |
     |                  |             |  - wave height priority                  |
@@ -189,6 +193,12 @@ for j = 1:simulation_years
         end%for k
     end%if
 end%for j
+% Sampled Storm Indexes (For Timeseries LC Creation)
+sampled_storms = [XC_INDEX, SimOUT_XC]; % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
+% Storm IDs Only (use_peaks = 0: storm_peaks Holds The Storm ID Column): No Copula Draw
+if nargout < 2
+    return
+end
 % Call Copula Sampler [ SWL, Hm0, Tp, wDir, storm_IDs ]
 [Y] = copula_sampler(storm_peaks(:, 2:5), XC_INDEX);
 % Monte Carlo Simulation Outputs (Sample Extratropical Storms Peaks)
@@ -196,7 +206,5 @@ lcs_data = zeros(numel(XC_INDEX), C.n_peaks); % Life-Cycle Peaks Layout (lcs_col
 lcs_data(:, [C.id, C.bin, C.year, C.order]) = [XC_INDEX, SimOUT_XC];
 lcs_data(:, [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir]) = Y(:, [1 2 2 3 4]);
 lcs_data(:, C.storm_duration) = storm_duration_days;
-% Sampled Storm Indexes (For Timeseries LC Creation)
-sampled_storms = [XC_INDEX, SimOUT_XC]; % [ storm_IDs, intensity_bin, Sim_Year, yearly_ocurrance_order ]
 
 end

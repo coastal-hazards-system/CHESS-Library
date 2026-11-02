@@ -7,16 +7,18 @@ INPUTS:
         Nstm_XC, Nyrs_XC                XC storm count and record length [years] (XC and CC sampling; XC rate)
         storm_duration                  Event length [hours] (Peaks storm duration column)
         compute_storm_duration          0 = config.storm_duration, 1 = per-storm SWL duration (Timeseries)
-        use_peaks, use_timeseries       Storm data types of the project
+        use_peaks, use_timeseries       Storm data types of the project (use_peaks = 0: Timeseries only; the
+                                        storm IDs are drawn from the Timeseries storms, no Peaks life cycles)
         create_wlp, create_whp          Build the water level / wave height priority datasets
         lcs_restrict_sampling_rate      Sampling mode (0 = full Poisson, 1 = rate matched)
         load_project_forcing, ref_case_name, lcs_convergence_prompt, out_files
                                         Reference case reuse, convergence check prompt, output files
     storm       CHS storm data per storm type: storm.XC / storm.TC .Peaks / .Timeseries .Default / .WLP / .WHP
+                (Peaks read only with use_peaks = 1)
     prob_mass   CHS probability masses (TC storm rate prob_mass.TC_SRR)
 
 OUTPUTS HEADERS (Column Map: lcs_columns.m):
-    LC_MCSimOUT:
+    LC_MCSimOUT (project_forcing.Peaks, use_peaks = 1 only):
         Size (# of events, 10) -> (Rows,Col)
             (01) Storm ID                       [-]
             (02) Storm type                     [0 = extratropical]
@@ -68,12 +70,15 @@ MATCHING METHODS (create_wlp / create_whp):
     CC: TC and XC life cycles of each matching method combined.
 
 SAMPLING SEED FILE (lcs_sampling_seed_file.m):
-    lcs_restrict_sampling_rate, sampled_ids.XC/.TC and, with XC sampling,
-    xc_peaks.Default (raw XC copula life cycles, before uncertainty and
-    adjustment).
-%}
-warning('off','all');
+    lcs_restrict_sampling_rate, sampled_ids.XC/.TC and, with XC sampling and
+    use_peaks = 1, xc_peaks.Default (raw XC copula life cycles, before
+    uncertainty and adjustment).
 
+use_peaks = 0 (TIMESERIES ONLY):
+    No Peaks life cycles: the samplers draw the storm IDs from the Timeseries
+    storms (same Poisson / randsample draws as with Peaks) and the XC copula is
+    not run.
+%}
 %% GRAB INPUT FROM "config"
 settings = read_life_cycle_settings(config);
 storm_sampling = settings.storm_sampling;
@@ -93,14 +98,9 @@ config = check_life_cycle_sampling(config, prob_mass, reuse, settings, lcs_mode)
 C = lcs_columns();
 C_ts = lcs_columns('Timeseries');
 
-%% CREATE DUMMY PEAKS DATASET IF NEEDED
-if config.use_peaks == 0
-    storm = peaks_from_timeseries_maxima(storm, config);
-end
-
 %% DEFINE ADDITIONAL VARIABLES
-% Initialize Life Cycle Storage Vars
-project_forcing = empty_life_cycle_storage(storm_sampling, settings.number_of_life_cycles);
+% Initialize Life Cycle Storage Vars (Peaks Only With use_peaks = 1)
+project_forcing = empty_life_cycle_storage(storm_sampling, settings.number_of_life_cycles, settings.use_peaks);
 % Sampled Storms Per Storm Type (Sampling Seed File)
 sampled_xc = [];
 sampled_tc = [];
@@ -125,16 +125,16 @@ disp(newline);
 %% REMOVE ADDITIONAL FIELDS (IF NEEDED)
 project_forcing = remove_unrequested_alternate_datasets(project_forcing, settings);
 
-%% SAVE SAMPLING SEED FILE (SAMPLING MODE, SAMPLED LIFE CYCLES & RAW XC PEAKS)
+%% SAVE SAMPLING SEED FILE (SAMPLING MODE, SAMPLED LIFE CYCLES & RAW XC PEAKS WITH use_peaks = 1)
 save_sampling_seed(config, lcs_mode, sampled_xc, sampled_tc, project_forcing);
-
-warning('on','all');
 end
 
 %% AUX FUNCTION: LIFE-CYCLE SAMPLING SETTINGS FROM "config"
 function settings = read_life_cycle_settings(config)
 % Storm Sampling Scheme
 settings.storm_sampling = config.storm_sampling;
+% Peaks Life Cycles (use_peaks = 0: Timeseries Only, Storm IDs Drawn From The Timeseries Storms)
+settings.use_peaks = config.use_peaks == 1;
 % Number Of Life Cycles
 settings.number_of_life_cycles = config.mcs_nLC;
 % Simulation Length
@@ -165,12 +165,9 @@ storm_types_to_sample = reuse.types;
 reused = reuse.reused;
 if config.load_project_forcing == 1
     if reuse.found && ~reuse.seed_found
-        % warning('off','all') Is Active Here: Enable This One So It Is Shown
-        warning('on', 'chess_lcs:referenceSeedNotFound');
         warning('chess_lcs:referenceSeedNotFound', ['Reference case ''%s'' has no sampling seed file; its sampling cannot be ',...
             'reused. Life cycles will be sampled fresh (as if load_project_forcing = 0).\n   %s'],...
             config.ref_case_name, lcs_sampling_seed_file(mcs_ref_pth));
-        warning('off', 'chess_lcs:referenceSeedNotFound');
     elseif reuse.found
         for kk = find(~reused)
             disp(['     Warning: ref_case_name ('  config.ref_case_name ') does not have ' storm_types_to_sample{kk} ' sampling information...']);
@@ -181,11 +178,8 @@ if config.load_project_forcing == 1
         else
             fallback = 'Storms are sampled fresh instead.';
         end
-        % warning('off','all') Is Active Here: Enable This One So It Is Shown
-        warning('on', 'chess_lcs:referenceNotFound');
         warning('chess_lcs:referenceNotFound', ['load_project_forcing = 1, but the project forcing of ref_case_name (%s) ',...
             'was not found at:\n   %s\n%s'], config.ref_case_name, mcs_ref_pth, fallback);
-        warning('off', 'chess_lcs:referenceNotFound');
     end
 end
 if reuse.own
@@ -245,29 +239,12 @@ if ~isempty(reuse.check_types)
 end
 end
 
-%% AUX FUNCTION: DUMMY PEAKS DATASET FROM THE TIMESERIES MAXIMA (use_peaks = 0)
-function storm = peaks_from_timeseries_maxima(storm, config)
-% Define Storm Types
-switch config.storm_sampling
-    case 'CC'
-        stm_list = {'TC','XC'};
-    otherwise
-        stm_list = {config.storm_sampling};
-end
-% Create Dummy Peak Dataset
-for kk = 1:length(stm_list)
-    % Get Max Responses, Peaks Layout [SWL Hm0 Tp wDir datenum] (Timeseries dt Column Dropped)
-    dummy_data = cell2mat(cellfun(@(x) max(x,[],1),...
-        storm.(stm_list{kk}).('Timeseries').Default(:,2), 'un', false));
-    dummy_data = dummy_data(:, 1:5);
-    % Create Dummy Dataset
-    storm.(stm_list{kk}).('Peaks').('Default') = [ storm.(stm_list{kk}).('Timeseries').Default(:,1),...
-        num2cell(dummy_data, 2)];
-end
-end
-
 %% AUX FUNCTION: EMPTY LIFE-CYCLE STORAGE PER STORM TYPE AND DATASET
-function project_forcing = empty_life_cycle_storage(storm_sampling, number_of_life_cycles)
+function project_forcing = empty_life_cycle_storage(storm_sampling, number_of_life_cycles, use_peaks)
+project_forcing = struct();
+if ~use_peaks
+    return
+end
 if contains(storm_sampling,{'XC','CC'})
     % Initialize Default Dataset MC Storage Variable
     project_forcing.Peaks.Default.('XC') = repmat({},number_of_life_cycles,1);
@@ -295,32 +272,40 @@ if hot_start
     disp(['     Loading XC sampling seed from ' reuse.label]);
     % Pull Sampling Seed
     sampled_xc = reuse.ids.XC;
-    fprintf(1,'      Completion Progress: %3d%%\n',0);
-    storm_data = storm.XC.Peaks.Default;
-    % Populate Storm Data
-    for lc=1:number_of_life_cycles
-        % Create LCs
-        project_forcing.Peaks.Default.('XC'){lc, 1} = reference_lc_peaks(sampled_xc{lc}, storm_data, config.storm_duration/24, C); % Life-Cycle Peaks Layout (lcs_columns.m)
-        fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cycles)));
-    end
-    % XC Peaks Are Copula Samples: Use The Reference's Sampled Values (Sampling Seed File) Instead Of Database Peaks
-    xc_seed = load_reference_xc_seed(reuse.seed_pf, sampled_xc, reuse.label, C);
-    % Only The Copula Values (SWL, Hm0, Tp, wDir) Are Kept: Identity And Storm Duration Come From This Run (As For TC)
-    if ~isempty(xc_seed)
-        copula_cols = [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir];
-        project_forcing.Peaks.Default.('XC') = cellfun(@(s, d) copy_columns(d, s, copula_cols), xc_seed,...
-            project_forcing.Peaks.Default.('XC'), 'un', false);
+    if settings.use_peaks
+        fprintf(1,'      Completion Progress: %3d%%\n',0);
+        storm_data = storm.XC.Peaks.Default;
+        % Populate Storm Data
+        for lc=1:number_of_life_cycles
+            % Create LCs
+            project_forcing.Peaks.Default.('XC'){lc, 1} = reference_lc_peaks(sampled_xc{lc}, storm_data, config.storm_duration/24, C); % Life-Cycle Peaks Layout (lcs_columns.m)
+            fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cycles)));
+        end
+        % XC Peaks Are Copula Samples: Use The Reference's Sampled Values (Sampling Seed File) Instead Of Database Peaks
+        xc_seed = load_reference_xc_seed(reuse.seed_pf, sampled_xc, reuse.label, C);
+        % Only The Copula Values (SWL, Hm0, Tp, wDir) Are Kept: Identity And Storm Duration Come From This Run (As For TC)
+        if ~isempty(xc_seed)
+            copula_cols = [C.SWL, C.Hm0_toe, C.Hm0_offshore, C.Tp, C.wDir];
+            project_forcing.Peaks.Default.('XC') = cellfun(@(s, d) copy_columns(d, s, copula_cols), xc_seed,...
+                project_forcing.Peaks.Default.('XC'), 'un', false);
+        end
     end
 end
 if ~hot_start
     disp('     Sampling Extratropical Events .....');
     fprintf(1,'      Completion Progress: %3d%%\n',0);
+    if ~settings.use_peaks
+        % Timeseries Only: Storm IDs Drawn From The Timeseries Storms, No Copula Peaks
+        xc_storm_ids = cell2mat(storm.XC.Timeseries.Default(:, 1));
+    end
     for lc=1:number_of_life_cycles
-        %
-        [sampled_xc{lc, 1},...
-            project_forcing.Peaks.Default.('XC'){lc, 1}] = ...
-            sample_xc_storm(cell2mat(storm.XC.Peaks.Default), settings.simulation_years, settings.xc_storm_count/settings.xc_record_years, lcs_mode, config.storm_duration/24);
-        %
+        if settings.use_peaks
+            [sampled_xc{lc, 1},...
+                project_forcing.Peaks.Default.('XC'){lc, 1}] = ...
+                sample_xc_storm(cell2mat(storm.XC.Peaks.Default), settings.simulation_years, settings.xc_storm_count/settings.xc_record_years, lcs_mode, config.storm_duration/24);
+        else
+            sampled_xc{lc, 1} = sample_xc_storm(xc_storm_ids, settings.simulation_years, settings.xc_storm_count/settings.xc_record_years, lcs_mode, config.storm_duration/24);
+        end
         fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cycles)));
     end
 end
@@ -353,24 +338,33 @@ if hot_start
     disp(['     Loading TC sampling seed from ' reuse.label]);
     % Pull Sampling Seed
     sampled_tc = reuse.ids.TC;
-    fprintf(1,'      Completion Progress: %3d%%\n',0);
-    storm_data = storm.TC.Peaks.Default;
-    % Populate Storm Data
-    for lc=1:number_of_life_cycles
-        % Create LCs
-        project_forcing.Peaks.Default.('TC'){lc, 1} = reference_lc_peaks(sampled_tc{lc}, storm_data, config.storm_duration/24, C); % Life-Cycle Peaks Layout (lcs_columns.m)
-        fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cycles)));
+    if settings.use_peaks
+        fprintf(1,'      Completion Progress: %3d%%\n',0);
+        storm_data = storm.TC.Peaks.Default;
+        % Populate Storm Data
+        for lc=1:number_of_life_cycles
+            % Create LCs
+            project_forcing.Peaks.Default.('TC'){lc, 1} = reference_lc_peaks(sampled_tc{lc}, storm_data, config.storm_duration/24, C); % Life-Cycle Peaks Layout (lcs_columns.m)
+            fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cycles)));
+        end
     end
 end
 if ~hot_start
     disp('     Sampling Tropical Events .....');
     fprintf(1,'      Completion Progress: %3d%%\n',0);
+    if ~settings.use_peaks
+        % Timeseries Only: Storm IDs Drawn From The Timeseries Storms
+        tc_storm_ids = cell2mat(storm.TC.Timeseries.Default(:, 1));
+    end
     for lc=1:number_of_life_cycles
-    [sampled_tc{lc, 1},...
-        project_forcing.Peaks.Default.('TC'){lc, 1}] = ...
-        sample_tc_storm(cell2mat(storm.TC.Peaks.Default), settings.simulation_years, prob_mass, lcs_mode, config.storm_duration/24);
-    %
-    fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cycles)));
+        if settings.use_peaks
+            [sampled_tc{lc, 1},...
+                project_forcing.Peaks.Default.('TC'){lc, 1}] = ...
+                sample_tc_storm(cell2mat(storm.TC.Peaks.Default), settings.simulation_years, prob_mass, lcs_mode, config.storm_duration/24);
+        else
+            sampled_tc{lc, 1} = sample_tc_storm(tc_storm_ids, settings.simulation_years, prob_mass, lcs_mode, config.storm_duration/24);
+        end
+        fprintf(1,'\b\b\b\b%3.0f%%',(100*(lc/number_of_life_cycles)));
     end
 end
 % Replicate Storm Sampling With Storm Timeseries
@@ -400,9 +394,11 @@ end
 %% AUX FUNCTION: COMBINE TROPICAL AND EXTRATROPICAL LIFE CYCLES (CC)
 function project_forcing = combine_storm_type_life_cycles(project_forcing, config, settings, C)
 for lc=1:settings.number_of_life_cycles
-    % Combined Suite Of XC and TC for Simulation Period Per Each Modeled Life-Cycle
-    project_forcing.Peaks.Default.('CC'){lc, 1} = sortrows([project_forcing.Peaks.Default.('TC'){lc, 1};...
-        project_forcing.Peaks.Default.('XC'){lc, 1}],[C.year, C.order, C.bin]);
+    if settings.use_peaks
+        % Combined Suite Of XC and TC for Simulation Period Per Each Modeled Life-Cycle
+        project_forcing.Peaks.Default.('CC'){lc, 1} = sortrows([project_forcing.Peaks.Default.('TC'){lc, 1};...
+            project_forcing.Peaks.Default.('XC'){lc, 1}],[C.year, C.order, C.bin]);
+    end
 
     if settings.whp_switch
         % Combined Suite Of XC and TC for Simulation Period Per Each Modeled Life-Cycle
@@ -424,6 +420,9 @@ end
 
 %% AUX FUNCTION: REMOVE ALTERNATE DATASETS THAT WERE NOT REQUESTED
 function project_forcing = remove_unrequested_alternate_datasets(project_forcing, settings)
+if ~settings.use_peaks
+    return
+end
 % Wave Height Priority
 if settings.whp_switch == 0
     % Remove Empty Field (Tropicals)
@@ -442,7 +441,8 @@ end
 % Rebuilds This Case's Forcing From Them Without Reading The Adjusted project_forcing.mat.
 % XC Peak Values Are Copula Samples (Not Database Values). Keep Them As Sampled (Before Uncertainty And
 % Adjustment) So Cases Reusing This One As Reference (load_project_forcing = 1) Get The Exact Same Values.
-% Default Only (xc_peaks.Default): XC WLP/WHP Life Cycles Are Copies Of It.
+% Default Only (xc_peaks.Default): XC WLP/WHP Life Cycles Are Copies Of It. use_peaks = 0: No xc_peaks (No Peaks Life
+% Cycles); A use_peaks = 1 Case Reusing Such A Seed Gets Storm Database Peaks For The Sampled XC Storms.
 % Stored Outside project_forcing: The Uncertainty/Adjustment Drivers Treat Every project_forcing Field As A Data Type.
 function save_sampling_seed(config, lcs_mode, sampled_xc, sampled_tc, project_forcing)
 storm_sampling = config.storm_sampling;
@@ -456,7 +456,7 @@ if isfield(config, 'out_files') && isfield(config.out_files, 'project_forcing')
         sampled_ids.TC = sampled_tc;
     end
     seed_vars = {'lcs_restrict_sampling_rate', 'sampled_ids'};
-    if contains(storm_sampling, {'XC','CC'})
+    if contains(storm_sampling, {'XC','CC'}) && config.use_peaks == 1
         xc_peaks = struct('Default', {project_forcing.Peaks.Default.('XC')});
         seed_vars{end+1} = 'xc_peaks';
     end
@@ -527,7 +527,12 @@ end
 function seed = load_reference_xc_seed(ref_pf_file, sampled, ref_label, C)
 % Returns The Reference's Raw XC Default Peaks (Life Cycles) When They Match The Loaded Sampling Seed, Else []
 seed = [];
-S = load(lcs_sampling_seed_file(ref_pf_file), 'xc_peaks');
+seed_file = lcs_sampling_seed_file(ref_pf_file);
+if ~ismember('xc_peaks', who('-file', seed_file))
+    disp(['     Warning: sampling seed file of ' ref_label ' holds no XC sampled peak values (sampled with use_peaks = 0); XC peak values are rebuilt from the storm database.']);
+    return
+end
+S = load(seed_file, 'xc_peaks');
 ok = isfield(S, 'xc_peaks') && isfield(S.xc_peaks, 'Default') && numel(S.xc_peaks.Default) == numel(sampled) &&...
     all(cellfun(@(a, b) isequal(a(:, [C.id, C.bin, C.year, C.order]), b), S.xc_peaks.Default(:), sampled(:)));
 if ok
@@ -562,10 +567,7 @@ end
 function confirm_not_converged(conv, stm_type, prompt)
 msg = sprintf('%s: mcs_nLC = %d is below the %d life cycles required for convergence.', stm_type, conv.nLC, conv.nLC_req);
 if prompt ~= 1
-    % warning('off','all') Is Active Here: Enable This One So It Is Shown
-    warning('on', 'chess_lcs:notConverged');
     warning('chess_lcs:notConverged', '%s Continuing (lcs_convergence_prompt = 0).', msg);
-    warning('off', 'chess_lcs:notConverged');
     return
 end
 while true
@@ -573,7 +575,6 @@ while true
     if any(strcmp(reply, {'p', 'proceed'}))
         return
     elseif any(strcmp(reply, {'c', 'cancel'}))
-        warning('on','all');
         error('chess_lcs:notConverged', ['chess_lcs: LCS cancelled. %s Set mcs_nLC >= %d in the input file ',...
             '(or relax lcs_convergence_tol / lcs_convergence_confidence).'], msg, conv.nLC_req);
     end

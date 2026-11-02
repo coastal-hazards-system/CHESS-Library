@@ -4,9 +4,9 @@ function [project_forcing, config] = build_boundary_conditions(config, storm, pr
         Step 1 of call_chess_boundary_conditions.m: builds the project
         forcing of the whole storm request, per workflow. Nothing is saved
         here except the LCS sampling seed file (chess_lcs.m).
-            - PROS (RB/FB, workflows 1, 4): chess_pros_formatter.m
-              (replicates per storm).
-            - DET (workflow 2): chess_det_formatter.m (storms as recorded).
+            - PROS (RB/FB, workflows 1, 4) and DET (workflow 2):
+              chess_forcing_formatter.m (PROS: replicates per storm; DET:
+              storms as recorded).
             - LCS (workflow 3): chess_lcs.m (samples the life cycles; adds
               config.lcs_effective_sampling_rate).
             - Multi-line stage 2 (config.multiline, multiline_stage2_config.m):
@@ -43,15 +43,10 @@ if ~isfield(config, 'compute_storm_duration') || isempty(config.compute_storm_du
     config.compute_storm_duration = 0;
 end
 switch config.workflow
-    case {1,4} % CHESS: PROS (RB1, RB3, FB)
+    case {1,2,4} % CHESS: PROS (RB1, RB3, FB; Replicates Per Storm) And Deterministic (No Replicates)
         check_peaks_timeseries_ids(storm, config.storm_sampling);
-        % Reshape Forcing Parameters For RB Analysis (nStorms * normal_discretizations)
-        project_forcing = chess_pros_formatter(config.storm_sampling, storm, prob_mass, config.print_progress,...
-            config.storm_duration, config.compute_storm_duration);
-    case 2 % CHESS: Deterministic (No Replicates)
-        check_peaks_timeseries_ids(storm, config.storm_sampling);
-        project_forcing = chess_det_formatter(config.storm_sampling, storm, config.print_progress,...
-            config.storm_duration, config.compute_storm_duration);
+        project_forcing = chess_forcing_formatter(config.storm_sampling, storm, prob_mass, config.print_progress,...
+            config.storm_duration, config.compute_storm_duration, config.workflow ~= 2);
     case 3 % CHESS: LCS
         % Monte Carlo Storm Sampler (config: Adds lcs_effective_sampling_rate)
         [project_forcing, config] = chess_lcs(config, storm, prob_mass);
@@ -62,11 +57,7 @@ end
 % PROS/DET Pair Them By Row (One Tide Start Hour Per Storm Shared By Both: draw_tide_indices.m).
 % LCS Is Not Checked: It Pulls Hydrographs By Storm ID (chess_lcs.m timeseries_lc_creation)
 function check_peaks_timeseries_ids(storm, storm_sampling)
-if strcmp(storm_sampling, 'CC')
-    storm_types = {'TC', 'XC'};
-else
-    storm_types = {storm_sampling};
-end
+storm_types = storm_types_for_sampling(storm_sampling, {'TC', 'XC'});
 for st = storm_types
     if ~all(isfield(storm.(st{1}), {'Peaks', 'Timeseries'}))
         continue

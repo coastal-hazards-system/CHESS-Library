@@ -9,8 +9,8 @@ hotstart_plan.m (library resolve_hotstart_state.m and the GUI).
 Levels (first match wins):
     'resample'       A lcs_sampling_fields field changed, or the request is not
                      covered by the cached data shape (dataset_coverage_fields,
-                     plus use_peaks outside LCS; asymmetric check: a
-                     cache holding MORE than requested still covers it).
+                     every workflow; asymmetric check: a cache holding
+                     MORE than requested still covers it).
                      LCS draws new life cycles.
     'reuse_sampling' A forcing_build_fields, forcing_adjustment_fields or forcing_uncertainty_fields
                      field changed. The forcing is rebuilt from the storm
@@ -58,9 +58,6 @@ end
 function fld = uncovered_data_shape(config, config_old, shape_fields)
 fld = '';
 flags = setdiff(shape_fields, {'storm_sampling'}, 'stable');
-if isfield(config, 'workflow') && config.workflow ~= 3
-    flags = [{'use_peaks'}, flags];
-end
 for kk = 1:numel(flags)
     f = flags{kk};
     if isfield(config, f) && isfield(config_old, f) && logical(config.(f)) && ~logical(config_old.(f))
@@ -75,9 +72,5 @@ end
 end
 
 function types = storm_types(storm_sampling)
-if strcmpi(storm_sampling, 'CC')
-    types = {'XC', 'TC'};
-else
-    types = {upper(char(storm_sampling))};
-end
+types = storm_types_for_sampling(storm_sampling, {'XC', 'TC'});
 end

@@ -7,7 +7,7 @@ function [STWAVE_headers_location,Tp_special] = chs_wave_model_header_locator(ST
         hosted in CHS. Additionally, this routine identifies if provided
         file provides Tp or Tm as output. Tp_special (0 -> Tp, 1 -> Tm)
         serves as the flag value. Conversion must be performed through the
-        use of "chs_h5_converter.m" or "call_chs_h5_converter.m".
+        use of "chs_h5_converter.m" or "convert_chs_zip.m".
         
     %% INPUTS
         STWAVE: Converted CHS wave model XC/TC storm peaks. | struc | 1 x size_varies

@@ -41,46 +41,21 @@ function [Resp] = call_project_response(config, project_forcing, structure)
     %% COMPUTE STRUCTURE RESPONSE BASED ON WORKFLOW
     switch workflow
         
-        case {1, 4} % ================= PROS WORKFLOW =================
-            % Define workflow parameters
-            wName  = ifthen(workflow == 4, 'FB', 'RB');
+        case {1, 2, 4} % ============ PROS AND DETERMINISTIC WORKFLOWS ============
             ensure_directory(subDir);
-
-            % Process Peaks Datasets (PROS)
-            if use_peaks && isfield(project_forcing, 'Peaks')
-                disp('Running CHESS: Probabilistic Response Of Structures (PROS) - Peaks....');
-                
-                peak_fields = fieldnames(project_forcing.Peaks);
-                for i = 1:numel(peak_fields)
-                    fName = peak_fields{i};
-                    
-                    % Filter based on water level/height configurations
-                    if (strcmp(fName, 'WLP') && ~use_wlp) || (strcmp(fName, 'WHP') && ~use_whp)
-                        continue; 
-                    end
-                    
-                    fprintf('   Processing %s dataset....\n', fName);
-                    save_path = fullfile(subDir, sprintf('%s1_%s', wName, fName));
-                    
-                    Resp.Peaks.(fName) = chess_pros(config_peaks, ...
-                        project_forcing.Peaks.(fName), structure, save_path);
-                end
+            if workflow == 2
+                run_label = 'Deterministic';
+                run_dataset = @(cfg, data, file_name) chess_det(cfg, data, structure);
+            else
+                run_label = 'Probabilistic Response Of Structures (PROS)';
+                run_dataset = @(cfg, data, file_name) chess_pros(cfg, data, structure, fullfile(subDir, file_name));
             end
+            % Run File Tag: RB / FB (PROS-RB / PROS-FB, chess_workflows.m); Not Used By DET
+            tag = extractAfter(chess_workflows(workflow).wflow_name, 'PROS-');
 
-            % Process Timeseries Datasets (PROS)
-            if use_timeseries && isfield(project_forcing, 'Timeseries')
-                disp('Running CHESS: Probabilistic Response Of Structures (PROS) - Timeseries....');
-                save_path = fullfile(subDir, [wName, '3']);
-                
-                Resp.Timeseries.Default = chess_pros(config, ...
-                    project_forcing.Timeseries.Default, structure, save_path);
-            end
-        case 2 % ============== DETERMINISTIC WORKFLOW ==============
-            ensure_directory(subDir);
-
-            % Process Peaks Datasets (DET)
+            % Process Peaks Datasets
             if use_peaks && isfield(project_forcing, 'Peaks')
-                disp('Running CHESS: Deterministic - Peaks....');
+                disp(['Running CHESS: ' run_label ' - Peaks....']);
 
                 peak_fields = fieldnames(project_forcing.Peaks);
                 for i = 1:numel(peak_fields)
@@ -92,17 +67,17 @@ function [Resp] = call_project_response(config, project_forcing, structure)
                     end
 
                     fprintf('   Processing %s dataset....\n', fName);
-                    Resp.Peaks.(fName) = chess_det(config_peaks, ...
-                        project_forcing.Peaks.(fName), structure);
+                    Resp.Peaks.(fName) = run_dataset(config_peaks, ...
+                        project_forcing.Peaks.(fName), sprintf('%s1_%s', tag, fName));
                 end
             end
 
-            % Process Timeseries Datasets (DET)
+            % Process Timeseries Datasets
             if use_timeseries && isfield(project_forcing, 'Timeseries')
-                disp('Running CHESS: Deterministic - Timeseries....');
+                disp(['Running CHESS: ' run_label ' - Timeseries....']);
 
-                Resp.Timeseries.Default = chess_det(config, ...
-                    project_forcing.Timeseries.Default, structure);
+                Resp.Timeseries.Default = run_dataset(config, ...
+                    project_forcing.Timeseries.Default, [tag '3']);
             end
         case 3 % ================== CSR WORKFLOW ==================
             % Define workflow parameters
@@ -150,7 +125,3 @@ function ensure_directory(dir_path)
     end
 end
 
-function out = ifthen(cond, true_val, false_val)
-    % Fast inline ternary condition
-    if cond, out = true_val; else, out = false_val; end
-end

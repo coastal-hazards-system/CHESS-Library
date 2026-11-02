@@ -273,7 +273,7 @@ if storm_mat_exists
     end
 end
 % Bias & Uncertainty Of The Database (CHS_Dependencies, Else Manual Values Of The Database Being Rebuilt, Else Prompted)
-% And Offshore Elevation: Study Grid Point Nearest To The Savepoint Coordinates (call_input_parser.m; NaN: ID Match)
+% And Offshore Elevation At The Savepoint Study Grid Row (savepoint_grid_row.m; Coordinates From call_input_parser.m, NaN: None)
 if has_info
     bnu = storm_db_bias_uncertainty(config.chs_dependencies, config.region, config.sp_ID, [config.sp_lat config.sp_lon], db_info);
 else
