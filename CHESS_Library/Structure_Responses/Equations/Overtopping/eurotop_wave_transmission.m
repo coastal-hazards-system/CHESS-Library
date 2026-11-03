@@ -1,73 +1,77 @@
-%function [Kt]= Wave_Transmission_All(Hm0,Tp,beta,Rc,Dn50,B,tana,ht,grav,struc_type)
 function [Kt]= eurotop_wave_transmission(Hm0,Tp,Rc,B,tana,grav)
-%{
-LICENSING:
-    This code is part of CHESS software suite developed by the U.S. Army
-    Engineer Research and Development Center Coastal and Hydraulics
-    Laboratory (hereinafter “ERDC-CHL”). This material is distributed in
-    accordance with DoD Instruction 5230.24. Recipient agrees to abide by
-    all notices, and distribution and license markings. The controlling DOD
-    office is the U.S. Army Engineer Research and Development Center
-    (hereinafter, "ERDC"). This material shall be handled and maintained in
-    accordance with For Official Use Only, Export Control, and AR 380-19
-    requirements. ERDC-CHL retains all right, title and interest in
-    CHESS and any portion thereof and in all copies, modifications and
-    derivative works of CHESS and any portions thereof including,
-    without limitation, all rights to patent, copyright, trade secret,
-    trademark and other proprietary or intellectual property rights.
-    Recipient has no rights, by license or otherwise, to use, disclose or
-    disseminate CHESS, in whole or in part.
+% eurotop_wave_transmission  Wave transmission coefficient over a crest.
+%   Kt = eurotop_wave_transmission(Hm0, Tp, Rc, B, tana, grav) returns the
+%       transmission coefficient Kt = Hm0 transmitted / Hm0 incident of a
+%       rubble mound type crest for every forcing row.
+%
+%   EurOtop (2018) p. 65, Eq. 4.7:
+%   Kt = -0.4*Rc/Hm0 + 0.64*(B/Hm0)^(-0.31)*(1 - exp(-0.5*xi)), with
+%   xi = tana/sqrt(s0p), s0p = Hm0/L0p and L0p = grav*Tp^2/(2*pi).
+%   Kt is limited to 0 <= Kt <= 0.80 and set to 0 where s0p = 0 or the
+%   forcing is NaN. Only the EurOtop equation is active; the CEM, vertical
+%   wall and Goda low-crested alternatives remain commented out in the
+%   code. Exceptions (e.g. negative Hm0) are expected to be handled by the
+%   caller.
+%
+%   Inputs (Hm0 and Rc with as many elements as Tp):
+%     Hm0  - incident spectral significant wave height at the toe [m]
+%     Tp   - peak wave period [s]; Kt takes the shape of Tp
+%     Rc   - freeboard, crest elevation - SWL [m]
+%     B    - crest width [m], scalar
+%     tana - seaward slope tan(alpha) [-], scalar (CHESS: 1/seaside slope
+%            for levees and rubble mounds, the toe berm slope for
+%            floodwalls)
+%     grav - gravitational acceleration [m/s^2], scalar
+%   Outputs:
+%     Kt   - wave transmission coefficient [-], size of Tp
+%
+%   Tier: public
+%
+%   See also Eurotop_r2p_q_Final, compute_structure_response,
+%   apply_stage1_transmission.
+%
+%   Developed by: Jeffrey A. Melby (JAM)
 
-DISCLAIMER:
-    CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT
-    HOLDERS. ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS
-    OR IMPLIED WITH RESPECT TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL,
-    AND EXPRESSLY DISCLAIMS ALL WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
-    IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF MERCHANTABILITY,
-    NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
-    CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE
-    AND RESULTS OF THE USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE
-    UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL WARRANTIES AND LIABILITIES
-    REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND DISTRIBUTES
-    IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST
-    ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND
-    SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD HARMLESS ERDC-CHL, THE
-    UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
-    LIABILITIES, DEMANDS, DAMAGES.
-
-SOFTWARE NAME:
-    Wave_Transmission_All.m
-
-DESCRIPTION:
-    Function to Wave transmission due to overtopping according to 
-    1. CEM Table VI-5-15, pg VI-5-47
-    2. EurOtop II Manual pg 65, Eq 4.7
-    3. Goda LCS (originally from Goda and Ahrens) pg 150, 
-    Eq 3.60-3.62, Random Seas and Design of Maritime Structures
-Compared the various equations for Midbay and Goda and EurOtop seem
-reasonable, CEM not.  Goda Beff is a bit strange. For eample, if SWL is
-just above crest vs just below, eq gives very different results. Probably
-better to just use Beff=B when SWL near crest.  Also, any eq with Dn50 in
-it creates problems because Dn50 can change a lot depending on
-conventional, low-crest or reef.  So Decided to comment everything but
-EurOtop equation.
-
-
-INPUT/OUTPUT ARGUMENTS:
-    Hm0: incident zero moment significant wave height
-    Dn50:  Seaside armor stone size
-    beta: wave angle, 0<beta<70 deg
-    Tp:  peak wave period
-    Rc: Freeboard
-    B: Crest Width
-
-AUTHORS:
-    Jeffrey A. Melby (JAM)
-
-HISTORY OF REVISIONS:
-
-***************  ALPHA  VERSION  **  FOR INTERNAL TESTING ONLY ************
-%}
+% LICENSING:
+%     This code is part of CHESS software suite developed by the U.S. Army
+%     Engineer Research and Development Center Coastal and Hydraulics
+%     Laboratory (hereinafter “ERDC-CHL”). This material is distributed in
+%     accordance with DoD Instruction 5230.24. Recipient agrees to abide by
+%     all notices, and distribution and license markings. The controlling DOD
+%     office is the U.S. Army Engineer Research and Development Center
+%     (hereinafter, "ERDC"). This material shall be handled and maintained in
+%     accordance with For Official Use Only, Export Control, and AR 380-19
+%     requirements. ERDC-CHL retains all right, title and interest in
+%     CHESS and any portion thereof and in all copies, modifications and
+%     derivative works of CHESS and any portions thereof including,
+%     without limitation, all rights to patent, copyright, trade secret,
+%     trademark and other proprietary or intellectual property rights.
+%     Recipient has no rights, by license or otherwise, to use, disclose or
+%     disseminate CHESS, in whole or in part.
+%
+% DISCLAIMER:
+%     CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT
+%     HOLDERS. ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS
+%     OR IMPLIED WITH RESPECT TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL,
+%     AND EXPRESSLY DISCLAIMS ALL WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+%     IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF MERCHANTABILITY,
+%     NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
+%     CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE
+%     AND RESULTS OF THE USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE
+%     UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL WARRANTIES AND LIABILITIES
+%     REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND DISTRIBUTES
+%     IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST
+%     ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND
+%     SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD HARMLESS ERDC-CHL, THE
+%     UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
+%     LIABILITIES, DEMANDS, DAMAGES.
+%
+% SOFTWARE NAME:
+%     Wave_Transmission_All.m
+%
+% HISTORY OF REVISIONS:
+%
+% ***************  ALPHA  VERSION  **  FOR INTERNAL TESTING ONLY ************
 var_shape = size(Tp);
 Hm0 = Hm0(:);
 Tp = Tp(:);

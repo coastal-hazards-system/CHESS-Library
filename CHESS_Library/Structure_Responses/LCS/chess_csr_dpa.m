@@ -1,131 +1,147 @@
  function [CSR_Timeseries_DPA] = chess_csr_dpa(config, structure, emp_coeff, LC_SimOUT_hyd)
-%{
-LICENSING:
-    This code is part of CHESS software suite developed by the U.S. Army
-    Engineer Research and Development Center Coastal and Hydraulics Laboratory
-    (hereinafter “ERDC-CHL”). This material is distributed in accordance with DoD
-    Instruction 5230.24. Recipient agrees to abide by all notices, and distribution
-    and license markings. The controlling DOD office is the U.S. Army Engineer
-    Research and Development Center (hereinafter, "ERDC"). This material shall be
-    handled and maintained in accordance with For Official Use Only, Export Control,
-    and AR 380-19 requirements. ERDC-CHL retains all right, title and interest in
-    CHESS and any portion thereof and in all copies, modifications and derivative
-    works of CHESS and any portions thereof including, without limitation, all
-    rights to patent, copyright, trade secret, trademark and other proprietary or
-    intellectual property rights. Recipient has no rights, by license or otherwise, to
-    use, disclose or disseminate CHESS, in whole or in part.
+% chess_csr_dpa  Rubble mound armor damage progression over LCS life cycles.
+%   CSR_Timeseries_DPA = chess_csr_dpa(config, structure, emp_coeff,
+%       LC_SimOUT_hyd)
+%
+%   Damage progression analysis (DPA) of the seaside and leeside armor of
+%   a rubble mound, row by row over the Timeseries rows of every life
+%   cycle. Seaside damage: seaside_armor_stone_damage (Melby), with the
+%   first-damage coefficient k_si (dS = 0.5) until the end of the first
+%   damaging storm and k_sp afterwards. Leeside damage:
+%   leeside_armor_stone_damage, with the run-up z1p_calc and the crest
+%   velocity u1p_calc. Forcing per row: SWL, Hm0_toe, Tp (Tm = Tp/1.2,
+%   T_m-1,0 = Tp/1.1) and the number of waves Nz = dt/Tm (dt, the row time
+%   step). csr_apply_cutoff_correction / csr_cutoff_offset raise the
+%   crest used for the submergence check of the damage functions.
+%   Each side is tracked without and with repairs
+%   (csr_apply_structure_repair: 0 none; 1 above the service limit
+%   seaside_design_S / leeside_design_S; 2 above the ultimate limit
+%   seaside_S_uls / leeside_S_uls; 3 either; any other value is an error).
+%   When the damage of the previous row exceeds the limit, the rest of
+%   that storm is NaN and the damage restarts at 0 at the next storm.
+%   Without repairs (0) the with-repairs series equal the no-repairs
+%   series.
+%   Yearly curves: compute_lcs_yearly_curve on the no-repairs damage, with
+%   a year 0 row of zeros. Prints the progress.
+%
+%   References: Melby (1999, 2009); Melby and Hughes (2004); Melby and
+%   Kobayashi (2011); Van Gent and Pozueta (2005); Gonzalez et al. (2020),
+%   ERDC/CHL TR-20-5.
+%
+%   Inputs:
+%     config        - CHESS configuration, 1x1 struct; reads
+%                     gravity_constant [m/s^2], water_density [kg/m^3],
+%                     mcs_nYears, csr_apply_structure_repair (0-3),
+%                     csr_apply_cutoff_correction (0/1) and
+%                     csr_cutoff_offset [m]
+%     structure     - structure geometry, 1x1 struct; reads
+%                     crest_elevation, toe_elevation [m, study datum,
+%                     positive up], crest_width [m], seaside_slope,
+%                     leeside_slope (cot) [-], armor_delta [-],
+%                     seaside_mass, leeside_mass [kg], cem_P [-],
+%                     seaside_design_S, leeside_design_S (service limits)
+%                     and seaside_S_uls, leeside_S_uls (ultimate limits)
+%                     [-]
+%     emp_coeff     - armor damage coefficients
+%                     (load_empirical_coefficients), struct; reads km1,
+%                     km2, k_si, k_sp, k_ls1, k_ls2
+%     LC_SimOUT_hyd - life cycles of one storm type, nLC x 1 cell of
+%                     Timeseries matrices (nRows x 12, lcs_columns; reads
+%                     year, SWL, Hm0_toe, Tp, dt [days] and step)
+%   Outputs:
+%     CSR_Timeseries_DPA - damage progression results, struct with fields
+%                          (in this order):
+%       S_seaside_no_repairs, S_leeside_no_repairs - accumulated damage per
+%           row [-], nLC x 1 cell of nRows x 1
+%       S_seaside_with_repairs, S_leeside_with_repairs - same with repairs
+%           (NaN over the rest of a storm that triggered a repair)
+%       Seaside_Repair_Indexes, Leeside_Repair_Indexes - one row per life
+%           cycle with repairs: {rows where the limit was exceeded, life
+%           cycle index}, cell ({} without repairs)
+%       stats - final damage (last row of each life cycle, no repairs):
+%           mean and 10/16/84/90th percentiles, table (p, Smean, Sp,
+%           LSmean, LSp)
+%       Repairs_Stats - repairs on only: total, mean and 10/16/84/90th
+%           percentiles of the repair counts, seaside and leeside, table
+%       seaside_repair_count, leeside_repair_count - repairs off only:
+%           life cycles whose no-repairs damage reaches the ultimate limit
+%       Reliability_Seaside, Reliability_Leeside - 1 - (life cycles with a
+%           repair, or reaching the ultimate limit without repairs)/nLC
+%       Smax, LSmax - seaside and leeside yearly mean of the storm-maximum
+%           damage (no repairs), (mcs_nYears + 1) x 1, row 1 = year 0
+%       LSPcurves, SPcurves - leeside and seaside 10/16/84/90th
+%           percentiles, (mcs_nYears + 1) x 4
+%       diagnostics - per-row forcing and damage, 1 x nLC cell of tables
+%           (WL, Hm0_toe, Tp, h, Nz, Rc, z1p, u1p, Szero_no_repairs,
+%           Ssea_no_repairs, Szero_with_repairs, Ssea_with_repairs,
+%           SLee_no_repairs, SLee_with_repairs)
+%
+%   Tier: internal
+%
+%   See also chess_csr, seaside_armor_stone_damage,
+%   leeside_armor_stone_damage, z1p_calc, u1p_calc,
+%   compute_lcs_yearly_curve, load_empirical_coefficients, lcs_columns.
+%
+%   Developed by: Jeffrey A. Melby, PhD; Norberto Nadal-Caraballo, PhD;
+%   Victor M. Gonzalez, PE
 
-DISCLAIMER:
-    CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT HOLDERS.
-    ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS OR IMPLIED WITH RESPECT
-    TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL, AND EXPRESSLY DISCLAIMS ALL WARRANTIES
-    OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF
-    MERCHANTABILITY, NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
-    CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE AND RESULTS OF THE
-    USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL
-    WARRANTIES AND LIABILITIES REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND
-    DISTRIBUTES IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST ERDC-CHL, THE
-    UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD
-    HARMLESS ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
-    LIABILITIES, DEMANDS, DAMAGES.
+% LICENSING:
+%     This code is part of CHESS software suite developed by the U.S. Army
+%     Engineer Research and Development Center Coastal and Hydraulics Laboratory
+%     (hereinafter “ERDC-CHL”). This material is distributed in accordance with DoD
+%     Instruction 5230.24. Recipient agrees to abide by all notices, and distribution
+%     and license markings. The controlling DOD office is the U.S. Army Engineer
+%     Research and Development Center (hereinafter, "ERDC"). This material shall be
+%     handled and maintained in accordance with For Official Use Only, Export Control,
+%     and AR 380-19 requirements. ERDC-CHL retains all right, title and interest in
+%     CHESS and any portion thereof and in all copies, modifications and derivative
+%     works of CHESS and any portions thereof including, without limitation, all
+%     rights to patent, copyright, trade secret, trademark and other proprietary or
+%     intellectual property rights. Recipient has no rights, by license or otherwise, to
+%     use, disclose or disseminate CHESS, in whole or in part.
+%
+% DISCLAIMER:
+%     CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT HOLDERS.
+%     ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS OR IMPLIED WITH RESPECT
+%     TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL, AND EXPRESSLY DISCLAIMS ALL WARRANTIES
+%     OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF
+%     MERCHANTABILITY, NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
+%     CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE AND RESULTS OF THE
+%     USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL
+%     WARRANTIES AND LIABILITIES REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND
+%     DISTRIBUTES IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST ERDC-CHL, THE
+%     UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD
+%     HARMLESS ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
+%     LIABILITIES, DEMANDS, DAMAGES.
+%
+% SCRIPT NAME:
+%     CSR_timeseries_DLL3.m.
+%
+% MODIFICATIONS:
+%     |   DATE (mm/dd/yyyy)   |      EDITOR      |         SUMMARY               |
+%     |-----------------------|------------------|-------------------------------|
+%     |      06/05/2020       |   Fabian Garcia  |  Code optimization,clean-up,  |
+%     |                       |                  |  and incorporation onto       |
+%     |                       |                  |  streamlined workflow.        |
+%     |-----------------------|------------------|-------------------------------|
+%
+% RELEVANT PUBLICATIONS:
+%     Source Material:
+%         (01) Melby, J. A. 1999. Damage Progression on Breakwaters. Dissertation in partial fulfillment of PhD.
+%                 Newark, Delaware: University of Delaware.
+%         (02) Melby, J. A. 2009. “Time-Dependent Life-Cycle Analysis of Coastal Structures.
+%                 ”Proceedings of Coastal Structures 2007, 1842–1853. Singapore: World Scientific.
+%         (03) Melby, J. A., and S. A. Hughes. 2004. “Armor Stability Based on Wave Momentum Flux.
+%                 ”Proceedings of Coastal Structures 2003, 53–65. Reston, VA: ASCE.
+%         (04) Melby, J. A., and N. K. Kobayashi. 2011. “Stone Armor Damage Initiation and Progression.
+%                 Journal of Coastal Research 27(1): 110–119.
+%         (05) Van Gent, M. R. A., and B. Pozueta. 2005. “Rear-Side Stability of Rubble Mound Structures.
+%                 ”Coastal Engineering 2004, 3481–93. World Scientific Publishing Company.
+%     Application Of Methodology:
+%         (01) Gonzalez, Victor M. et. al. 2020. "Alabama Barrier Island Restauration Assesment life-cycle
+%                 structure response modeling." ERDC/CHL TR-20-5. Vicksburg, MS: US Army Engineer Research
+%                 and Development Center.
 
-SCRIPT NAME:
-    CSR_timeseries_DLL3.m.
-
-CALLED BY:
-    MCS_CSR_Main_Script.m
-
-PURPOSE:
-    This script is used to compute incremental damage for historical
-    conditions using the life cylce structure built by the function
-    LC_Structure_Builder.m. This version of the damage progression script
-    has the capability of accounting for structure repairs throughout the
-    whole analysis by setting limit states for seaide and leeside damage
-    in the input CSV file. Repairs are applied per storm in the current
-    life cycle if accumulated damage surpases the limit state. Also,
-    it computes yearly averages and percentiles by taking the maximum average
-    of the accumulated damage per year. Yearly values do not take repairs into
-    account. This means that damage is allowed to accumulate until the end
-    of the life cycle being evaluated.
-
-INPUTS:
-    |   Vars Name   |  Vars Type  |               Description                |
-    |---------------|-------------|------------------------------------------|
-    |  input_param  |    String   |  File name of input CSV file             |
-    |---------------|-------------|------------------------------------------|
-    | LC_SimOUT_hyd |  Structure  |  Time series data of sampled storms      |
-    |---------------|-------------|------------------------------------------|
-
-OUTPUTS:
-    |   Vars Name   |  Vars Type  |               Description                |
-    |---------------|-------------|------------------------------------------|
-    |    outputs    |  Structure  |  Contains damage progression analysis    |
-    |               |             |  outputs.                                |
-    |---------------|-------------|------------------------------------------|
-
-INPUTS HEADERS:
-    LC_SimOUT_hyd:
-        First Level:
-            Size (# of LC's, 1) -> (Rows,Col)
-            Each row contains a matrix which size depends on the ammount of
-            storms sampled for that specific life cyccle.
-        Second Level:
-            (01) Storm ID                       [-]
-            (02) Storm type                     [0 = extratropical]
-            (03) Storm Year                     [-]
-            (04) Number of storm in storm year  [-]
-            (05) Water Level                    [meters, MSL]
-            (06) Wave Height                    [meters]
-            (07) Peak Wave Period               [seconds]
-            (08) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
-            (09) Storm Duration           [days]
-            (10) Timestep Counter         [0:storm_tstp-1]
-
-EXTERNAL FUNCTIONS:
-    Wave Transformation:
-        wavnum1_VG(Tp,h,grav)
-    Seaside Damage:
-        ZeroSeaDamFunc(Hm0,h,Tm,SseaLast_full,Sslp,SDn,SG,grav,P,Nz,Km1)
-        SeaDamFunc(Szero,h,SseaLast,...
-                    SseaSDLast,SseaMaxLast,Hm0,Tm,Sslp,SDn,SG,grav,P,Nz,...
-                        Szerolim,Cheight+cutoff_delta_new,WL,Cheight,Km1)
-    Leeside Damage:
-        LeeDamFunc(z1p,SLeeLast_full,SLeeSDLast_full,...
-                    SLeeMaxLast_full,Hm0,Tp,u1p,LDn,SG,grav,Sslp,Lslp,Rc,wdth,Nz,INPUT);
-        RunupFunc(Hm0,Tp,Rc,Sslp,grav)
-    Yearly Maximum Averaging:
-        S_yearly_v2(LC_SimOUT_hyd,Ssave_full,Leesave_full,INPUT{2,1))
-
-AUTHORS:
-    By:  Jeffrey A. Melby, PhD,
-    Norberto Nadal-Caraballo, PhD,
-    and Victor M. Gonzalez,PE
-
-MODIFICATIONS:
-    |   DATE (mm/dd/yyyy)   |      EDITOR      |         SUMMARY               |
-    |-----------------------|------------------|-------------------------------|
-    |      06/05/2020       |   Fabian Garcia  |  Code optimization,clean-up,  |
-    |                       |                  |  and incorporation onto       |
-    |                       |                  |  streamlined workflow.        |
-    |-----------------------|------------------|-------------------------------|
-    
-RELEVANT PUBLICATIONS:
-    Source Material:
-        (01) Melby, J. A. 1999. Damage Progression on Breakwaters. Dissertation in partial fulfillment of PhD.
-                Newark, Delaware: University of Delaware.
-        (02) Melby, J. A. 2009. “Time-Dependent Life-Cycle Analysis of Coastal Structures.
-                ”Proceedings of Coastal Structures 2007, 1842–1853. Singapore: World Scientific.
-        (03) Melby, J. A., and S. A. Hughes. 2004. “Armor Stability Based on Wave Momentum Flux.
-                ”Proceedings of Coastal Structures 2003, 53–65. Reston, VA: ASCE.
-        (04) Melby, J. A., and N. K. Kobayashi. 2011. “Stone Armor Damage Initiation and Progression.
-                Journal of Coastal Research 27(1): 110–119.
-        (05) Van Gent, M. R. A., and B. Pozueta. 2005. “Rear-Side Stability of Rubble Mound Structures.
-                ”Coastal Engineering 2004, 3481–93. World Scientific Publishing Company.
-    Application Of Methodology:
-        (01) Gonzalez, Victor M. et. al. 2020. "Alabama Barrier Island Restauration Assesment life-cycle
-                structure response modeling." ERDC/CHL TR-20-5. Vicksburg, MS: US Army Engineer Research
-                and Development Center.
-%}
 %% PRINT PROGRESS HEADER
 disp(['   Running CHESS: Coastal Structure Reliability - Damage Progression Analysis....']);
 fprintf(1,'      Completion Progress: %3d%%\n',0);

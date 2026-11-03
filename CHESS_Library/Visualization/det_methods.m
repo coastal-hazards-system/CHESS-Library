@@ -1,11 +1,36 @@
 classdef det_methods < CHESSPlotsBase
-    % DET_METHODS CHESS: Deterministic workflow plots (workflow = 2).
-    % Instantiated via CHESSPlots(...). Resp layout (chess_det.m):
-    %   Resp.(Peaks|Timeseries).(Default|WLP|WHP).(XC|TC) -> storm_id, h, Rc, response histories + .Max (one value per storm,
-    %   forcing maxima included). Forcing histories (time, SWL, Hm0_offshore, Hm0_toe, Tp) come from project_forcing (same
-    %   dataset, same row order), needed by the Timeseries response table only.
-    % Every field (forcing: SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc; and responses) can be used on any axis.
-    % Labels, units and log scaling come from response_library_headers.m.
+    % det_methods  Plots of the deterministic (DET) workflow results (workflow 2).
+    %   sp = CHESSPlots(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+    %       with config.workflow = 2 returns a det_methods object; the
+    %       constructor det_methods(...) takes the same inputs (documented
+    %       in CHESSPlots).
+    %
+    %   Resp layout (chess_det):
+    %     Resp.(Peaks|Timeseries).(Default|WLP|WHP).(XC|TC) -> storm_id, h,
+    %     Rc, response histories + .Max (one value per storm, forcing
+    %     maxima included). Forcing histories (time, SWL, Hm0_offshore,
+    %     Hm0_toe, Tp) come from project_forcing (same dataset, same row
+    %     order), needed by the Timeseries response table and viewer only.
+    %   Every field (forcing: SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc; and
+    %   responses) can be used on any axis. Labels, units and log scaling
+    %   come from response_library_headers.
+    %   ds_query (every method): struct with storm_type ('XC' or 'TC'),
+    %   data_type ('Peaks' or 'Timeseries') and match_type ('Default',
+    %   'WLP' or 'WHP'), see aux_methods.pull_data.
+    %
+    %   Methods (in addition to the CHESSPlotsBase methods):
+    %     det_methods              - constructor (create through CHESSPlots)
+    %     available_fields         - fields that can be plotted for a dataset
+    %     response_vs_forcing_plot - scatter of storm values, X, Y and color fields
+    %     peaks_vs_timeseries_plot - Peaks value vs Timeseries storm peak, 1:1 line
+    %     event_choices            - storm event viewer / response table choices
+    %     event_table              - response table rows
+    %     event_series             - storm event viewer series
+    %
+    %   Tier: public
+    %
+    %   See also CHESSPlots, CHESSPlotsBase, pros_methods, lcs_methods,
+    %   chess_det.
 
     properties (Constant, Access=private)
         % Plotted Before The Responses, In This Order
@@ -14,11 +39,25 @@ classdef det_methods < CHESSPlotsBase
 
     methods (Access=public)
         function self = det_methods(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+            % det_methods  Create the DET plotting object (use CHESSPlots).
+            %   self = det_methods(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+            %       passes every input to the CHESSPlotsBase constructor;
+            %       the inputs are documented in CHESSPlots.
+
             self = self@CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system);
         end
 
         function fields = available_fields(self, ds_query)
-            % Fields That Can Be Plotted For The Queried Dataset (Forcing First, Then Responses)
+            % available_fields  Fields that can be plotted for the queried dataset.
+            %   fields = available_fields(self, ds_query)
+            %
+            %   Inputs:
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %   Outputs:
+            %     fields - 1 x N cell of field names of Resp...Max without
+            %              storm_id and time: forcing fields first (registry
+            %              order), then the responses
+
             mx = self.det_data(ds_query).Max;
             names = setdiff(fieldnames(mx), {'storm_id', 'time'}, 'stable');
             fields = [self.forcing_fields(ismember(self.forcing_fields, names)), ...
@@ -26,9 +65,23 @@ classdef det_methods < CHESSPlotsBase
             fields = fields(:)';
         end
 
-        % Method: Response vs Forcing (X, Y, Color)
         function ax = response_vs_forcing_plot(self, ax, ds_query, x_field, y_field, c_field)
-            % Peaks: One Point Per Storm. Timeseries: Storm Maxima (Non-Concurrent; Rc Uses The Minimum).
+            % response_vs_forcing_plot  Scatter of storm values with X, Y and color fields.
+            %   ax = response_vs_forcing_plot(self, ax, ds_query, x_field, y_field, c_field)
+            %       Peaks: one point per storm. Timeseries: storm maxima
+            %       (non-concurrent; Rc uses the minimum). Log-scaled fields
+            %       (e.g. q) hide non-positive values; the count note
+            %       reports them.
+            %
+            %   Inputs:
+            %     ax       - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %     x_field, y_field, c_field - field names from available_fields
+            %                for the X axis, Y axis and marker color; an
+            %                unknown field errors (det_methods:unknownField)
+            %   Outputs:
+            %     ax - the plot axes
+
             T = self.max_table(ds_query);
             self.check_fields(T, {x_field, y_field, c_field});
             [x_lbl, ~, x_log] = self.field_info(x_field);
@@ -64,9 +117,21 @@ classdef det_methods < CHESSPlotsBase
                 'VerticalAlignment', 'top', 'FontSize', self.base_fnt - 2);
         end
 
-        % Method: Peaks Value vs Timeseries Computed Peak
         function ax = peaks_vs_timeseries_plot(self, ax, ds_query, field)
-            % Needs Both Datasets. Peaks Uses ds_query.match_type; Storms Matched By ID; Dashed 1:1 Line.
+            % peaks_vs_timeseries_plot  Peaks value vs Timeseries storm peak of one field.
+            %   ax = peaks_vs_timeseries_plot(self, ax, ds_query, field)
+            %       needs both datasets (else det_methods:missingDataset).
+            %       Peaks uses ds_query.match_type; storms are matched by
+            %       ID; a dashed 1:1 line is drawn.
+            %
+            %   Inputs:
+            %     ax       - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query - dataset query (storm_type, match_type; data_type
+            %                is set to Peaks and Timeseries here)
+            %     field    - field name from available_fields
+            %   Outputs:
+            %     ax - the plot axes
+
             q_pk = ds_query; q_pk.data_type = 'Peaks';
             q_ts = ds_query; q_ts.data_type = 'Timeseries';
             if ~self.has_data(q_pk) || ~self.has_data(q_ts)
@@ -96,15 +161,35 @@ classdef det_methods < CHESSPlotsBase
         end
 
         function ch = event_choices(self, ds_query)
-            % Storm Event Viewer / Response Table Choices: Storm IDs Of The Saved Results, Timeseries Flag
+            % event_choices  Storm event viewer / response table choices of a dataset.
+            %   ch = event_choices(self, ds_query)
+            %
+            %   Inputs:
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %   Outputs:
+            %     ch - struct: storm_ids (storm IDs of the saved results),
+            %          is_ts (Timeseries data), peaks_toggle (= is_ts)
+
             ch.storm_ids = self.det_data(ds_query).storm_id(:);
             ch.is_ts = strcmp(ds_query.data_type, 'Timeseries');
             ch.peaks_toggle = ch.is_ts;
         end
 
         function [T, info] = event_table(self, ds_query, sel)
-            % Response Table Rows (DET): The Selected Storm's Hourly Rows (Timeseries View), Else One Row Per Storm (Max).
-            % info: mode ('ts'|'peaks'), view_label, plot_title, x_label
+            % event_table  Response table rows of the DET results.
+            %   [T, info] = event_table(self, ds_query, sel)
+            %
+            %   Inputs:
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %     sel      - selection struct (CHESSPlotsBase.event_selection):
+            %                storm_id, peaks_view
+            %   Outputs:
+            %     T    - table: Timeseries view: the hourly rows of the
+            %            selected storm (Time = elapsed hours); else one row
+            %            per storm (StormID, Time, storm maxima)
+            %     info - struct: mode ('ts' or 'peaks'), view_label,
+            %            plot_title, x_label
+
             if strcmp(ds_query.data_type, 'Timeseries') && ~sel.peaks_view
                 T = self.storm_table(ds_query, sel.storm_id);
                 info.mode = 'ts';
@@ -119,10 +204,23 @@ classdef det_methods < CHESSPlotsBase
         end
 
         function ser = event_series(self, ds_query, response_to_view, sel)
-            % Storm Event Viewer Data (DET): Straight From The Saved Results, Nothing Recomputed.
-            %   Timeseries View: One Storm's Histories (project_forcing + Resp, Matched By Storm ID).
-            %   Peaks View / Peaks Data: The Saved Max Struct, One Value Per Storm (Rc Is The Minimum).
-            % ser: x, x_kind ('datetime'|'event'), storm_ids, swl, hm0_off, hm0_toe, h, hb ([] w/o berm), rc, resp, event_str
+            % event_series  Storm event viewer series of the DET results.
+            %   ser = event_series(self, ds_query, response_to_view, sel)
+            %       reads the saved results, nothing is recomputed.
+            %       Timeseries view: one storm's histories (project_forcing
+            %       + Resp, matched by storm ID). Peaks view / Peaks data:
+            %       the saved Max struct, one value per storm (Rc is the
+            %       minimum).
+            %
+            %   Inputs:
+            %     ds_query         - dataset query (storm_type, data_type, match_type)
+            %     response_to_view - response name (char or string)
+            %     sel              - selection struct: storm_id, peaks_view
+            %   Outputs:
+            %     ser - struct: x, x_kind ('datetime' or 'event'), storm_ids,
+            %           swl, hm0_off, hm0_toe, h, hb ([] without a berm), rc,
+            %           resp ([] when the response is not saved), event_str
+
             d = self.det_data(ds_query);
             resp_name = char(response_to_view);
             if strcmp(ds_query.data_type, 'Timeseries') && ~sel.peaks_view

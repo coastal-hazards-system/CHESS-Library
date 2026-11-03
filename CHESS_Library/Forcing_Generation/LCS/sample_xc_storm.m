@@ -1,4 +1,61 @@
 function [sampled_storms, lcs_data] = sample_xc_storm(storm_peaks, simulation_years, yearly_rate, restrict_rate, storm_duration_days)
+% sample_xc_storm  Sample one LCS life cycle of extratropical (XC) storms.
+%   sampled_storms = sample_xc_storm(storm_peaks, simulation_years,
+%       yearly_rate, restrict_rate, storm_duration_days)
+%   [sampled_storms, lcs_data] = sample_xc_storm(storm_peaks,
+%       simulation_years, yearly_rate, restrict_rate, storm_duration_days)
+%
+%   Draws the number of XC storms of each simulation year from a Poisson
+%   distribution with rate yearly_rate. restrict_rate = 1 redraws the
+%   yearly counts until the life-cycle storm rate is within
+%   1/simulation_years of yearly_rate (1e-4 for 1e5 years), i.e. +/- 1
+%   storm per life cycle, up to 1e6 draws (then a warning, the last draw
+%   is kept); restrict_rate = 0 keeps the first draw (a life cycle can
+%   hold no storms). Each storm is drawn uniformly, with replacement, from
+%   the storm IDs in storm_peaks(:, 1).
+%   With two outputs the peak values are drawn from a Gaussian copula
+%   fitted to the SWL, Hm0, Tp and wDir columns of storm_peaks
+%   (copula_sampler), not taken from the database values of the sampled
+%   storms. With one output only the storm IDs are drawn and the copula is
+%   not run (chess_lcs with use_peaks = 0 passes the Timeseries storm IDs
+%   as storm_peaks). Errors when yearly_rate is not a finite, non-negative
+%   scalar.
+%
+%   Inputs:
+%     storm_peaks         - XC Peaks storm database rows [ID, SWL, Hm0, Tp,
+%                           wDir, datenum] (cell2mat of
+%                           storm.XC.Peaks.Default): SWL [m, study datum],
+%                           Hm0 [m], Tp [s], wDir [deg], datenum [days],
+%                           nStorms x 6 double; with one output only
+%                           column 1 (storm ID) is read
+%     simulation_years    - life-cycle length, mcs_nYears [years], positive
+%                           integer scalar
+%     yearly_rate         - XC storm rate, Nstm_XC/Nyrs_XC [storms/yr],
+%                           finite non-negative scalar double
+%     restrict_rate       - sampling mode (effective
+%                           lcs_restrict_sampling_rate): 0 full Poisson, 1
+%                           rate matched, scalar double
+%     storm_duration_days - storm duration written to every row of lcs_data
+%                           [days] (storm_duration/24; storm_duration is in
+%                           hours), scalar double
+%   Outputs:
+%     sampled_storms - sampled storm identity [storm ID, bin (0 = XC), year
+%                      (1 to simulation_years), order (storm number within
+%                      the year)], one row per storm in year order,
+%                      nEvents x 4 double (0 x 4 when no storm is drawn)
+%     lcs_data       - life-cycle Peaks matrix (lcs_columns Peaks map): id,
+%                      bin, year, order, SWL [m, study datum], Hm0_toe [m]
+%                      (= Hm0_offshore; depth limited later by
+%                      adjust_project_forcing), Hm0_offshore [m], Tp [s],
+%                      wDir [deg], storm_duration [days]; nEvents x 10
+%                      double (0 x 10 when no storm is drawn)
+%
+%   Tier: internal
+%
+%   See also sample_tc_storm, chess_lcs, lcs_columns, copula_sampler.
+%
+%   Developed by: Norberto C. Nadal-Caraballo, PhD; Victor M. Gonzalez, PE;
+%   Fabian A. Garcia-Moreno
 
 %{
 LICENSING:
@@ -29,86 +86,6 @@ DISCLAIMER:
     UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD
     HARMLESS ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
     LIABILITIES, DEMANDS, DAMAGES.
-
-SCRIPT NAME:
-    Sample_XC.m.
-
-CALLED BY:
-    MCS_DLL1.m
-
-PURPOSE:
-    This script reads and pre-processes CHS tropical storm data.
-
-INPUTS:
-    |   Vars Name   |  Vars Type  |               Description                |
-    |---------------|-------------|------------------------------------------|
-    |       lc      |   double    |  Number of life cycles                   |
-    |---------------|-------------|------------------------------------------|
-    |    storm_peaks    |   Double    |  Extra tropical storm response variable  |
-    |               |             |  [ID SWL Hm0 Tp wDir ...]; the storm ID  |
-    |               |             |  column alone when only sampled_storms   |
-    |               |             |  is requested (use_peaks = 0)            |
-    |---------------|-------------|------------------------------------------|
-    |  storm_wlp_peaks  |   Double    |  Extra tropical storm response variable  |
-    |               |             |  - water level priority                  |
-    |---------------|-------------|------------------------------------------|
-    |  storm_whp_peaks  |   Double    |  Extra tropical storm response variable  |
-    |               |             |  - wave height priority                  |
-    |---------------|-------------|------------------------------------------|
-    |    simulation_years     |   Double    |  Extra tropical storm response variable  |
-    |---------------|-------------|------------------------------------------|
-    |    XC_Nstm    |   Double    |  Number of storms in storm data          |
-    |---------------|-------------|------------------------------------------|
-    |    XC_Nyrs    |   Double    |  Number of years of storm data           |
-    |---------------|-------------|------------------------------------------|
-    |    SIM_Flag   |   Double    |  Simulation flag to ensure sampled storms|
-    |               |             |  match sampling rate                     |
-    |---------------|-------------|------------------------------------------|
-    |storm_duration_days| Double  |  Storm duration [days]                   |
-    |               |             |  (config.storm_duration/24; the storm DB |
-    |               |             |  Peaks rows have none)                   |
-    |---------------|-------------|------------------------------------------|    
-       
-OUTPUTS:
-    |   Vars Name      |  Vars Type  |               Description                |
-    |------------------|-------------|------------------------------------------|
-    |    INDEX_XC_TS   |   Double    |  Sampled Storm Indexes                   |
-    |------------------|-------------|------------------------------------------|
-    | LC_MCSimOUT_XC   |   Double    |  Life Cycle Data Structure - Maximums    |
-    |                  |             |  (copula draw; only when requested)      |
-    |------------------|-------------|------------------------------------------|
-    |LC_MCSimOUT_XC_WHP|   Double    |  Life Cycle Data Structure               |
-    |                  |             |  - wave height priority                  |
-    |------------------|-------------|------------------------------------------|
-    |LC_MCSimOUT_XC_WLP|   Double    |  Life Cycle Data Structure               |
-    |                  |             |  - water level priority                  |
-    |------------------|-------------|------------------------------------------|
-
-
-OUTPUTS HEADERS:
-    LC_MCSimOUT_XC, LC_MCSimOUT_XC_WHP, LC_MCSimOUT_XC_WLP :
-        Size (# of events, 10) -> Column map: lcs_columns.m
-            (01) Storm ID                       [-]
-            (02) Storm type                     [0 = extratropical]
-            (03) Storm Year                     [-]
-            (04) Number of storm in storm year  [-]
-            (05) Water Level                    [meters, MSL]
-            (06) Wave Height At Toe             [meters] (= Offshore Here; Depth Limited By adjust_project_forcing)
-            (07) Wave Height Offshore           [meters]
-            (08) Peak Wave Period               [seconds]
-            (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
-            (10) Storm Duration                 [days] (storm_duration_days)
-            
-
-
-EXTERNAL FUNCTIONS:
-    import_options_ADCIRC_peaks(Peaks_CHS_CSV_filename)
-    storm type flag => (0 - tropicals, 1 - extratropicals)
-    import_options_waves_peaks(Peaks_CHS_CSV_filename)
-
-AUTHORS:
-    By: Norberto C. Nadal-Caraballo, PhD,
-    Victor M. Gonzalez,PE, Fabian A. Garcia-Moreno
 
 MODIFICATIONS:
     |   DATE (yyyy-mm-dd)   |      EDITOR      |         SUMMARY               |

@@ -1,133 +1,150 @@
 function [R2p, R2p_SWL, q, q_overflow, q_wave_ot]=Eurotop_r2p_q_Final(Hm0, T_m10, SWL,...
     Rc, slope, gamma_f, gamma_beta_r2p, gamma_beta_OT, ...
     gamma_star, gamma_v, gamma_b, wall_toe, P, g, structure_type)
+% Eurotop_r2p_q_Final  EurOtop wave run-up and overtopping discharge.
+%   [R2p, R2p_SWL, q, q_overflow, q_wave_ot] = Eurotop_r2p_q_Final(Hm0,
+%       T_m10, SWL, Rc, slope, gamma_f, gamma_beta_r2p, gamma_beta_OT,
+%       gamma_star, gamma_v, gamma_b, wall_toe, P, g, structure_type)
+%       returns the 2 percent run-up and the mean overtopping discharge of
+%       a levee, floodwall or rubble mound for every forcing row.
+%
+%   Equations (EurOtop 2018; xi = tan(alpha)/sqrt(s_m10) with
+%   tan(alpha) = 1/slope, s_m10 = Hm0/L_m10 and L_m10 = g*T_m10^2/(2*pi)):
+%   structure_type 1, levee:
+%     2 <= slope <= 9.99: R2p = Hm0*min(1.65*gamma_b*gamma_f*gamma_beta_r2p*xi,
+%       1.0*gamma_f*gamma_beta_r2p*(4 - 1.5/sqrt(gamma_b*xi))) (Eqs. 5.1,
+%       5.2; the first term alone when the second is <= 0); q_wave_ot =
+%       min of Eq. 5.10, sqrt(g*Hm0^3)*0.023/sqrt(tan(alpha))*gamma_b*xi*
+%       exp(-(2.7*Rc/(xi*Hm0*gamma_b*gamma_f*gamma_beta_OT*gamma_v))^1.3),
+%       and Eq. 5.11, sqrt(g*Hm0^3)*0.09*exp(-(1.5*Rc/(Hm0*gamma_f*
+%       gamma_beta_OT*gamma_star))^1.3).
+%     0.1 < slope < 2: R2p = max(1.8*Hm0, min(0.8*Hm0/slope + 1.6, 3*Hm0))
+%       (Eq. 5.6, as coded); q_wave_ot from Eq. 5.18 (smooth slopes),
+%       sqrt(g*Hm0^3)*a*exp(-(b*Rc/(Hm0*gamma_beta_OT))^1.3), with
+%       a = 0.09 - 0.01*(2 - slope)^2.1 and b = min(1.5 + 0.42*(2 -
+%       slope)^1.5, 2.35), each scaled by one randn draw per call (standard
+%       deviation 15 and 10 percent): seed rng for repeatable results.
+%     Other slopes: R2p = 0 and q_wave_ot = 0.
+%   structure_type 2, floodwall (vertical wall; R2p = NaN; the gamma
+%   factors are not used): q_wave_ot = sqrt(g*Hm0^3)*0.047*
+%     exp(-(2.35*Rc/Hm0)^1.3) when (SWL - wall_toe)/Hm0 > 4 (no foreshore
+%     influence, Eq. 7.1), else sqrt(g*Hm0^3)*0.05*exp(-2.78*Rc/Hm0)
+%     (non-impulsive, Eq. 7.5).
+%   structure_type 3, rubble mound: run-up as for levees (Eq. 6.1, same
+%     coefficients 1.65 and 1.0) with gamma_f replaced by gamma_f_surge =
+%     gamma_f + (xi - 1.8)*(1 - gamma_f)/8.2 for 1.8 < xi < 10;
+%     q_wave_ot = sqrt(g*Hm0^3)*0.09*exp(-(1.5*Rc/(Hm0*gamma_f_OT*
+%     gamma_beta_OT))^1.3) (Eq. 6.5), where gamma_f_OT = gamma_f +
+%     (xi - 5)*(1 - gamma_f)/5 for 5 < xi < 10 (Eq. 6.7), else 1, capped
+%     at 0.6 when P > 0.1.
+%   Rc < 0 (crest below SWL): the wave terms use Rc = 0 and the weir
+%   overflow q_overflow = 0.54*sqrt(g*|Rc|^3) (Eq. 5.20) is added,
+%   q = q_wave_ot + q_overflow. q_wave_ot below 1e-6 or NaN is set to 0.
+%   Rows without forcing (Hm0 <= 0, T_m10 <= 0, SWL <= -100 or any of them
+%   NaN) return NaN unless they overflow.
+%   Berms: the berm influence enters only through gamma_b (levee and
+%   rubble mound run-up, levee overtopping); the berm breakwater factor of
+%   Eq. 6.11 is not used (internal berm width fixed at 0).
+%   Not covered: impulsive or composite walls, battered walls, the crest
+%   reduction Cr of Eq. 6.8 for armored crests; an emergent wall toe is
+%   treated as a wall on an embankment.
+%
+%   Inputs (arrays with as many elements as SWL; outputs take the shape of
+%   SWL):
+%     Hm0            - spectral significant wave height at the toe [m]
+%     T_m10          - spectral wave period T_m-1,0 [s] (CHESS: Tp/1.1)
+%     SWL            - still water level [m, study datum, positive up]
+%     Rc             - freeboard, crest elevation - SWL [m] (negative when
+%                      the crest is submerged)
+%     slope          - seaward slope cot(alpha) [-] (not used for
+%                      structure_type 2; CHESS passes zeros)
+%     gamma_f        - roughness influence factor [-]
+%                      (surface_roughness_influence_factor)
+%     gamma_beta_r2p - oblique wave factor for run-up [-]
+%     gamma_beta_OT  - oblique wave factor for overtopping [-]
+%                      (oblique_waves_influence_factor; 1 in CHESS)
+%     gamma_star     - wall factor in Eq. 5.11 [-]
+%     gamma_v        - wall factor in Eq. 5.10 [-] (wall_influence_factor)
+%     gamma_b        - berm influence factor [-] (berm_influence_factor;
+%                      1 without a toe berm)
+%     wall_toe       - wall toe elevation [m, study datum, positive up],
+%                      scalar; used only by structure_type 2 (CHESS passes
+%                      the wall bottom elevation for floodwalls, the toe
+%                      elevation otherwise)
+%     P              - notional permeability [-], scalar; used only by
+%                      structure_type 3
+%     g              - gravitational acceleration [m/s^2], scalar
+%     structure_type - 1 levee, 2 floodwall, 3 rubble mound; any other
+%                      value is an error
+%   Outputs (size of SWL):
+%     R2p        - run-up height exceeded by 2 percent of the incident
+%                  waves, above SWL [m] (NaN for floodwalls)
+%     R2p_SWL    - run-up elevation, R2p + SWL [m, study datum, positive up]
+%     q          - mean overtopping discharge, q_wave_ot + q_overflow
+%                  [m^3/s per m of crest]
+%     q_overflow - weir overflow when Rc < 0, else 0 [m^3/s per m]
+%     q_wave_ot  - wave overtopping discharge [m^3/s per m]
+%
+%   References: EurOtop (2018), Wave Overtopping of Sea Defences and
+%   Related Structures: Assessment Manual, www.overtopping-manual.com.
+%
+%   Tier: public
+%
+%   See also surface_roughness_influence_factor,
+%   oblique_waves_influence_factor, wall_influence_factor,
+%   berm_influence_factor, floodwall_nappe_response,
+%   compute_structure_response.
+%
+%   Developed by: Abigail L. Stehno; Jeffrey A. Melby
 
-
-%{
- LICENSING:
-    This code is part of CHESS software suite developed by the U.S. Army
-    Engineer Research and Development Center Coastal and Hydraulics Laboratory
-    (hereinafter “ERDC-CHL”). This material is distributed in accordance with DoD
-    Instruction 5230.24. Recipient agrees to abide by all notices, and distribution
-    and license markings. The controlling DOD office is the U.S. Army Engineer
-    Research and Development Center (hereinafter, "ERDC"). This material shall be
-    handled and maintained in accordance with For Official Use Only, Export Control,
-    and AR 380-19 requirements. ERDC-CHL retains all right, title and interest in
-    CHESS and any portion thereof and in all copies, modifications and derivative
-    works of CHESS and any portions thereof including, without limitation, all
-    rights to patent, copyright, trade secret, trademark and other proprietary or
-    intellectual property rights. Recipient has no rights, by license or otherwise, to
-    use, disclose or disseminate CHESS, in whole or in part.
-
-DISCLAIMER:
-    CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT HOLDERS.
-    ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS OR IMPLIED WITH RESPECT
-    TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL, AND EXPRESSLY DISCLAIMS ALL WARRANTIES
-    OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF
-    MERCHANTABILITY, NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
-    CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE AND RESULTS OF THE
-    USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL
-    WARRANTIES AND LIABILITIES REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND
-    DISTRIBUTES IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST ERDC-CHL, THE
-    UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD
-    HARMLESS ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
-    LIABILITIES, DEMANDS, DAMAGES.
-                
- SCRIPT NAME:
-    Eurotop_r2p_q_Final.m
-
-PURPOSE:        
-    Calculates overtopping and runup on levees, and 
-    overtopping on floodwalls   
-            
-INPUTS: 
-|   Vars Name   |  Vars Type  |               Description                |
-|---------------|-------------|------------------------------------------|
-|      Hm0      |    Double   |  Zero moment significant wave height [m] |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|
-|      Tp       |    Double   |  Peak wave period                    [s] |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|
-|      SWL      |    Double   |  Storm water level            [m, datum] |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|
-|       h       |    Double   |  Water depth                         [m] |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|
-|      Rc       |    Double   |  Freeboard                           [m] |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|                
-|    slope      |    Double   |  cot(alpha)                              |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|                
-|    gamma_f    |    Double   |  Influence of surface friction           |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|
-| gamma_beta_r2p|    Double   |  Influence of wave direction on runup    |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|                
-| gamma_beta_OT |    Double   |  Influence of wave direction on          |
-|               |             |  overtopping (Nstm.*Ndsrt x 1)            |
-|---------------|-------------|------------------------------------------|
-|  gamma_star   |    Double   |  Influence of wall on a levee            |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|                
-|   gamma_v     |    Double   |  Influence of wall on a slope            |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|
-|   wall_toe    |    Double   |  Elevation of wall toe        [m, datum] |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------| 
-|   BermWidth   |    Double   |  Structure berm width                [m] |
-|               |             |  (Nstm.*Ndsrt x 1)                        |
-|---------------|-------------|------------------------------------------|  
-|  strucType    |    Double   |  Switch (1 for levees, 2 for floodwalls, |
-|               |             |  3 for rubble mound) (Nstm.*Ndsrt x 1)    |
-|---------------|-------------|------------------------------------------|  
-
-OUTPUTS:
-|   Vars Name   |  Vars Type  |               Description                |
-|---------------|-------------|------------------------------------------|
-|   R2p_final   |    Double   |  Runup calculation for levees + Rubble   |
-|               |             |  Mound (Nstm.*Ndsrt x 1)              [m] |
-|---------------|-------------|------------------------------------------|
-|    q_final    |    Double   |  Overtopping calculation for levees +    |
-|               |             |  Rubble Mound (Nstm.*Ndsrt x 1)  [cm./s./m] |
-|---------------|-------------|------------------------------------------|
-
-AUTHORS: 
-    Abigail L. Stehno and Jeffrey A. Melby, PhD
-
-MODIFICATIONS: 
-|  DATE (mm./dd./yyy) |  EDITOR          |          Description             |
-|-------------------|------------------|----------------------------------|
-|    04./04./19       |  Abigail Stehno  |  Created code from               |
-|                   |                  |  Eurotop_r2p_q_v4.m              |  
-|-------------------|------------------|----------------------------------|
-|    04./08./19       |  Abigail Stehno  |  Updated capabilites, usability  |  
-|       to          |                  |  and added rubble mound calcs.   |
-|    09./03./20       |                  |  Updated comments                |
-|-------------------|------------------|----------------------------------|
-|    03./03./21       |  Abigail Stehno  |  Updated for distribution        |
-|-------------------|------------------|----------------------------------|
-|    05./28./21       |  Abigail Stehno  |  Updated for distribution more   |
-|-------------------|------------------|----------------------------------|  
-|    06./14./21       |  Abigail Stehno  |  Corrected rubble mound calc     |
-|-------------------|------------------|----------------------------------| 
-NOTES: 
-If there is a foreshore influence: no significant mound is considered,non-
-    impulsive is assumed, and no composite structures are considered.
-Does not include battered wall types
-Emergent toe of wall is considered a wall on embankment
-Cr value is not considered for armored crests. See EurOtop Eq 6.8 for info.
-Assume no berm influence 
-                
-REFERENCES:
-   EurOtop - Wave Overtopping of Sea Defences and Related Structures:  
-        Assessment Manual, August 2018.  
-        http:././www.overtopping-manual.com./eurotop.pdf
-%}
+%  LICENSING:
+%     This code is part of CHESS software suite developed by the U.S. Army
+%     Engineer Research and Development Center Coastal and Hydraulics Laboratory
+%     (hereinafter “ERDC-CHL”). This material is distributed in accordance with DoD
+%     Instruction 5230.24. Recipient agrees to abide by all notices, and distribution
+%     and license markings. The controlling DOD office is the U.S. Army Engineer
+%     Research and Development Center (hereinafter, "ERDC"). This material shall be
+%     handled and maintained in accordance with For Official Use Only, Export Control,
+%     and AR 380-19 requirements. ERDC-CHL retains all right, title and interest in
+%     CHESS and any portion thereof and in all copies, modifications and derivative
+%     works of CHESS and any portions thereof including, without limitation, all
+%     rights to patent, copyright, trade secret, trademark and other proprietary or
+%     intellectual property rights. Recipient has no rights, by license or otherwise, to
+%     use, disclose or disseminate CHESS, in whole or in part.
+%
+% DISCLAIMER:
+%     CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT HOLDERS.
+%     ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS OR IMPLIED WITH RESPECT
+%     TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL, AND EXPRESSLY DISCLAIMS ALL WARRANTIES
+%     OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF
+%     MERCHANTABILITY, NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
+%     CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE AND RESULTS OF THE
+%     USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL
+%     WARRANTIES AND LIABILITIES REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND
+%     DISTRIBUTES IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST ERDC-CHL, THE
+%     UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD
+%     HARMLESS ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
+%     LIABILITIES, DEMANDS, DAMAGES.
+%                 
+%  SCRIPT NAME:
+%     Eurotop_r2p_q_Final.m
+%
+% MODIFICATIONS: 
+% |  DATE (mm./dd./yyy) |  EDITOR          |          Description             |
+% |-------------------|------------------|----------------------------------|
+% |    04./04./19       |  Abigail Stehno  |  Created code from               |
+% |                   |                  |  Eurotop_r2p_q_v4.m              |  
+% |-------------------|------------------|----------------------------------|
+% |    04./08./19       |  Abigail Stehno  |  Updated capabilites, usability  |  
+% |       to          |                  |  and added rubble mound calcs.   |
+% |    09./03./20       |                  |  Updated comments                |
+% |-------------------|------------------|----------------------------------|
+% |    03./03./21       |  Abigail Stehno  |  Updated for distribution        |
+% |-------------------|------------------|----------------------------------|
+% |    05./28./21       |  Abigail Stehno  |  Updated for distribution more   |
+% |-------------------|------------------|----------------------------------|  
+% |    06./14./21       |  Abigail Stehno  |  Corrected rubble mound calc     |
+% |-------------------|------------------|----------------------------------| 
 
 %% VECTORIZE INPUTS
 data_dims = size(SWL);

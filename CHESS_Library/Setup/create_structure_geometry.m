@@ -1,46 +1,41 @@
 function [structure] = create_structure_geometry(config)
-%{
-    %% DESCRIPTION
-        This function creates MATLAB struture object containing project structure geometry.
-    
-    %% INPUTS
-        config: Parsed CAST input file. | struc | 1 x number_of_inputs
-        Required fields are listed below:
-            config.
-                   crest_elevation: Structure crest elevation
-                   crest_width: Strucutre crest width.
-                   seaside slope: Structure seaward slope.
-                   leeside slope: Strucutre landward slope.
-                   toe_elevation: Structure toe elevation (Nevative below datum zero)
-    
-    %% OUTPUTS
-        structure: Formatted structure geometry details | struc | 1 x varies_per_struc_type
-            structure.
-         ------- All Structure Types Fields -------
-                   crest_elevation: Structure crest elevation
-                   crest_width: Structure crest width.
-                   toe_elevation: Structure toe elevation (Negative below datum zero)
-  
-        ------- Rubblemound & Levee Only Fields -------
-                   seaside_slope: Structure seaward slope.
-                   leeside_slope: Structure landward slope.
-    
-            ------- Rubblemound Only Fields -------
-                   armor_delta: Armor stone immersed relative density. (1-rho_s/rho_h20)
-                   seaside_limit_S: Rubblemound structure seaward face damage limit (S).
-                   cem_P: Mean permeability coefficient (From CEM).
-    
-              --- CHESS: MCS/CSR Only Fields ---
-                   water_density: Water Density.
-                   seaside_mass: Rubblemound structure seaward face stone mass.
-                   seaside_init_S: Structure seaward face damage initiation limit (S).
-                   leeside_mass: Rubblemound structure landward face stone mass.
-                   leeside_init_S: Structure landward face damage initiation limit (S).
-                   leeside_limit_S: Rubblemound structure landward face damage limit (S).
-   
- %% DEV SIGNATURE
-    Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% create_structure_geometry  Structure geometry struct from config.
+%   structure = create_structure_geometry(config) applies the
+%   structure-level rules (finalize_structure_config) and copies the
+%   geometry and material fields of the structure type from config into
+%   structure (prints 'Creating <type> geometry....'). Berm fields are
+%   copied only when add_toe_berm is 1 (toe berms are hidden, so never at
+%   present). Shared by the library (call_input_parser) and the GUI; must
+%   stay directly under Setup/ (chessProject finds PSE_Templates through
+%   it).
+%
+%   Inputs:
+%     config - CHESS configuration, 1x1 struct; reads struc_type (1 Levee,
+%              2 Floodwall, 3 Rubblemound), add_toe_berm and the fields
+%              listed under Outputs
+%   Outputs:
+%     structure - structure geometry, 1x1 struct; elevations [m, study
+%                 datum, positive up], lengths [m]:
+%                   all types   - crest_elevation, crest_width,
+%                                 toe_elevation, water_density,
+%                                 roughness_ifactor, offshore_slope,
+%                                 struc_type
+%                   Levee       - seaside_slope, leeside_slope
+%                   Floodwall   - wall_bottom_elevation
+%                   Rubblemound - seaside_slope, leeside_slope, armor_delta,
+%                                 seaside_mass, leeside_mass, cem_P,
+%                                 seaside_design_S, leeside_design_S,
+%                                 seaside_S_uls, leeside_S_uls
+%                   with a toe berm (add_toe_berm = 1) - berm_crest_width,
+%                                 berm_crest_elevation, berm_seaward_slope
+%                                 (Levee also berm_toe_elevation)
+%
+%   Tier: internal
+%
+%   See also finalize_structure_config, call_input_parser, read_chess_input.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
+
 %% GRAB INPUT FROM "config"
 %{
         This section meant to provide an easy way to make changes to config

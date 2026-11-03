@@ -1,4 +1,69 @@
 function [sample_storms, lcs_data] = sample_tc_storm(storm_peaks, simulation_years, prob_mass, restrict_rate, storm_duration_days)
+% sample_tc_storm  Sample one LCS life cycle of tropical cyclones (TC).
+%   sample_storms = sample_tc_storm(storm_peaks, simulation_years,
+%       prob_mass, restrict_rate, storm_duration_days)
+%   [sample_storms, lcs_data] = sample_tc_storm(storm_peaks,
+%       simulation_years, prob_mass, restrict_rate, storm_duration_days)
+%
+%   Draws the number of TC storms of each simulation year from a Poisson
+%   distribution with the total TC recurrence rate prob_mass.TC_SRR(end).
+%   restrict_rate = 1 redraws the yearly counts until the life-cycle storm
+%   rate is within 1/simulation_years of that rate (1e-4 for 1e5 years),
+%   i.e. +/- 1 storm per life cycle, up to 1e6 draws (then a warning, the
+%   last draw is kept); restrict_rate = 0 keeps the first draw (a life
+%   cycle can hold no storms). For each storm an intensity bin (1 low,
+%   2 mid, 3 high) is drawn with probability
+%   TC_SRR(1:3)/sum(TC_SRR(1:3)), redrawn when the bin has no storm in
+%   storm_peaks, then a storm ID of that bin (smpl1, smpl2 or smpl3,
+%   restricted to the IDs in storm_peaks(:, 1)) weighted by TC_Freq.
+%   With two outputs the peak values are the database values of the
+%   sampled storms (storm_peaks rows). With one output only the storm IDs
+%   are drawn (chess_lcs with use_peaks = 0 passes the Timeseries storm
+%   IDs as storm_peaks). Errors when TC_SRR(end) is not a finite,
+%   non-negative scalar, or when no bin with a positive rate has storms.
+%
+%   Inputs:
+%     storm_peaks         - TC Peaks storm database rows [ID, SWL, Hm0, Tp,
+%                           wDir, datenum] (cell2mat of
+%                           storm.TC.Peaks.Default): SWL [m, study datum],
+%                           Hm0 [m], Tp [s], wDir [deg], datenum [days],
+%                           nStorms x 6 double; with one output only
+%                           column 1 (storm ID) is read
+%     simulation_years    - life-cycle length, mcs_nYears [years], positive
+%                           integer scalar
+%     prob_mass           - TC probability masses
+%                           (chs_probability_mass_loader), struct with
+%                           TC_SRR (recurrence rates [storms/yr] of the low,
+%                           mid and high bins and of all storms, 1 x 4),
+%                           TC_Freq (storm weights, indexed by the storm's
+%                           row in storm_peaks) and smpl1, smpl2, smpl3
+%                           (storm IDs of each bin, columns)
+%     restrict_rate       - sampling mode (effective
+%                           lcs_restrict_sampling_rate): 0 full Poisson, 1
+%                           rate matched, scalar double
+%     storm_duration_days - storm duration written to every row of lcs_data
+%                           [days] (storm_duration/24; storm_duration is in
+%                           hours), scalar double
+%   Outputs:
+%     sample_storms - sampled storm identity [storm ID, bin (1, 2, 3),
+%                     year (1 to simulation_years), order (storm number
+%                     within the year)], one row per storm in year order,
+%                     nEvents x 4 double (0 x 4 when no storm is drawn)
+%     lcs_data      - life-cycle Peaks matrix (lcs_columns Peaks map): id,
+%                     bin, year, order, SWL [m, study datum], Hm0_toe [m]
+%                     (= Hm0_offshore; depth limited later by
+%                     adjust_project_forcing), Hm0_offshore [m], Tp [s],
+%                     wDir [deg], storm_duration [days]; nEvents x 10
+%                     double (0 x 10 when no storm is drawn)
+%
+%   Tier: internal
+%
+%   See also sample_xc_storm, chess_lcs, lcs_columns,
+%   chs_probability_mass_loader.
+%
+%   Developed by: Norberto C. Nadal-Caraballo, PhD; Victor M. Gonzalez, PE;
+%   Fabian A. Garcia-Moreno
+
 %{
 LICENSING:
     This code is part of CHESS software suite developed by the U.S. Army
@@ -28,81 +93,6 @@ DISCLAIMER:
     UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD
     HARMLESS ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
     LIABILITIES, DEMANDS, DAMAGES.
-
-SCRIPT NAME:
-    Sample_XC.m.
-
-CALLED BY:
-    MCS_DLL1.m
-
-PURPOSE:
-    This script reads and pre-processes CHS tropical storm data.
-
-INPUTS:
-    |   Vars Name   |  Vars Type  |               Description                |
-    |---------------|-------------|------------------------------------------|
-    |       lc      |   double    |  Number of life cycles                   |
-    |---------------|-------------|------------------------------------------|
-    |    TC_B1RT    |   Double    |  Extra tropical storm response variable  |
-    |  (storm_peaks)|             |  [ID SWL Hm0 Tp wDir ...]; the storm ID  |
-    |               |             |  column alone when only sample_storms is |
-    |               |             |  requested (use_peaks = 0)               |
-    |---------------|-------------|------------------------------------------|
-    |  storm_whp_peaks  |   Double    |  Extra tropical storm response variable  |
-    |               |             |  - water level priority                  |
-    |---------------|-------------|------------------------------------------|
-    |  storm_wlp_peaks  |   Double    |  Extra tropical storm response variable  |
-    |               |             |  - wave height priority                  |
-    |---------------|-------------|------------------------------------------|
-    |    SIMyrs     |   Double    |  Extra tropical storm response variable  |
-    |---------------|-------------|------------------------------------------|
-    |    SIM_Flag   |   Double    |  Simulation flag to ensure sampled storms|
-    |               |             |  match sampling rate                     |
-    |---------------|-------------|------------------------------------------|
-    |     TC_SRR    |   Double    |  Tropical storm recurrance rate          |
-    |---------------|-------------|------------------------------------------|
-    |storm_duration_days| Double  |  Storm duration [days]                   |
-    |               |             |  (config.storm_duration/24; the storm DB |
-    |               |             |  Peaks rows have none)                   |
-    |---------------|-------------|------------------------------------------|
-       
-OUTPUTS:
-    |   Vars Name      |  Vars Type  |               Description                |
-    |------------------|-------------|------------------------------------------|
-    |    INDEX_TC_TS   |   Double    |  Sampled Storm Indexes                   |
-    |------------------|-------------|------------------------------------------|
-    | LC_MCSimOUT_TC   |   Double    |  Life Cycle Data Structure - Maximums    |
-    |------------------|-------------|------------------------------------------|
-    |LC_MCSimOUT_TC_WHP|   Double    |  Life Cycle Data Structure               |
-    |                  |             |  - wave height priority                  |
-    |------------------|-------------|------------------------------------------|
-    |LC_MCSimOUT_TC_WLP|   Double    |  Life Cycle Data Structure               |
-    |                  |             |  - water level priority                  |
-    |------------------|-------------|------------------------------------------|
-    |     TC_iclass    |   Double    |  Sampled Storms Intensity Index          |
-    |------------------|-------------|------------------------------------------|
-
-OUTPUTS HEADERS:
-    LC_MCSimOUT_TC, LC_MCSimOUT_TC_WHP, LC_MCSimOUT_TC_WLP :
-        Size (# of events, 10) -> Column map: lcs_columns.m
-            (01) Storm ID                       [-]
-            (02) Storm type                     [0 = extratropical]
-            (03) Storm Year                     [-]
-            (04) Number of storm in storm year  [-]
-            (05) Water Level                    [meters, MSL]
-            (06) Wave Height At Toe             [meters] (= Offshore Here; Depth Limited By adjust_project_forcing)
-            (07) Wave Height Offshore           [meters]
-            (08) Peak Wave Period               [seconds]
-            (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
-            (10) Storm Duration                 [days] (storm_duration_days)
-
-
-EXTERNAL FUNCTIONS:
-    storm type flag => (0 - tropicals, 1 - extratropicals)
-
-AUTHORS:
-    By: Norberto C. Nadal-Caraballo, PhD,
-    Victor M. Gonzalez,PE, Fabian A. Garcia-Moreno
 
 MODIFICATIONS:
     |   DATE (yyyy-mm-dd)   |      EDITOR      |         SUMMARY               |

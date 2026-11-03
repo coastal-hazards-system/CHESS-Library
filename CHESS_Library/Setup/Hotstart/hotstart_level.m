@@ -1,39 +1,42 @@
 function [level, reason_field] = hotstart_level(config, config_old)
-%HOTSTART_LEVEL How much of a cached run of the same case can be reused.
-%{
-%% DESCRIPTION
-Compares the current run's config against the cached run's config with
-the lists of hotstart_dependency_fields.m. No side effects: shared by
-hotstart_plan.m (library resolve_hotstart_state.m and the GUI).
-
-Levels (first match wins):
-    'resample'       A lcs_sampling_fields field changed, or the request is not
-                     covered by the cached data shape (dataset_coverage_fields,
-                     every workflow; asymmetric check: a cache holding
-                     MORE than requested still covers it).
-                     LCS draws new life cycles.
-    'reuse_sampling' A forcing_build_fields, forcing_adjustment_fields or forcing_uncertainty_fields
-                     field changed. The forcing is rebuilt from the storm
-                     database and adjusted/perturbed once; LCS keeps its
-                     sampled life cycles (sampling seed file).
-    'full'           Nothing forcing-relevant changed: the cached
-                     (adjusted/perturbed) project forcing is reused.
-PROS (workflow 1, 4) and DET (2) have no random sampling: 'resample' and
-'reuse_sampling' both rebuild their forcing from the storm database.
-
-Fields missing from either struct count as unchanged (any_field_changed.m).
-
-%% INPUTS
-config: Current run's config. | struct
-config_old: Cached run's config (same case). | struct
-
-%% OUTPUTS
-level: 'full', 'reuse_sampling' or 'resample'. | char
-reason_field: Config field that set the level ('' for 'full'). | char
-
-%R DEV SIGNATURE
-Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% hotstart_level  How much of a cached run of the same case can be reused.
+%   [level, reason_field] = hotstart_level(config, config_old) compares the
+%   current run's config with the cached run's config using the lists of
+%   hotstart_dependency_fields. No side effects: shared by hotstart_plan
+%   (library resolve_hotstart_state and the GUI).
+%
+%   Levels (first match wins):
+%       'resample'       A lcs_sampling_fields field changed, or the request
+%                        is not covered by the cached data shape
+%                        (dataset_coverage_fields, every workflow;
+%                        asymmetric check: a cache holding MORE than
+%                        requested still covers it). LCS draws new life
+%                        cycles.
+%       'reuse_sampling' A forcing_build_fields, forcing_adjustment_fields
+%                        or forcing_uncertainty_fields field changed. The
+%                        forcing is rebuilt from the storm database and
+%                        adjusted/perturbed once; LCS keeps its sampled
+%                        life cycles (sampling seed file).
+%       'full'           Nothing forcing-relevant changed: the cached
+%                        (adjusted/perturbed) project forcing is reused.
+%   PROS (workflows 1, 4) and DET (2) have no random sampling: 'resample'
+%   and 'reuse_sampling' both rebuild their forcing from the storm database.
+%   Fields missing from either struct count as unchanged
+%   (any_field_changed).
+%
+%   Inputs:
+%     config     - current run's configuration, 1x1 struct
+%     config_old - cached run's configuration (same case), 1x1 struct
+%   Outputs:
+%     level        - 'full', 'reuse_sampling' or 'resample', char
+%     reason_field - config field that set the level ('' for 'full'), char
+%
+%   Tier: internal
+%
+%   See also hotstart_plan, hotstart_dependency_fields, any_field_changed,
+%   apply_hotstart_level.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 dependency_fields = hotstart_dependency_fields();
 [changed, reason_field] = any_field_changed(config, config_old, dependency_fields.lcs_sampling_fields);
 if changed

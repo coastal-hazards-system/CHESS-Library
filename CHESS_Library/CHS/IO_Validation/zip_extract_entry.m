@@ -1,22 +1,27 @@
 function out_file = zip_extract_entry(zip_name, entry_file, out_dir)
-%{
-    %% DESCRIPTION
-        Extract one entry of a zip folder, by file name (any zip
-        subfolder, case-insensitive), into out_dir without decompressing the rest. Used by
-        zip_h5_attributes.m (study datum & savepoint coordinates for
-        call_input_parser.m and the GUI storm database wizard).
+% zip_extract_entry  Extract one entry of a zip file by name, without the rest.
+%   out_file = zip_extract_entry(zip_name, entry_file, out_dir)
+%
+%   Extracts one entry of a zip folder, by file name (any zip subfolder,
+%   case-insensitive), into out_dir without decompressing the rest; a
+%   file of that name in out_dir is replaced. Used by zip_h5_attributes
+%   (study datum and savepoint coordinates for call_input_parser and the
+%   GUI storm database wizard). An entry not in the zip folder is an
+%   error (zip_extract_entry:entryNotFound).
+%
+%   Inputs:
+%     zip_name   - zip folder (relative or full path), char
+%     entry_file - entry file name (name + extension, no folder), char
+%     out_dir    - destination folder (created if missing), char
+%   Outputs:
+%     out_file   - full path of the extracted file, char
+%
+%   Tier: internal
+%
+%   See also zip_h5_attributes, zip_h5_names.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        zip_name: Zip folder (relative or full path). | char
-        entry_file: Entry file name (name + extension, no folder). | char
-        out_dir: Destination folder (created if missing). | char
-
-    %% OUTPUTS
-        out_file: Full path of the extracted file. | char
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 % Absolute Path (Java Resolves Relative Paths Against Its Own Working Folder; exist() Also Finds Files On The MATLAB Path)
 zip_info = dir(zip_name);
 if isscalar(zip_info) && ~zip_info.isdir

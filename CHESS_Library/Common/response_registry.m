@@ -1,88 +1,107 @@
 function out = response_registry(options)
-%{
-    %% DESCRIPTION
-        Registry of the CHESS forcing variables, structure responses and
-        armor damage measures: one row per variable stored in the project
-        forcing / Resp outputs. Single source of the response lists of the
-        library and the GUI (compute switches, structure-type applicability,
-        labels, uncertainty sources, hazard-curve rules). The registry order
-        is the dropdown order.
+% response_registry  Registry of CHESS forcing variables, responses and armor damage.
+%   rows = response_registry() returns every registry row.
+%   out = response_registry('output', output, Name, Value, ...) returns the
+%   rows, names or compute switches of the rows that pass the filters.
+%
+%   Registry of the CHESS forcing variables, structure responses and armor
+%   damage measures: one row per variable stored in the project forcing /
+%   Resp outputs. Single source of the response lists of the library and the
+%   GUI (compute switches, structure-type applicability, labels, uncertainty
+%   sources, hazard-curve rules). The registry order is the dropdown order.
+%
+%   Rows (kind):
+%       forcing      | SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc
+%       response     | Hm0t, R2p, R2p_SWL, Dn50, Dn50_Lee, p1, q, q_wave_ot,
+%                    | Q_vol, Q_vol_wave_ot, DamDepthElev, DamDepth,
+%                    | p2dyn, p2sta, p2total, p3dyn, p3sta, p3total, pu,
+%                    | X_low, X_up, X_c_surge, Bx, theta_low, theta_up,
+%                    | theta_center, Bjet, Vjet, Fjet
+%       armor_damage | S_seaside_no_repairs, S_seaside_with_repairs,
+%                    | S_leeside_no_repairs, S_leeside_with_repairs,
+%                    | Smax, LSmax
+%
+%   Not in the registry: storm DB columns, id columns (storm_id, time, Year,
+%   Order), q_overflow and Q_vol_overflow (Eurotop intermediates),
+%   compute_damaging_depth_Ks, compute_storm_duration.
+%
+%   Examples:
+%       response_registry('output', 'names', 'per_event', true, 'structure_type', 3)
+%       response_registry('output', 'switches', 'structure_type', 2)
+%       row = response_registry('name', 'q');
+%   In an arguments block declare only `x string`; validators cannot call
+%   functions (R2022b), so check in the body:
+%   mustBeMember(x, response_registry('output', 'names', 'per_event', true))
+%
+%   Inputs (name-value, all optional; filters are AND-combined, omitted = no
+%   filter):
+%     output         - what to return: "rows" (default), "names" or
+%                      "switches", string
+%     name           - names to keep (registry order kept, unknown names
+%                      dropped), string, char or cellstr
+%     kind           - "forcing", "response" and/or "armor_damage", string,
+%                      char or cellstr
+%     structure_type - 1 Levee, 2 Floodwall, 3 Rubblemound [-], scalar double
+%     data_type      - "Peaks" or "Timeseries", string or char
+%     compute_switch - config compute switch, e.g. 'compute_q', string or
+%                      char
+%     datum_elevation, pros_forcing_curve, fitted_by_pros_rb,
+%     pros_secondary_eb1, per_event, with_repairs - row flag value, scalar
+%                      logical (or 0/1)
+%     cc_rule, cc_confidence_limit_method, armor_side, damage_summary - row
+%                      field value, string or char
+%   Outputs:
+%     out - depends on output, struct or cell:
+%           "rows"     - [Nx1] struct array of the filtered rows (0x1 if
+%                        none)
+%           "names"    - [1xN] cellstr of the row names (1x0 if none)
+%           "switches" - [1xM] cellstr of the unique non-empty compute_switch
+%                        values of the filtered rows, first-appearance order
+%         Row fields:
+%           name           - field name in the forcing / Resp outputs, char
+%           kind           - 'forcing', 'response' or 'armor_damage', char
+%           compute_switch - config switch that computes it ('' for forcing
+%                            and armor damage; S is gated by csr_call_dpa),
+%                            char
+%           display_name   - plot legend / dropdown label (LaTeX), char
+%           axis_label     - axis label; '{datum}' is replaced by
+%                            config.project_datum, char
+%           unit_label     - unit in SI ('' if dimensionless), char
+%           unit_kind      - dimension (length, time, pressure,
+%                            discharge_per_length, volume_per_length, angle,
+%                            velocity, force_per_length, dimensionless);
+%                            pairs with the unit conversion libraries, char
+%           log_scale      - 1 to plot on a log axis [-], double
+%           structure_types - structure types it applies to [-], double
+%           data_types     - {'Peaks','Timeseries'} or {'Timeseries'}, cell
+%           datum_elevation - value is an elevation referenced to the datum,
+%                            logical
+%           pros_forcing_curve - PROS forcing hazard curve, logical
+%           fitted_by_pros_rb - hazard curve fitted by PROS-RB, logical
+%           pros_secondary_eb1 - secondary floodwall response (p2/p3, nappe)
+%                            computed by PROS from the EB1 forcing, logical
+%           cc_rule        - 'combine' or 'skip' in the hazard curve
+%                            combiner, char
+%           cc_confidence_limit_method - 'tropical_only' or 'als_relative',
+%                            char
+%           absolute_uncertainty - config field of U_a ('' = 0), char
+%           relative_uncertainty - config field of U_r ('' = 0), char
+%           relative_uncertainty_rule - 'as_is' or 'tp_from_hm0'
+%                            (U_r = sqrt(1 + U) - 1), char
+%           jpm_uncertainty_treatment - 'combined', 'relative' or 'none',
+%                            char
+%           per_event      - one value per storm event, logical
+%           armor_side     - 'seaside', 'leeside' or '', char
+%           with_repairs   - armor damage with structure repairs, logical
+%           damage_summary - 'series', 'yearly_mean_max' or '', char
+%
+%   Tier: internal
+%
+%   See also response_library_headers, pros_forcing_curves,
+%   compute_structure_response, finalize_config.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-        Rows (kind):
-            forcing      | SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc
-            response     | Hm0t, R2p, R2p_SWL, Dn50, Dn50_Lee, p1, q, q_wave_ot,
-                         | Q_vol, Q_vol_wave_ot, DamDepthElev, DamDepth,
-                         | p2dyn, p2sta, p2total, p3dyn, p3sta, p3total, pu,
-                         | X_low, X_up, X_c_surge, Bx, theta_low, theta_up,
-                         | theta_center, Bjet, Vjet, Fjet
-            armor_damage | S_seaside_no_repairs, S_seaside_with_repairs,
-                         | S_leeside_no_repairs, S_leeside_with_repairs,
-                         | Smax, LSmax
-
-        Not in the registry: storm DB columns, id columns (storm_id, time,
-        Year, Order), q_overflow and Q_vol_overflow (Eurotop intermediates),
-        compute_damaging_depth_Ks, compute_storm_duration.
-
-    %% INPUTS (name-value, all optional; filters are AND-combined, omitted = no filter)
-        output: "rows" (default), "names" or "switches". | string
-        name: Names to keep (registry order kept, unknown names dropped). | string/char/cellstr
-        kind: "forcing", "response" and/or "armor_damage". | string/char/cellstr
-        structure_type: 1 Levee, 2 Floodwall, 3 Rubblemound. | double
-        data_type: "Peaks" or "Timeseries". | string/char
-        compute_switch: config compute switch, e.g. 'compute_q'. | string/char
-        datum_elevation, pros_forcing_curve, fitted_by_pros_rb,
-        pros_secondary_eb1, per_event, with_repairs: row flag value. | logical
-        cc_rule, cc_confidence_limit_method, armor_side, damage_summary:
-            row field value. | string/char
-
-    %% OUTPUTS
-        out: depending on output: | struct / cell
-            "rows": [Nx1] struct array of the filtered rows (0x1 if none).
-            "names": [1xN] cellstr of the row names (1x0 if none).
-            "switches": [1xM] cellstr of the unique non-empty compute_switch
-                values of the filtered rows, first-appearance order.
-        Row fields:
-            name: Field name in the forcing / Resp outputs. | char
-            kind: 'forcing', 'response' or 'armor_damage'. | char
-            compute_switch: config switch that computes it ('' for forcing
-                and armor damage; S is gated by csr_call_dpa). | char
-            display_name: Plot legend / dropdown label (LaTeX). | char
-            axis_label: Axis label; '{datum}' is replaced by
-                config.project_datum. | char
-            unit_label: Unit in SI ('' if dimensionless). | char
-            unit_kind: Dimension (length, time, pressure, discharge_per_length,
-                volume_per_length, angle, velocity, force_per_length,
-                dimensionless), pairs with the unit conversion libraries. | char
-            log_scale: 1 to plot on a log axis. | double
-            structure_types: Structure types it applies to. | double
-            data_types: {'Peaks','Timeseries'} or {'Timeseries'}. | cell
-            datum_elevation: Value is an elevation referenced to the datum. | logical
-            pros_forcing_curve: PROS forcing hazard curve. | logical
-            fitted_by_pros_rb: Hazard curve fitted by PROS-RB. | logical
-            pros_secondary_eb1: Secondary floodwall response (p2/p3, nappe)
-                computed by PROS from the EB1 forcing. | logical
-            cc_rule: 'combine' or 'skip' in the hazard curve combiner. | char
-            cc_confidence_limit_method: 'tropical_only' or 'als_relative'. | char
-            absolute_uncertainty: config field of U_a ('' = 0). | char
-            relative_uncertainty: config field of U_r ('' = 0). | char
-            relative_uncertainty_rule: 'as_is' or 'tp_from_hm0'
-                (U_r = sqrt(1 + U) - 1). | char
-            jpm_uncertainty_treatment: 'combined', 'relative' or 'none'. | char
-            per_event: One value per storm event. | logical
-            armor_side: 'seaside', 'leeside' or ''. | char
-            with_repairs: Armor damage with structure repairs. | logical
-            damage_summary: 'series', 'yearly_mean_max' or ''. | char
-
-    %% EXAMPLES
-        response_registry('output', 'names', 'per_event', true, 'structure_type', 3)
-        response_registry('output', 'switches', 'structure_type', 2)
-        row = response_registry('name', 'q');
-        % In an arguments block declare only `x string`; validators cannot call functions (R2022b),
-        % so check in the body: mustBeMember(x, response_registry('output', 'names', 'per_event', true))
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 arguments
     options.output (1,1) string {mustBeMember(options.output, ["rows", "names", "switches"])} = "rows"
     options.name string

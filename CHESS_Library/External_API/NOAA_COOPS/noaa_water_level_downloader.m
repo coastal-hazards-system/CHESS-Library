@@ -1,81 +1,100 @@
 function [Sdata, notFound] = noaa_water_level_downloader(idList, StationList, requested_datum, products, opMode, dBeg, dEnd)
-%{
-    %% DESCRIPTION
-        Downloads NOAA CO-OPS measured water levels (and, next to 6-minute,
-        hourly and high/low data, harmonic tide predictions) for a list of
-        stations. Replaces WL_downloader_V2.m (Retired\NOAA_Water_Level_Downloader\).
-        One Sdata element per (station, product), stations in idList order.
-            Product segments: the StationList segments whose WL_products
-                equals the product name (the name carries the quality, e.g.
-                'Preliminary 6-Minute Water Level'); a product the station
-                does not offer gives status 'product not offered'.
-            Window: opMode 1 = whole inventory of the product (first segment
-                start to last segment end); opMode 2 = [dBeg, dEnd], the same
-                for every station (never narrowed by a previous station).
-            Datum (WL_datum): the requested data API datum when the station
-                offers it (NAVD88 is read as NAVD, GL_LWD as LWD); otherwise
-                the first offered of NAVD, MSL, MLLW (requested datum
-                containing NAVD) or MSL, MLLW, NAVD (any other request), else
-                STND. Great Lakes stations: IGLD, or LWD when LWD is
-                requested. TP_datum = WL_datum.
-            Measured data: download_noaa_water_levels.m (window intersected
-                with the segments, each time requested once, NaN on regular
-                grids, high_low never filled).
-            Tide predictions (TP): only for harmonic ('R') stations
-                (StationList.harmonic_predictions) and only next to
-                water_level ('6'), hourly_height ('h') and high_low ('hilo')
-                data, over the downloaded windows; none for daily or monthly
-                means (TP empty, TP_downloaded_product '').
-            WL/TP layout: two tables. For 6-minute and hourly data, WL and
-                TP are outer-joined on DateTime, so both tables have the same
-                DateTime column (NaN where one of them has no value). For
-                high_low, the observed and predicted highs/lows happen at
-                different times, so WL and TP keep their own time stamps.
-            record_length: inventory span of the product in years
-                (sum of its segment durations, each limited to the window in
-                opMode 2; years = 365.2425 days), not the count of valid data.
-            Beg, End: first and last DateTime of WL (NaT when empty).
-            status: 'ok'; 'product not offered'; 'no inventory in the
-                requested window'; 'no data returned' (WL all NaN or empty);
-                'download failed: <NOAA message>'; '; tide predictions failed:
-                <message>' is appended when only TP failed.
-        NOAA rejections (noaa:requestFailed) are reported in status and the
-        loop continues; noaa:noConnection stops it.
-
-    %% INPUTS
-        idList: Station ids to download. | cell/string/char
-        StationList: Station list (noaa_station_list.m). | struct
-        requested_datum: Data API datum preferred (e.g. 'MSL',
-            'NAVD'). | char
-        products: NOAA product names, any of 'Verified 6-Minute Water
-            Level', 'Preliminary 6-Minute Water Level', 'Verified Hourly
-            Height Water Level', 'Verified High/Low Water Level', 'Verified
-            Daily Mean Water Level', 'Verified Monthly Mean Water
-            Level'. | cell/string/char
-        opMode: 1 = full record, 2 = [dBeg, dEnd]. | double
-        dBeg, dEnd: (opMode 2) Window start and end, UTC (datetime,
-            datenum or date text). | datetime/double/char
-
-    %% OUTPUTS
-        Sdata: Struct array with fields | struct
-            id, name, state: Station id, name and state. | char
-            lon, lat: Longitude and latitude [deg]. | double
-            WL_datum, TP_datum: Data API datum used. | char
-            WL_downloaded_product: Product name. | char
-            TP_downloaded_product: Prediction interval ('6', 'h', 'hilo')
-                or ''. | char
-            record_length: Inventory span [years]. | double
-            WL: Table DateTime (UTC), WaterLevel [m] (+ Type for
-                high_low). | table
-            TP: Table DateTime (UTC), Prediction [m] (+ Type for
-                hilo). | table
-            Beg, End: First and last WL time stamp (UTC). | datetime
-            status: Download status. | char
-        notFound: Ids missing from StationList. | cell
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% noaa_water_level_downloader  Download NOAA water levels of many stations.
+%   [Sdata, notFound] = noaa_water_level_downloader(idList, StationList,
+%       requested_datum, products, 1)
+%   [Sdata, notFound] = noaa_water_level_downloader(idList, StationList,
+%       requested_datum, products, 2, dBeg, dEnd)
+%
+%   Downloads NOAA CO-OPS measured water levels (and, next to 6-minute,
+%   hourly and high/low data, harmonic tide predictions) for a list of
+%   stations. Replaces WL_downloader_V2.m
+%   (Retired\NOAA_Water_Level_Downloader\).
+%   One Sdata element per (station, product), stations in idList order.
+%   Prints one status line per element.
+%     Product segments: the StationList segments whose WL_products equals
+%         the product name (the name carries the quality, e.g.
+%         'Preliminary 6-Minute Water Level'); a product the station does
+%         not offer gives status 'product not offered'.
+%     Window: opMode 1 = whole inventory of the product (first segment
+%         start to last segment end); opMode 2 = [dBeg, dEnd], the same for
+%         every station (never narrowed by a previous station).
+%     Datum (WL_datum), as currently coded: requested_datum is upper-cased
+%         and mapped by noaa_datum_code (NAVD88 -> NAVD, GL_LWD -> LWD).
+%         Great Lakes stations (checked first): IGLD, or LWD when LWD is
+%         requested and the station offers it. Other stations: the
+%         requested code when the station offers it (StationList datums
+%         api_code); otherwise the first offered of NAVD, MSL, MLLW (when
+%         the requested code contains NAVD) or of MSL, MLLW, NAVD (any
+%         other request); else STND (also when the station has no datums).
+%         TP_datum = WL_datum.
+%     Measured data: download_noaa_water_levels (window intersected with
+%         the segments, each time requested once, NaN on regular grids,
+%         high_low never filled).
+%     Tide predictions (TP): only for harmonic ('R') stations
+%         (StationList.harmonic_predictions) and only next to water_level
+%         ('6'), hourly_height ('h') and high_low ('hilo') data, from the
+%         first downloaded window start to the last window end; none for
+%         daily or monthly means (TP empty, TP_downloaded_product '').
+%     WL/TP layout: two tables. For 6-minute and hourly data, WL and TP
+%         are outer-joined on DateTime, so both tables have the same
+%         DateTime column (NaN where one of them has no value). For
+%         high_low, the observed and predicted highs/lows happen at
+%         different times, so WL and TP keep their own time stamps.
+%     record_length: inventory span of the product in years (sum of its
+%         segment durations, each limited to the window in opMode 2;
+%         years = 365.2425 days), not the count of valid data.
+%     Beg, End: first and last DateTime of WL (NaT when empty).
+%     status: 'ok'; 'product not offered'; 'no inventory in the requested
+%         window'; 'no data returned' (WL all NaN or empty); 'download
+%         failed: <NOAA message>'; '; tide predictions failed: <message>'
+%         is appended when only TP failed.
+%   NOAA rejections (noaa:requestFailed) are reported in status and the
+%   loop continues; any other error (e.g. noaa:noConnection) stops it.
+%   An opMode other than 1 or 2, opMode 2 without dBeg and dEnd, or
+%   dBeg after dEnd raises noaa:invalidMode.
+%
+%   Inputs:
+%     idList          - station ids to download, cell, string or char
+%     StationList     - station list (noaa_station_list), struct array
+%     requested_datum - preferred datum: Data API code or datums endpoint
+%                       name (e.g. 'MSL', 'NAVD', 'NAVD88'; see
+%                       noaa_station_details for a station's datums),
+%                       char or string
+%     products        - NOAA product names, any of 'Verified 6-Minute
+%                       Water Level', 'Preliminary 6-Minute Water Level',
+%                       'Verified Hourly Height Water Level', 'Verified
+%                       High/Low Water Level', 'Verified Daily Mean Water
+%                       Level', 'Verified Monthly Mean Water Level', cell,
+%                       string or char
+%     opMode          - 1 = full record, 2 = [dBeg, dEnd], double
+%     dBeg, dEnd      - (opMode 2) window start and end, UTC (a datetime
+%                       with a time zone is converted), datetime, datenum
+%                       or date text
+%   Outputs:
+%     Sdata    - struct array (column), fields:
+%                  id, name, state - station id, name and state, char
+%                  lon, lat - longitude and latitude [deg], double
+%                  WL_datum, TP_datum - data API datum used, char
+%                  WL_downloaded_product - product name, char
+%                  TP_downloaded_product - prediction interval ('6', 'h',
+%                      'hilo') or '', char
+%                  record_length - inventory span [years], double
+%                  WL - table: DateTime (UTC), WaterLevel [m] (+ Type for
+%                      high_low)
+%                  TP - table: DateTime (UTC), Prediction [m] (+ Type for
+%                      hilo)
+%                  Beg, End - first and last WL time stamp (UTC), datetime
+%                  status - download status, char
+%     notFound - ids missing from StationList, cell column
+%
+%   Tier: public
+%
+%   See also noaa_station_list, create_tide_file,
+%   download_noaa_tide_predictions, download_noaa_water_levels,
+%   noaa_station_catalog, noaa_station_details, select_noaa_stations,
+%   plot_noaa_stations.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if ~ismember(opMode, 1:2)
     error('noaa:invalidMode', 'Please use a valid operational mode (1 - full record, 2 - specific dates).');
 end

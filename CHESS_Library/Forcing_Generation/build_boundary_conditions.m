@@ -1,38 +1,50 @@
 function [project_forcing, config] = build_boundary_conditions(config, storm, prob_mass)
-%{
-    %% DESCRIPTION
-        Step 1 of call_chess_boundary_conditions.m: builds the project
-        forcing of the whole storm request, per workflow. Nothing is saved
-        here except the LCS sampling seed file (chess_lcs.m).
-            - PROS (RB/FB, workflows 1, 4) and DET (workflow 2):
-              chess_forcing_formatter.m (PROS: replicates per storm; DET:
-              storms as recorded).
-            - LCS (workflow 3): chess_lcs.m (samples the life cycles; adds
-              config.lcs_effective_sampling_rate).
-            - Multi-line stage 2 (config.multiline, multiline_stage2_config.m):
-              apply_stage1_transmission.m (stage 1's complete forcing,
-              transmitted behind stage 1, depth limited at the stage 2 toe).
-        Peaks storm_duration = config.storm_duration (the storm DB has
-        none). Every dataset carries storm_duration (event length);
-        Timeseries also carry dt (row time step); with
-        compute_storm_duration = 1 (missing = 0) the Timeseries
-        storm_duration is the SWL duration of each storm
-        (timeseries_storm_durations.m). PROS/DET check that Peaks and
-        Timeseries hold the same storm IDs in the same order.
+% build_boundary_conditions  Build the project forcing of the storm request.
+%   [project_forcing, config] = build_boundary_conditions(config, storm,
+%       prob_mass)
+%
+%   Step 1 of call_chess_boundary_conditions: builds the project forcing of
+%   the whole storm request, per workflow. Nothing is saved here except the
+%   LCS sampling seed file (chess_lcs).
+%     - PROS (RB/FB, workflows 1, 4) and DET (workflow 2):
+%       chess_forcing_formatter (PROS: replicates per storm; DET: storms as
+%       recorded). Peaks and Timeseries of a storm type must hold the same
+%       storm IDs in the same order (else error
+%       chess:peaksTimeseriesIdMismatch).
+%     - LCS (workflow 3): chess_lcs (samples the life cycles; adds
+%       lcs_effective_sampling_rate to config).
+%     - Multi-line stage 2 (multiline, multiline_stage2_config):
+%       apply_stage1_transmission (stage 1's complete forcing, transmitted
+%       behind stage 1, depth limited at the stage 2 toe); config is
+%       returned unchanged.
+%   The storm database holds no storm duration: every dataset gets
+%   storm_duration (event length; Peaks: the config storm_duration).
+%   Timeseries also carry dt (row time step); with compute_storm_duration
+%   = 1 (missing = 0) the Timeseries storm_duration is the SWL duration of
+%   each storm (timeseries_storm_durations).
+%
+%   Inputs:
+%     config    - CHESS configuration, 1x1 struct; reads workflow,
+%                 storm_sampling, print_progress, storm_duration [hours],
+%                 compute_storm_duration, multiline (and the chess_lcs
+%                 fields for LCS)
+%     storm     - storm database request (call_chs_data_formatter), struct
+%     prob_mass - storm probability masses (PROS TC: TC_Freq), struct
+%   Outputs:
+%     project_forcing - project forcing before uncertainty and adjustments,
+%                       project_forcing.<data type>.<match type>.<storm
+%                       type>, struct
+%     config          - input config with compute_storm_duration (0 when
+%                       missing) and, LCS, lcs_effective_sampling_rate,
+%                       struct
+%
+%   Tier: internal
+%
+%   See also call_chess_boundary_conditions, chess_forcing_formatter,
+%   chess_lcs, apply_stage1_transmission, timeseries_storm_durations.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        config: Run configuration. | struct
-        storm: Storm database request (call_chs_data_formatter.m). | struct
-        prob_mass: Storm probability masses. | struct
-
-    %% OUTPUTS
-        project_forcing: Project forcing before uncertainty and
-            adjustments. | struct
-        config: Run configuration (LCS: lcs_effective_sampling_rate). | struct
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 if isfield(config, 'multiline') && ~isempty(config.multiline)
     % Multi-Line Stage 2: Stage 1's Storms/Life Cycles, Uncertainty, Tides And SLR Are Kept
     project_forcing = apply_stage1_transmission(config);

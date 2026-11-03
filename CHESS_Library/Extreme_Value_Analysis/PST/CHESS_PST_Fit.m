@@ -1,4 +1,53 @@
 function [SST_output] = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, gprMdl, pst_options, plot_options)
+% CHESS_PST_Fit  Bootstrap GPD fit of a POT sample into hazard curves.
+%   SST_output = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs,
+%       gprMdl, pst_options, plot_options)
+%
+%   Fit step of CHESS_PST (inputs already checked there).
+%   Empirical curve: Weibull plotting position m/(n+1) times the sample
+%   intensity n/Nyrs (AEF; AEP when use_AEP = 1). Bootstrap
+%   (ecdf_boot, bootstrap_sims samples); with ind_Skew = 1 and a gprMdl
+%   object, skew tides predicted by gprMdl (mean plus a random normal
+%   times the standard deviation) are added to each sample of the surge
+%   minus SLC, SLC is added back and the empirical curve uses
+%   POT_with_tides. Values < 0 are set to NaN.
+%   GPD (when the sample has >= 20 events and Nyrs >= 20 years, or
+%   apply_GPD_to_SS = 1): threshold from CHESS_MRL (GPD_TH_crit); without
+%   one, 0.99 times the minimum of each bootstrap sample ('Default'). The
+%   GPD is fitted to each bootstrap sample above the threshold with the
+%   shape limited to [-0.5 0.3], and each simulated curve joins the GPD
+%   above the threshold and the empirical values below. Otherwise each
+%   bootstrap sample gives an empirical curve.
+%   The mean and the prc percentiles of the simulated curves are made
+%   monotonic (Monotonic_adjustment) and interpolated into the tables.
+%   Errors when ind_Skew = 1 and the mean curve reaches 1e3. With
+%   create_plots = 1 and a GPD fit, the bootstrap check figure
+%   SST_HC_bootCheck_<staID>_TH_<criterion>.png is written in path_out.
+%
+%   Inputs:
+%     POT_no_tides   - POT sample without tides, vector
+%     POT_with_tides - POT sample with tides (used with ind_Skew = 1),
+%                      vector
+%     SLC            - sea level change implicit in the sample [response
+%                      units], scalar
+%     Nyrs           - record length [years], scalar
+%     gprMdl         - skew tide Gaussian process regression model ([]
+%                      without skew tides)
+%     pst_options    - PST settings (use_AEP, bootstrap_sims, ind_Skew,
+%                      GPD_TH_crit, apply_GPD_to_SS, prc; see CHESS_PST),
+%                      struct
+%     plot_options   - plot settings (create_plots, y_log, staID,
+%                      yaxis_Limits, yaxis_Label, path_out), struct
+%   Outputs:
+%     SST_output - hazard curves (staID, RL, MRL_output, HC_plt, HC_tbl,
+%                  HC_tbl_rsp_x, HC_emp, HC_tbl_rsp_y, HC_plt_x, HC_tbl_x;
+%                  see CHESS_PST), struct
+%
+%   Tier: internal
+%
+%   See also CHESS_PST, CHESS_PST_plot, CHESS_MRL, ecdf_boot,
+%   Monotonic_adjustment.
+
 %% INITIALIZE FIELDS
 % Set up probabilities for HC summary
 if pst_options.('use_AEP') %Select AEPs

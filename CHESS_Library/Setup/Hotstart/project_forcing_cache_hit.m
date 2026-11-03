@@ -1,34 +1,41 @@
 function [hit, project_forcing, missing_desc] = project_forcing_cache_hit(config)
-%PROJECT_FORCING_CACHE_HIT True if the cached project_forcing.mat will be reused as is.
-%{
-%% DESCRIPTION
-The coverage rule of call_chess_boundary_conditions.m (step 0, which
-also needs config.forcing_stamp): the cached
-config.out_files.project_forcing exists and covers the current request
-(project_forcing_coverage.m) in the current layout (current_layout:
-every PROS/DET dataset carries storm_duration, LCS Timeseries life
-cycles have lcs_columns().n_timeseries columns; an older forcing is
-rebuilt, never converted). No side effects (a non-covering cache is
-not deleted here). Hotstart resolution runs first and deletes the cache
-when a dependency changed (apply_hotstart_level.m, used by the library's
-resolve_hotstart_state.m and by the GUI), so call this after it, or
-after the equivalent side-effect-free decision (hotstart_plan.m level
-'full'). On a hit no project forcing is generated, e.g. no LCS sampling
-and no convergence check.
-
-%% INPUTS
-config: Current run's parsed config struct (out_files.project_forcing
-        plus the fields read by project_forcing_coverage.m).
-
-%% OUTPUTS
-hit: true if the cached project forcing exists and covers the request.
-project_forcing: Loaded cached project forcing ([] if no file).
-missing_desc: Missing items (project_forcing_coverage.m); '' on a hit
-              or when there is no file.
-
-%R DEV SIGNATURE
-Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% project_forcing_cache_hit  True if the cached project forcing is reused as is.
+%   [hit, project_forcing, missing_desc] = project_forcing_cache_hit(config)
+%   loads the cached out_files.project_forcing and checks that it covers the
+%   current request in the current layout.
+%
+%   The coverage rule of call_chess_boundary_conditions (step 0, which also
+%   needs the forcing_stamp field): the cached project forcing file exists
+%   and covers the current request (project_forcing_coverage) in the
+%   current layout (every PROS/DET dataset carries storm_duration, LCS
+%   Timeseries life cycles have lcs_columns().n_timeseries columns; an
+%   older forcing is rebuilt, never converted). No side effects (a
+%   non-covering cache is not deleted here). Hotstart resolution runs first
+%   and deletes the cache when a dependency changed (apply_hotstart_level,
+%   used by the library's resolve_hotstart_state and by the GUI), so call
+%   this after it, or after the equivalent side-effect-free decision
+%   (hotstart_plan level 'full'). On a hit no project forcing is generated,
+%   e.g. no LCS sampling and no convergence check.
+%
+%   Inputs:
+%     config - current run's parsed configuration, 1x1 struct; reads
+%              out_files.project_forcing, workflow and the fields read by
+%              project_forcing_coverage
+%   Outputs:
+%     hit             - true if the cached project forcing exists and covers
+%                       the request in the current layout, logical
+%     project_forcing - loaded cached project forcing ([] if no file),
+%                       struct
+%     missing_desc    - missing items (project_forcing_coverage, or
+%                       'storm_duration (forcing layout)' for an older
+%                       layout); '' on a hit or when there is no file, char
+%
+%   Tier: internal
+%
+%   See also project_forcing_coverage, call_chess_boundary_conditions,
+%   apply_hotstart_level, hotstart_plan.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 hit = false;
 project_forcing = [];
 missing_desc = '';

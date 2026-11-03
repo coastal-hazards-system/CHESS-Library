@@ -1,19 +1,45 @@
 classdef aux_methods
-    % AUX_METHODS Shared plotting utilities.
-    % All methods are Static — you never create an aux_methods object.
-    % Call them directly: aux_methods.initiate_axes(...)
+    % aux_methods  Static plotting helpers shared by the CHESS plot classes.
+    %   aux_methods holds Static methods only; no object is created. Call
+    %   them on the class name, e.g.
+    %     ax = aux_methods.initiate_axes(parent, x_label, y_label, title_str, base_fnt)
+    %   Used by CHESSPlotsBase, det_methods, lcs_methods, pros_methods and
+    %   the GUI (chessResults, chessRunPlanner, the app); CHESSPlots does
+    %   not call them.
     %
-    % These are called by pros_methods (and future lcs_methods, etc.)
-    % NOT by CHESSPlots directly.
+    %   Methods:
+    %     pull_data          - one dataset of a storm, Resp or project_forcing struct
+    %     initiate_axes      - create or reset axes formatted for a CHESS plot
+    %     latex_escape       - escape text for the LaTeX interpreter
+    %     display_no_data    - red "No data available" note centred on axes
+    %     pad_limits         - axis limits = data range plus a buffer
+    %     tern               - ternary helper (a if cond, else b)
+    %     build_unit_library - unit factors and symbols for 'SI' or 'Imperial'
+    %
+    %   Tier: internal
+    %
+    %   See also CHESSPlots, CHESSPlotsBase, det_methods, lcs_methods,
+    %   pros_methods.
 
     methods (Static)
 
         function data_out = pull_data(query_names, ds)
-            % ds: Can be CHESS variable: Resp, storm, project_forcing
-            % query_names: structure containing the following fields
-            %   - storm_type: 'XC', 'TC' or 'CC'
-            %   - data_type: 'Peaks' or 'Timeseries'
-            %   - match_type: 'Default', 'WLP' or 'WHP'
+            % pull_data  Return one dataset of a storm, Resp or project_forcing struct.
+            %   data_out = aux_methods.pull_data(query_names, ds)
+            %
+            %   Inputs:
+            %     query_names - struct with fields storm_type ('XC', 'TC' or
+            %                   'CC'), data_type ('Peaks' or 'Timeseries') and
+            %                   match_type ('Default', 'WLP' or 'WHP';
+            %                   Timeseries always uses 'Default')
+            %     ds          - storm database "storm"
+            %                   (ds.<storm_type>.<data_type>.<match_type>), or
+            %                   Resp / project_forcing
+            %                   (ds.<data_type>.<match_type>.<storm_type>)
+            %   Outputs:
+            %     data_out - the requested dataset; a missing level errors
+            %                with the original message
+
             storm_type=query_names.storm_type;
             data_type=query_names.data_type;
             % Exception cases
@@ -39,16 +65,27 @@ classdef aux_methods
         end
 
         function ax = initiate_axes(parent, x_label, y_label, title_str, base_fnt, varargin)
-            % initiate_axes Initializes and formats a uiaxes object for CHESS plots.
+            % initiate_axes  Create or reset axes formatted for a CHESS plot.
+            %   ax = aux_methods.initiate_axes(parent, x_label, y_label, title_str, base_fnt)
+            %   ax = aux_methods.initiate_axes(parent, x_label, y_label, title_str, base_fnt, row, col)
+            %       clears the axes, turns grids, minor ticks, box and hold
+            %       on, and writes the title and labels with the LaTeX
+            %       interpreter (latex_escape). ax.Tag is 'chess_fig'.
             %
-            % Inputs:
-            %   parent    - Parent container (uifigure or uigridlayout) or an existing uiaxes handle.
-            %   x_label   - String or cell array for the X-axis label.
-            %   y_label   - String or cell array for the Y-axis label.
-            %   title_str - String or cell array for the plot title.
-            %   base_fnt  - Base font size for the title (labels and ticks are scaled relative to this).
-            %   row       - (Optional) Grid row for the axes layout.
-            %   col       - (Optional) Grid column for the axes layout.
+            %   Inputs:
+            %     parent    - existing axes or uiaxes (reused), uifigure or
+            %                 classic figure (new axes), uigridlayout (new
+            %                 uiaxes at row, col), or [] / deleted handle (new
+            %                 uifigure with a 1 x 1 grid)
+            %     x_label   - X-axis label, char, string or cell array
+            %     y_label   - Y-axis label, char, string or cell array
+            %     title_str - plot title, char, string or cell array
+            %     base_fnt  - base font size [pt]: labels base_fnt, title
+            %                 base_fnt + 2, ticks base_fnt - 2
+            %     row, col  - (optional, both or neither) grid row and column
+            %                 when parent is a uigridlayout (default 1, 1)
+            %   Outputs:
+            %     ax - the formatted axes
 
             % Parse Optional Inputs 
             if length(varargin)==2
@@ -63,7 +100,7 @@ classdef aux_methods
             if isempty(parent) || ~isvalid(parent)
                 % Default TO GridLayout
                 fig = uifigure('Name', 'CHESS Figure', 'Position', [100 100 1000 600]);
-                % Create the nested-style 1x2 grid we've been using
+                % 1 x 1 Grid Holding The New Axes
                 parent = uigridlayout(fig, [1 1]);
                 parent.ColumnWidth = {'1x'}; % Dedicated Colorbar Column
                 parent.Padding = [10 10 10 10];
@@ -121,11 +158,24 @@ classdef aux_methods
         end
 
         function out = latex_escape(str)
-            % LATEX_ESCAPE Display String Valid For The LaTeX Interpreter (Titles / Axis Labels Only; Never Field Names).
-            %   Outside $...$ math segments: # % & _ escaped, ^ -> \^{}, a lone \ -> \textbackslash{}, | -> $|$
-            %   (text-mode | renders as an em dash in LaTeX's OT1 font); an unpaired $ is escaped. Math segments, \-commands and already escaped characters (\%, \_) are kept, so mixed labels
-            %   (e.g. response_library_headers.m: '$R_{2\%}$ [m]') pass unchanged and escaping twice changes nothing.
-            %   Accepts char, string or cell arrays of them (same shape out); other types are returned as given.
+            % latex_escape  Escape text for the LaTeX interpreter (titles and axis labels).
+            %   out = aux_methods.latex_escape(str)
+            %
+            %   For titles and axis labels only, never for field names.
+            %   Outside $...$ math segments: # % & _ are escaped, ^ ->
+            %   \^{}, a lone \ -> \textbackslash{}, | -> $|$ (text-mode |
+            %   renders as an em dash in the LaTeX OT1 font); an unpaired $
+            %   is escaped. Math segments, \-commands and already escaped
+            %   characters (\%, \_) are kept, so mixed labels (e.g.
+            %   response_library_headers: '$R_{2\%}$ [m]') pass unchanged
+            %   and escaping twice changes nothing.
+            %
+            %   Inputs:
+            %     str - char, string or cell array of them; other types
+            %           are returned as given
+            %   Outputs:
+            %     out - escaped text, same class and shape as str
+
             if iscell(str)
                 out = cellfun(@aux_methods.latex_escape, str, 'un', false);
                 return
@@ -175,7 +225,16 @@ classdef aux_methods
         end
 
         function display_no_data(ax, base_fnt, msg)
-            % Puts a red "No data available" (or msg) label at the centre of ax.
+            % display_no_data  Write a red "No data available" note at the centre of axes.
+            %   aux_methods.display_no_data(ax, base_fnt)
+            %   aux_methods.display_no_data(ax, base_fnt, msg)
+            %
+            %   Inputs:
+            %     ax       - target axes
+            %     base_fnt - font size of the note [pt]
+            %     msg      - (optional) note text (default 'No data available')
+
+
             if nargin < 3, msg = 'No data available'; end
             text(ax, 0.5, 0.5, msg, ...
                 'Units',               'normalized', ...
@@ -188,9 +247,21 @@ classdef aux_methods
         end
 
         function pad_limits(ax, which, data, frac)
-            % PAD_LIMITS Sets ax X/Y limits to the data range plus a buffer, so points never sit on the axis edge.
-            %   which: 'X' or 'Y'. data: values plotted on that axis. frac: buffer per side (default 0.05).
-            %   Log axes are padded in decades; a flat signal gets +/-5% of its magnitude (or +/-0.05 if zero).
+            % pad_limits  Set axis limits to the data range plus a buffer.
+            %   aux_methods.pad_limits(ax, which, data)
+            %   aux_methods.pad_limits(ax, which, data, frac) sets the X or
+            %       Y limits of ax so plotted points never sit on the axis
+            %       edge. Log axes are padded in decades; a flat signal
+            %       gets +/-5% of its magnitude (or +/-0.05 if zero). No
+            %       finite data (positive on log axes): limits unchanged.
+            %
+            %   Inputs:
+            %     ax    - target axes
+            %     which - 'X' or 'Y'
+            %     data  - values plotted on that axis
+            %     frac  - (optional) buffer per side as a fraction of the
+            %             range (default 0.05)
+
             if nargin < 4, frac = 0.05; end
             data = data(isfinite(data));
             is_log = strcmp(ax.([which 'Scale']), 'log');
@@ -207,7 +278,15 @@ classdef aux_methods
         end
 
         function out = tern(cond, a, b)
-            % TERN Ternary helper: returns a if cond is true, else b.
+            % tern  Ternary helper: return a if cond is true, else b.
+            %   out = aux_methods.tern(cond, a, b)
+            %
+            %   Inputs:
+            %     cond - logical scalar
+            %     a, b - values returned when cond is true or false
+            %   Outputs:
+            %     out - a or b
+
             if cond
                 out = a;
             else
@@ -216,6 +295,18 @@ classdef aux_methods
         end
 
         function unitLib = build_unit_library(unit_system)
+            % build_unit_library  Unit conversion factors and symbols of a unit system.
+            %   unitLib = aux_methods.build_unit_library(unit_system)
+            %
+            %   Inputs:
+            %     unit_system - 'SI' or 'Imperial' (anything else errors)
+            %   Outputs:
+            %     unitLib - struct with conversionCoeffs (length, mass,
+            %               density, force, pressure: factors to the other
+            %               system) and unitSymbols (the same fields: symbols
+            %               of unit_system); CHESSPlotsBase uses
+            %               unitSymbols.length in axis labels
+
             switch unit_system
                 case 'SI'
                     % Define Conversion Factors For Fundamental Units

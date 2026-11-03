@@ -1,49 +1,51 @@
 function loc = savepoint_grid_row(files, sp_ID, sp_coords)
-%{
-    %% DESCRIPTION
-        Study grid row of a savepoint: the one lookup shared by the TC
-        probability masses (chs_probability_mass_loader.m) and the storm
-        database bias & uncertainty / offshore elevation
-        (storm_db_bias_uncertainty.m). Prints nothing.
-        Study grid (chs_dependency_files.m): [ID Node Lat Lon Value] (5
-        columns), [ID Lat Lon Value] (4) or [ID Lat Lon] (3, no value).
-        Resolution:
-          - staID grids: savepoint ID in column 1; CHS-LA (study grid rows
-            are ADCIRC nodes): savepoint -> ADCIRC node through the savepoint
-            node map file, node in column 2. The ID match is used when it
-            is unique; otherwise (ID missing or repeated, e.g. the CHS-TX
-            grid) the grid point nearest to sp_coords.
-          - nodeID grids (CHS-NA: mesh nodes, no savepoint IDs): the grid
-            point nearest to sp_coords only.
-        Nearest: great-circle distance (haversine_km.m), ties to the first
-        row.
-        Errors: no study grid file, or no CHS-LA savepoint node map when
-        the ID is needed (savepoint_grid_row:gridNotFound, naming the
-        folder); nodeID grid without coordinates
-        (savepoint_grid_row:noCoordinates); no unique ID match and no
-        coordinates (savepoint_grid_row:spNotFound, naming the file
-        searched).
-
-    %% INPUTS
-        files: chs_dependency_files.m output of the region. | struct
-        sp_ID: CHS ADCIRC savepoint ID. | double | 1 x 1
-        sp_coords: Savepoint [latitude longitude] in degrees ([] or NaN: | double | 1 x 2
-                   not available).
-
-    %% OUTPUTS
-        loc: | struct
-            row: Study grid row.
-            lat, lon: Grid point coordinates [deg].
-            value: Grid value column of the row (depth, positive down; []
-                   for grids without a value column).
-            method: 'id' (savepoint ID matched) | 'nearest'.
-            distance_m: Distance from sp_coords to the grid point [m] ([]
-                        without coordinates).
-            grid_name: Study grid file name (with extension).
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% savepoint_grid_row  Study grid row of a CHS savepoint (ID match, else nearest).
+%   loc = savepoint_grid_row(files, sp_ID, sp_coords)
+%
+%   Study grid row of a savepoint: the one lookup shared by the TC
+%   probability masses (chs_probability_mass_loader) and the storm
+%   database bias & uncertainty / offshore elevation
+%   (storm_db_bias_uncertainty). Prints nothing.
+%   Study grid (chs_dependency_files): [ID Node Lat Lon Value] (5
+%   columns), [ID Lat Lon Value] (4) or [ID Lat Lon] (3, no value).
+%   Resolution:
+%     - staID grids: savepoint ID in column 1; CHS-LA (study grid rows
+%       are ADCIRC nodes): savepoint -> ADCIRC node through the savepoint
+%       node map file, node in column 2. The ID match is used when it is
+%       unique; otherwise (ID missing or repeated, e.g. the CHS-TX grid)
+%       the grid point nearest to sp_coords.
+%     - nodeID grids (CHS-NA: mesh nodes, no savepoint IDs): the grid
+%       point nearest to sp_coords only.
+%   Nearest: great-circle distance (haversine_km), ties to the first row.
+%   Errors: no study grid file, or no CHS-LA savepoint node map when the
+%   ID is needed (savepoint_grid_row:gridNotFound, naming the folder);
+%   nodeID grid without coordinates (savepoint_grid_row:noCoordinates);
+%   no unique ID match and no coordinates (savepoint_grid_row:spNotFound,
+%   naming the file searched).
+%
+%   Inputs:
+%     files     - chs_dependency_files output of the region, struct
+%     sp_ID     - CHS ADCIRC savepoint ID, scalar double
+%     sp_coords - savepoint [latitude longitude] [deg] ([] or NaN: not
+%                 available), 1x2 double
+%   Outputs:
+%     loc - study grid point, struct; fields:
+%             row        - study grid row, double
+%             lat, lon   - grid point coordinates [deg], double
+%             value      - grid value column of the row (depth [m,
+%                          study datum, positive down]; [] for grids
+%                          without a value column), double
+%             method     - 'id' (savepoint ID matched) or 'nearest', char
+%             distance_m - distance from sp_coords to the grid point [m]
+%                          ([] without coordinates), double
+%             grid_name  - study grid file name (with extension), char
+%
+%   Tier: internal
+%
+%   See also chs_dependency_files, haversine_km, storm_db_bias_uncertainty,
+%   chs_probability_mass_loader.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 region = files.region;
 if ~files.study_grid_available
     error('savepoint_grid_row:gridNotFound', 'No %s study grid file (%s_nodeID*.mat or %s_staID*.mat) found in %s.',...

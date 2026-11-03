@@ -1,13 +1,57 @@
 function [cData] = chs_h5_converter(Filein) %#ok<INUSL>
-% This MATLAB function converts any Coastal Hazards System (CHS) Project
-% Files and Imports to MATLAB Enviorment
+% chs_h5_converter  Read a Coastal Hazards System (CHS) .h5 file into MATLAB.
+%   cData = chs_h5_converter(Filein)
+%
+%   Converts any Coastal Hazards System (CHS) project file (.h5) and
+%   imports it into the MATLAB environment. The region, data type and
+%   storm type come from the file name (CHS file name rule,
+%   chs_file_name_parts), the file layout version from the file
+%   attributes. A single-entry file with a 'Landfall Time' column (or of
+%   version 3) gets a yyyymmddHHMM datetime column after 'Storm Name',
+%   and numeric storm IDs become text. Great Lakes regions
+%   (mean_lake_level not 0): the ADCIRC 'Water Elevation' gets the
+%   'Steric Adjustment' of each storm group and the mean lake level
+%   added. Used per file by convert_chs_zip.
+%
+%   Inputs:
+%     Filein - CHS .h5 file, name with the .h5 extension (folder allowed)
+%              following the CHS file name rule, e.g.
+%              NACCS_TS_SimB_Post0_SP00008_ADCIRC01_Timeseries.h5, char
+%   Outputs:
+%     cData - converted file, struct (1 x number_of_curves for a hazard
+%             curve file (AEP, AEF, AEFcond) with several curves, else
+%             1x1); fields:
+%               Attributes             - file (root) HDF5 attributes
+%                                        (h5info: Name, Value, ...), struct
+%                                        array; files with attributes only
+%               headers                - column names, 1 x
+%                                        number_of_columns cell
+%               units                  - column units, 1 x
+%                                        number_of_columns cell
+%               StormData              - data, one row per storm or curve
+%                                        (Timeseries cells hold the
+%                                        series), cell
+%               Table_StormData        - StormData as a table (variable
+%                                        names = headers), table
+%               Storm_Data_Description - dataset names and descriptions
+%                                        (version 2/3 files with datasets),
+%                                        cell
+%               StormData_Description  - hazard curve group attributes,
+%                                        struct
+%               Parameter              - hazard curve group name (files
+%                                        with several curves), char
+%             SRR files also hold headers2, units2, StormData2 and
+%             Table_StormData2 (Storm Relative Probabilities), NLR files
+%             header2.
+%
+%   Tier: public
+%
+%   See also convert_chs_zip, chs_file_name_parts, call_chs_data_formatter,
+%   mean_lake_level.
+%
+%   Developed by: Fabian Garcia-Moreno, USACE-ERDC-CHL
 
-% Variables:
-%       Filein= Name of the file to be read, include the .h5 extension
-%               Ex. NACCS_TS_SimB_Post0_SP00008_ADCIRC01_Timeseries.h5
-
-%       Filename:  chs_h5_converter.m
-
+% HISTORY:
 %  Written By:  Fabian Garcia-Moreno, USACE-ERDC-CHL, Vicksburg, MS 39180
 %  Date:  April 27, 2021
 %  Last Modified: August 19, 2026

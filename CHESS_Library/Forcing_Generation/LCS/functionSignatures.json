@@ -1,0 +1,11 @@
+{
+  "_schemaVersion": "1.0.0",
+  "lcs_sampling_seed_file": {
+    "inputs": [
+      {"name": "pf_file", "kind": "required", "type": ["file=*.mat"], "purpose": "Project forcing file (<prefix>_project_forcing.mat)"}
+    ],
+    "outputs": [
+      {"name": "seed_file", "type": ["char"]}
+    ]
+  }
+}

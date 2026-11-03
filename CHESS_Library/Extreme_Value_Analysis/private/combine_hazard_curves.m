@@ -1,4 +1,42 @@
 function [aep_out] = combine_hazard_curves(tc_prob, xc_prob, xc_resp_vector, aep_list, log_scale, prc, u_a, resp_var)
+% combine_hazard_curves  Combined (CC) response at given AEPs from TC and XC.
+%   aep_out = combine_hazard_curves(tc_prob, xc_prob, xc_resp_vector,
+%       aep_list, log_scale, prc, u_a, resp_var)
+%
+%   Best estimate (column 1): at every response level of xc_resp_vector
+%   the XC and TC best-estimate AEPs are added (zero/NaN taken as 0); the
+%   response is interpolated linearly in log(AEP) at aep_list (with
+%   extrapolation; values <= 0 set to NaN). CL columns: for registry rows
+%   with cc_confidence_limit_method 'als_relative', BE*(1 + z*u_a) with z
+%   the standard normal score of prc; otherwise the TC curves alone give
+%   the offset of each CL from the TC best estimate, applied to the
+%   combined best estimate (a difference when log_scale = 0, a log10
+%   ratio when log_scale = 1).
+%
+%   Inputs:
+%     tc_prob        - TC AEP per response level, one column per CL
+%                      (call_hazard_curve_builder tbl_rsp_x),
+%                      number_of_levels x number_of_CLs double
+%     xc_prob        - XC AEP per response level (tbl_rsp_x), same size
+%                      as tc_prob
+%     xc_resp_vector - response levels of both tables (tbl_rsp_y)
+%                      [response units], number_of_levels x 1 double
+%     aep_list       - AEPs to evaluate [-], vector
+%     log_scale      - y axis log scale flag of the variable (0/1), scalar
+%     prc            - CL percentiles of the columns, [50 project_CLs]
+%                      [%], 1 x number_of_CLs double
+%     u_a            - relative uncertainty for the 'als_relative' CLs
+%                      [-], scalar ([] otherwise)
+%     resp_var       - variable name (registry name), char
+%   Outputs:
+%     aep_out - combined response at aep_list [response units],
+%               numel(aep_list) x number_of_CLs double
+%
+%   Tier: internal
+%
+%   See also call_hazard_curve_combiner, call_hazard_curve_builder,
+%   response_registry.
+
 % Initialize Out Var
 aep_out = NaN(length(aep_list), size(xc_prob, 2));
 % Loop Through Each CL

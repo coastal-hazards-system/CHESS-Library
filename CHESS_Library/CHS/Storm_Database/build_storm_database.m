@@ -1,60 +1,74 @@
 function [storm, prob_mass, db_info] = build_storm_database(CHS_Data, options)
-%{
-    %% DESCRIPTION
-        Builds the storm database (storm, prob_mass, db_info) from converted
-        CHS files. The one builder of the library (call_chs_data_formatter.m)
-        and the GUI storm database wizard (CHSStormDBImportUI.create_storm_database),
-        so both give the same database from the same input. Steps, TC first:
-            1. TC probability masses (chs_probability_mass_loader.m).
-            2. Per storm type: format, match and screen the CHS files
-               (call_chs_storm_quality_check.m; TC SWL bias correction with
-               the database bias when the region's bias & uncertainty files
-               exist).
-            3. Per storm type with Peaks and Timeseries: hydrograph peaks
-               replaced by the Peaks file values (chs_timeseries_peak_replacer.m).
-            4. db_info (storm_db_info.m 'create').
-        Data types and WLP/WHP datasets are decided per storm type from the
-        storm file slots (chs_storm_file_slots.m): Peaks / Timeseries when
-        that storm type's slot is complete; WLP / WHP when requested and
-        that storm type has both Peaks and Timeseries.
-        Bias & uncertainty (CHS_Dependencies or manual), the CHS_Dependencies
-        availability decision (which storm types to build), the forcing
-        cache reset, the datum adjustment and the saves stay with the
-        callers.
-
-    %% INPUTS
-        CHS_Data: Converted CHS files (Filename, Conv_Data; folders in         | struct | 1 x number_of_files
-                  Filename are dropped before the file selection).
-        options.
-            chs_dependencies: CHS_Dependencies folder.                         | char
-            region: CHS region (e.g. 'CHS-NA').                                 | char
-            sp_ID: ADCIRC savepoint ID.                                         | double | 1 x 1
-            storm_types: Storm types to build ('TC' and/or 'XC').              | cell
-            storm_file_slots: Storm file slots of the input                     | table
-                              (chs_storm_file_slots.m slots output).
-            create_wlp: Build the Water Level Priority dataset. (0/1)          | double | 1 x 1
-            create_whp: Build the Wave Height Priority dataset. (0/1)          | double | 1 x 1
-            bias_uncertainty: Bias & uncertainty and savepoint location of     | struct
-                              the database (storm_db_bias_uncertainty.m);
-                              chs_swl_b_a/_b_r drive the TC bias correction;
-                              sp_lat/sp_lon locate the savepoint for the TC
-                              probability masses (chs_probability_mass_loader.m).
-            source_file: Input the database is built from (name + extension). | char
-            print_progress: Print progress to the command window. (0/1)        | double | 1 x 1
-            progress_fcn: Called before each step as                            | function_handle | 1 x 1
-                          progress_fcn(fraction, message), fraction in [0 1)
-                          ([]: none). An error raised there stops the build
-                          (GUI cancel: 'CHESS:importCancelled').
-
-    %% OUTPUTS
-        storm: Storm database (storm.TC / storm.XC: Peaks, Timeseries,        | struct
-               removed_storms; chs_peaks_formatter.m row layout).
-        prob_mass: TC probability masses ([] without TC).                       | struct
-        db_info: Storm database details (storm_db_info.m).                      | struct
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% build_storm_database  Build the storm database (storm, prob_mass, db_info).
+%   [storm, prob_mass, db_info] = build_storm_database(CHS_Data, options)
+%
+%   Builds the storm database from converted CHS files. The one builder
+%   of the library (call_chs_data_formatter) and the GUI storm database
+%   wizard (CHSStormDBImportUI.create_storm_database), so both give the
+%   same database from the same input. Steps, TC first:
+%       1. TC probability masses (chs_probability_mass_loader).
+%       2. Per storm type: format, match and screen the CHS files
+%          (call_chs_storm_quality_check; TC SWL bias correction with the
+%          database bias when the region's bias & uncertainty files
+%          exist).
+%       3. Per storm type with Peaks and Timeseries: hydrograph peaks
+%          replaced by the Peaks file values (chs_timeseries_peak_replacer).
+%       4. db_info (storm_db_info 'create').
+%   Data types and WLP/WHP datasets are decided per storm type from the
+%   storm file slots (chs_storm_file_slots): Peaks / Timeseries when that
+%   storm type's slot is complete; WLP / WHP when requested and that
+%   storm type has both Peaks and Timeseries. Bias & uncertainty
+%   (CHS_Dependencies or manual), the CHS_Dependencies availability
+%   decision (which storm types to build), the forcing cache reset, the
+%   datum adjustment and the saves stay with the callers.
+%
+%   Inputs:
+%     CHS_Data - converted CHS files (Filename, Conv_Data; folders in
+%                Filename are dropped before the file selection),
+%                1 x number_of_files struct
+%     options  - build settings, struct; fields (all required):
+%                  .chs_dependencies - CHS_Dependencies folder, char
+%                  .region           - CHS region (e.g. 'CHS-NA'), char
+%                  .sp_ID            - ADCIRC savepoint ID, scalar double
+%                  .storm_types      - storm types to build ('TC' and/or
+%                                      'XC'), cell
+%                  .storm_file_slots - storm file slots of the input
+%                                      (chs_storm_file_slots slots
+%                                      output), table
+%                  .create_wlp       - build the Water Level Priority
+%                                      dataset (0/1), scalar double
+%                  .create_whp       - build the Wave Height Priority
+%                                      dataset (0/1), scalar double
+%                  .bias_uncertainty - bias & uncertainty and savepoint
+%                                      location of the database
+%                                      (storm_db_bias_uncertainty output),
+%                                      struct; chs_swl_b_a/_b_r drive the
+%                                      TC bias correction, sp_lat/sp_lon
+%                                      locate the savepoint for the TC
+%                                      probability masses
+%                  .source_file      - input the database is built from
+%                                      (name + extension), char
+%                  .print_progress   - print progress to the command
+%                                      window (0/1), scalar double
+%                  .progress_fcn     - called before each step as
+%                                      progress_fcn(fraction, message),
+%                                      fraction in [0 1) ([]: none); an
+%                                      error raised there stops the build
+%                                      (GUI cancel: 'CHESS:importCancelled'),
+%                                      function_handle
+%   Outputs:
+%     storm     - storm database (storm.TC / storm.XC: Peaks, Timeseries,
+%                 removed_storms; chs_peaks_formatter row layout), struct
+%     prob_mass - TC probability masses (Param, TC_SRR, TC_Freq,
+%                 TotalFreq, smpl1, smpl2, smpl3; [] without TC), struct
+%     db_info   - storm database details (storm_db_info), struct
+%
+%   Tier: internal
+%
+%   See also call_chs_data_formatter, storm_db_info,
+%   storm_db_bias_uncertainty, chs_storm_file_slots, convert_chs_zip.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 CHS_Data = strip_chs_data_folders(CHS_Data);
 storm_types = reshape(intersect({'TC', 'XC'}, options.storm_types, 'stable'), 1, []);
 slots = options.storm_file_slots;

@@ -1,32 +1,58 @@
 function [config, structure] = call_input_parser(input_filename)
-%{
-    %% DESCRIPTION
-    This function parses CHESS's project input file and creates "config"
-    data structure. Variable names are controlled by symbols in "str_ref"
-    column.
-    CHS input (.zip / CHS_Data .mat): the storm files are checked by name
-    (chs_storm_file_slots.m: one study identity, chs_study_identity.m, and
-    one ADCIRC + one wave file per slot) before any unzip, and a TC/CC request needs
-    CHS_Dependencies TC statistics for the region (chs_dependency_files.m).
-    A .zip input is never unzipped here: the savepoint depth is read from
-    the first ADCIRC .h5 entry alone, extracted to a system temp folder
-    (tempname) removed before returning; call_chs_data_formatter.m unzips
-    the input when it converts it.
-    Storm .mat input (storm + prob_mass): validated, checked against this
-    run's request and saved as the storm database with its db_info
-    (storm_db_info.m; Nyrs_XC/Nstm_XC moved out of storm.XC). An existing
-    storm database's db_info is applied to config.
-
-    %% INPUTS
-    fname: CHESS project input file name.
-    
-    %% OUTPUTS
-    config: MATLAB data structure containing input file data parsed out as
-    individual strucutre fields.
-    
-    %R DEV SIGNATURE
-    Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% call_input_parser  Parse a CHESS input file into config and structure.
+%   [config, structure] = call_input_parser(input_filename) reads the CHESS
+%   project input file (read_chess_input), checks the storm data given in
+%   chs_zip, prepares the storm database and run folders, applies the
+%   configuration rules and builds the structure geometry. First step of
+%   the CHESS pipeline.
+%
+%   Every section row of the input file becomes a config field named by its
+%   'Model Variable Symbol' (last row wins); gravity_constant is set from
+%   standard_gravity. workflow must be a chess_workflows number (1 PROS-RB,
+%   2 DET, 3 LCS, 4 PROS-FB). The storm data in chs_zip is one of:
+%     CHS input (.zip or a CHS_Data .mat) - the storm files are checked by
+%       name (chs_storm_file_slots: one study identity, chs_study_identity,
+%       and one ADCIRC + one wave file per slot) against this run's request
+%       before any decompression or conversion; region, sp_ID and
+%       sp_ID_wave come from the file names, and a TC/CC request needs the
+%       CHS_Dependencies TC statistics of the region (chs_dependency_files).
+%       A .zip input is not decompressed here: the savepoint coordinates
+%       (sp_lat, sp_lon) are read from the HDF5 attributes of the first
+%       ADCIRC .h5 entry alone (zip_h5_attributes), and
+%       call_chs_data_formatter decompresses the input when it converts it.
+%       A CHS_Data .mat gives the coordinates from its attributes
+%       (chs_data_attributes) and is saved (when not saved yet) as the raw
+%       file of the storm database. Coordinates not found are NaN (the
+%       storm database build then matches the savepoint ID in the study
+%       grid).
+%     Storm .mat input (storm + prob_mass) - region and sp_ID from the file
+%       name (storm_mat_name_parts; else 'Custom_Modeling' and 1), storm_db
+%       defaults to the file name. Unless the storm database exists with a
+%       db_info, the data are validated, checked against this run's request
+%       and saved as the storm database with its db_info (storm_db_info;
+%       Nyrs_XC/Nstm_XC moved out of storm.XC).
+%   An existing storm database's db_info is applied to config. The storm
+%   database folder and the workflow folder of the alternative are created
+%   (chess_paths). finalize_structure_config, finalize_config and
+%   call_environment_setup (welcome banner when no storm database file
+%   exists yet, hotstart state, structure geometry, config file saved) run
+%   last.
+%
+%   Inputs:
+%     input_filename - CHESS project input file (.xlsx or .csv), char or
+%                      string
+%   Outputs:
+%     config         - CHESS configuration, 1x1 struct (one field per input
+%                      row plus the derived fields)
+%     structure      - structure geometry (create_structure_geometry), 1x1
+%                      struct
+%
+%   Tier: public
+%
+%   See also read_chess_input, chess_setup_path, call_chs_data_formatter,
+%   call_chess_boundary_conditions, call_project_response, chess_paths.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
 %% GRAB AND DEFINE INPUTS
 % Add Gravity Constant

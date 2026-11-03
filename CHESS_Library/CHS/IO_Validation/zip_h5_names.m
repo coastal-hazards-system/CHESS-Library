@@ -1,21 +1,26 @@
 function h5_names = zip_h5_names(zip_name)
-%{
-    %% DESCRIPTION
-        HDF5 file names in a zip folder (sorted, folders stripped, .h5
-        extension in any case, names kept as stored), read without
-        decompressing. macOS metadata (entries under __MACOSX/, names
-        starting with '._') is skipped. Shared by call_input_parser.m and
-        the GUI storm database wizard (storm file check before any unzip).
+% zip_h5_names  Names of the .h5 files in a zip file, without decompressing.
+%   h5_names = zip_h5_names(zip_name)
+%
+%   HDF5 file names in a zip folder (sorted, folders stripped, .h5
+%   extension in any case, names kept as stored), read without
+%   decompressing. macOS metadata (entries under __MACOSX/, names
+%   starting with '._') is skipped. A path that cannot be resolved or a
+%   file that is not a readable zip is an error (zip_h5_names:badZip).
+%   Shared by call_input_parser and the GUI storm database wizard (storm
+%   file check before any unzip).
+%
+%   Inputs:
+%     zip_name - zip folder (relative or full path), char
+%   Outputs:
+%     h5_names - .h5 file names (name + extension), n x 1 cell
+%
+%   Tier: internal
+%
+%   See also chs_storm_file_names, zip_h5_attributes, zip_extract_entry.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        zip_name: Zip folder (relative or full path). | char
-
-    %% OUTPUTS
-        h5_names: .h5 file names (name + extension). | cell | n x 1
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 % Absolute Path (Java Resolves Relative Paths Against Its Own Working Folder; exist() Also Finds Files On The MATLAB Path)
 zip_info = dir(zip_name);
 if isscalar(zip_info) && ~zip_info.isdir

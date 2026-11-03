@@ -1,84 +1,107 @@
 function [project_forcing, config] = chess_lcs(config, storm, prob_mass)
-%{
-INPUTS:
-    config (fields read):
-        storm_sampling                  'XC' (extratropical only), 'TC' (tropical only) or 'CC' (combined)
-        mcs_nLC, mcs_nYears             Number of life cycles, life cycle length [years]
-        Nstm_XC, Nyrs_XC                XC storm count and record length [years] (XC and CC sampling; XC rate)
-        storm_duration                  Event length [hours] (Peaks storm duration column)
-        compute_storm_duration          0 = config.storm_duration, 1 = per-storm SWL duration (Timeseries)
-        use_peaks, use_timeseries       Storm data types of the project (use_peaks = 0: Timeseries only; the
-                                        storm IDs are drawn from the Timeseries storms, no Peaks life cycles)
-        create_wlp, create_whp          Build the water level / wave height priority datasets
-        lcs_restrict_sampling_rate      Sampling mode (0 = full Poisson, 1 = rate matched)
-        load_project_forcing, ref_case_name, lcs_convergence_prompt, out_files
-                                        Reference case reuse, convergence check prompt, output files
-    storm       CHS storm data per storm type: storm.XC / storm.TC .Peaks / .Timeseries .Default / .WLP / .WHP
-                (Peaks read only with use_peaks = 1)
-    prob_mass   CHS probability masses (TC storm rate prob_mass.TC_SRR)
+% chess_lcs  Sample the LCS life cycles of the project forcing.
+%   [project_forcing, config] = chess_lcs(config, storm, prob_mass)
+%
+%   Life-cycle simulation (LCS, workflow 3) forcing build, called by
+%   build_boundary_conditions. Draws mcs_nLC life cycles of mcs_nYears
+%   years per storm type: XC storms with sample_xc_storm (Poisson storm
+%   counts, uniform storm draw, Gaussian copula peak values), TC storms
+%   with sample_tc_storm (Poisson storm counts, intensity bin by
+%   recurrence rate, storm by probability mass). CC also holds, per life
+%   cycle, the TC and XC life cycles combined and sorted by year, order
+%   and bin.
+%
+%   Sampling mode lcs_restrict_sampling_rate: 0 = full Poisson (a life
+%   cycle can hold no storms), 1 = rate matched (life cycles hold
+%   rate x mcs_nYears +/- 1 storms). Before sampling, a storm rate <= 0,
+%   or rate x mcs_nYears <= 1 in mode 1, stops with chess_lcs:rateTooLow.
+%   In mode 0 the storm types sampled fresh get the convergence check
+%   (lcs_convergence_checks); a mcs_nLC below the required count prompts
+%   (lcs_convergence_prompt = 1; cancel errors chess_lcs:notConverged)
+%   or warns.
+%
+%   Reuse (lcs_reference_reuse): with load_project_forcing = 1 the storm
+%   types held by the sampling seed file of the reference case
+%   (ref_case_name) are reused; otherwise, with hotstart level
+%   'reuse_sampling', this case's own sampling seed file. Reused storms
+%   keep the seed's sampling mode (lcs_effective_sampling_rate). Peak
+%   values of reused storms come from the storm database, except XC
+%   copula values, taken from the seed's xc_peaks when they match. The
+%   tide start hours tide_indx_<type> are cleared unless the storm type is
+%   this case's own reused sampling.
+%
+%   Matching methods (create_wlp / create_whp, Peaks only):
+%     XC: WLP and WHP life cycles are an exact copy of the Default XC life
+%         cycles (same storms, same copula-sampled values; the copula is
+%         never re-sampled), fresh sampling and reuse alike.
+%         storm.XC.Peaks.WLP/WHP are not read.
+%     TC: WLP and WHP life cycles hold the same sampled storms as Default
+%         with each storm's WLP/WHP database values.
+%     CC: TC and XC life cycles of each matching method combined.
+%
+%   Life-cycle matrices (column map: lcs_columns):
+%     Peaks (use_peaks = 1), nEvents x 10: id, bin (0 = XC; 1, 2, 3 = TC
+%       low, mid, high intensity), year (1 to mcs_nYears), order (storm
+%       number within the year), SWL [m, study datum], Hm0_toe [m] (equal
+%       to Hm0_offshore here; depth limited later by
+%       adjust_project_forcing), Hm0_offshore [m], Tp [s], wDir [deg; N=0,
+%       E=+90, S=+/-180, W=-90], storm_duration [days] (storm_duration/24;
+%       the storm database has none). No dt.
+%     Timeseries (use_timeseries = 1, Default only), one row per time step
+%       of each sampled storm's hydrograph, nRows x 12: columns 1-9 as
+%       Peaks (values from the storm's Timeseries), dt [days] (row time
+%       step), step (0 to n-1 per storm), storm_duration [days] (per storm,
+%       on every row: storm_duration/24, or the storm's SWL duration with
+%       compute_storm_duration = 1, timeseries_storm_durations).
+%
+%   use_peaks = 0 (Timeseries only): no Peaks life cycles; the samplers
+%   draw the storm IDs from the Timeseries storms (same Poisson /
+%   randsample draws as with Peaks) and the XC copula is not run.
+%
+%   File written (when out_files.project_forcing is set): the sampling
+%   seed file (lcs_sampling_seed_file) with lcs_restrict_sampling_rate
+%   (effective mode), sampled_ids.XC/.TC (per life cycle [storm ID, bin,
+%   year, order], empty life cycles included) and, with XC sampling and
+%   use_peaks = 1, xc_peaks.Default (raw XC copula life cycles, before
+%   uncertainty and adjustment).
+%
+%   Inputs:
+%     config    - CHESS configuration, 1x1 struct; reads storm_sampling
+%                 ('XC', 'TC' or 'CC'), mcs_nLC, mcs_nYears [years],
+%                 Nstm_XC and Nyrs_XC [years] (XC rate Nstm_XC/Nyrs_XC),
+%                 storm_duration [hours], compute_storm_duration (0/1,
+%                 missing = 0), use_peaks, use_timeseries, create_wlp,
+%                 create_whp, lcs_restrict_sampling_rate (0/1),
+%                 load_project_forcing, ref_case_name, hotstart_level
+%                 (optional), lcs_convergence_tol,
+%                 lcs_convergence_confidence, project_CLs,
+%                 lcs_convergence_prompt, out_files.project_forcing and the
+%                 chess_paths fields read by lcs_reference_reuse
+%     storm     - storm database request (call_chs_data_formatter),
+%                 storm.<XC|TC>.<Peaks|Timeseries>.<Default|WLP|WHP>
+%                 (storm ID x data cells); Peaks read only with
+%                 use_peaks = 1, XC WLP/WHP never read, struct
+%     prob_mass - TC probability masses (TC_SRR, TC_Freq, smpl1, smpl2,
+%                 smpl3; see sample_tc_storm), struct; unused for XC
+%   Outputs:
+%     project_forcing - life cycles,
+%                       project_forcing.Peaks.<Default|WLP|WHP>.<st>{lc}
+%                       and project_forcing.Timeseries.Default.<st>{lc}
+%                       (st = the sampled storm types, plus CC for CC
+%                       sampling; lc = 1 to mcs_nLC, mcs_nLC x 1 cell of
+%                       double matrices as above); WLP/WHP only when
+%                       requested, no Peaks with use_peaks = 0, struct
+%     config          - input config plus lcs_effective_sampling_rate
+%                       (0/1), lcs_convergence_results (check result per
+%                       checked storm type) and the cleared
+%                       tide_indx_<type> fields, struct
+%
+%   Tier: internal
+%
+%   See also build_boundary_conditions, sample_xc_storm, sample_tc_storm,
+%   lcs_reference_reuse, lcs_convergence_checks, lcs_sampling_seed_file,
+%   lcs_columns, timeseries_storm_durations.
 
-OUTPUTS HEADERS (Column Map: lcs_columns.m):
-    LC_MCSimOUT (project_forcing.Peaks, use_peaks = 1 only):
-        Size (# of events, 10) -> (Rows,Col)
-            (01) Storm ID                       [-]
-            (02) Storm type                     [0 = extratropical]
-            (03) Storm Year                     [-]
-            (04) Number of storm in storm year  [-]
-            (05) Water Level                    [meters, MSL]
-            (06) Wave Height At Toe             [meters] (Depth Limited By adjust_project_forcing)
-            (07) Wave Height Offshore           [meters] (Before Depth Limitation)
-            (08) Peak Wave Period               [seconds]
-            (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
-            (10) Storm Duration                 [days] (config.storm_duration; the storm DB has none; No Time Step)
-    LC_SimOUT_hyd:
-        First Level:
-            Size (# of LC's, 1) -> (Rows,Col)
-            Each row contains a matrix which size depends on the ammount of
-            storms sampled for that specific life cyccle.
-        Second Level:
-            (01) Storm ID                       [-]
-            (02) Storm type                     [0 = extratropical]
-            (03) Storm Year                     [-]
-            (04) Number of storm in storm year  [-]
-            (05) Water Level                    [meters, MSL]
-            (06) Wave Height At Toe             [meters]
-            (07) Wave Height Offshore           [meters]
-            (08) Peak Wave Period               [seconds]
-            (09) Wave Direction                 [degrees; N=0, E=+90, S=+/-180, W=-90]
-            (10) Time Step                      [days]
-            (11) Timestep Counter               [0:storm_tstp-1]
-            (12) Storm Duration                 [days] (Per Storm, On Every Row: config.storm_duration, Or The
-                                                        Storm's SWL Duration With compute_storm_duration = 1)
-    MC_indx:
-        First Level:
-            Size (# of LC's, 1) -> (Rows,Col)
-            Each row contains a vector which size depends on the ammount of
-            storms sampled for that specific life cyccle.
-        Second Level:
-            (01) Storm Year               [-]
-            (02) Storm Type               [-]
-            (03) Same Year Counter        [-]
-            (04) Storm ID                 [-]
-
-MATCHING METHODS (create_wlp / create_whp):
-    XC: WLP and WHP life cycles are an exact copy of the Default XC life
-        cycles (same storms, same copula-sampled values; the copula is
-        never re-sampled), fresh sampling and reuse alike.
-        storm.XC.Peaks.WLP/WHP are not read.
-    TC: WLP and WHP life cycles hold the same sampled storms as Default
-        with each storm's WLP/WHP database values.
-    CC: TC and XC life cycles of each matching method combined.
-
-SAMPLING SEED FILE (lcs_sampling_seed_file.m):
-    lcs_restrict_sampling_rate, sampled_ids.XC/.TC and, with XC sampling and
-    use_peaks = 1, xc_peaks.Default (raw XC copula life cycles, before
-    uncertainty and adjustment).
-
-use_peaks = 0 (TIMESERIES ONLY):
-    No Peaks life cycles: the samplers draw the storm IDs from the Timeseries
-    storms (same Poisson / randsample draws as with Peaks) and the XC copula is
-    not run.
-%}
 %% GRAB INPUT FROM "config"
 settings = read_life_cycle_settings(config);
 storm_sampling = settings.storm_sampling;

@@ -1,33 +1,70 @@
 function [config, storm, removed_storms, XC_Nyrs, XC_Nstm, prob_mass] = call_chs_storm_quality_check(config, CHS_Data, prob_mass, storm_type)
-
-%{
-    %% DESCRIPTION
-        This function is responsible for grabbing and applying QA/QC
-        process to the provbided CHS files. QA/QC revolves around:
-        searching for NaN's/flagged values and making sure storm wave model
-        output is contained within ADCIRC simulation outputs.
-        
-    %% INPUTS
-        CHS_Data: Converted CHS data. | struc | 1 x size_varies
-        ProbMass: Associated savepoint TC storm porbability | struc | 1 x 5
-                  masses.
-        storm_type: storm type being processed. ('TC' or 'XC') | char | 1 x 2
-        use_timeseries: Switch for using CHS timeseries for
-                        QA/QC process. Also, enables the use
-                        of WLP & WHP switches.
-        WLP_switch: Switch for creating Water Level Priority   | double | 1 x 1
-                    dataset.
-        WHP_switch: Switch for creating Wave Height Priority   | double | 1 x 1
-                    dataset.
-        
-    %% OUTPUTS
-        storm
-        removed_storms
-        XC_Nyrs
-      
-    %% DEV SIGNATURE
-    Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% call_chs_storm_quality_check  Format, match and screen CHS storm files.
+%   [config, storm, removed_storms, XC_Nyrs, XC_Nstm, prob_mass] =
+%       call_chs_storm_quality_check(config, CHS_Data, prob_mass, storm_type)
+%
+%   Builds the storm datasets of one storm type from converted CHS files;
+%   build_storm_database calls it per storm type, TC first. Peaks: the
+%   ADCIRC and wave model Peaks files are matched per storm ID
+%   (chs_peaks_formatter, Peaks.Default). Timeseries: the ADCIRC and wave
+%   model Timeseries are matched on an hourly time step
+%   (chs_timeseries_formatter, Timeseries.Default). With both data types,
+%   the Water Level Priority / Wave Height Priority Peaks datasets are
+%   built when requested (create_priority_dataset, Peaks.WLP /
+%   Peaks.WHP). The wave model columns come from
+%   chs_wave_model_header_locator.
+%   Screening: storms with NaN or flagged values, a one-value water level
+%   Timeseries or no common ADCIRC/wave time range are listed in
+%   removed_storms.Default and their rows are removed from the Default
+%   Peaks and Timeseries datasets; the WLP / WHP datasets drop the same
+%   rows. TC: the removed storms also leave prob_mass (Param, TC_Freq,
+%   smpl1, smpl2, smpl3; TC_Freq rescaled to TotalFreq), and the SWL is
+%   bias corrected when the region's bias & uncertainty files exist
+%   (chs_dependency_files bias_uncertainty_available). XC: never bias
+%   corrected; XC_Nstm and XC_Nyrs come from the ADCIRC Peaks file (else
+%   from the ADCIRC Timeseries file).
+%
+%   Inputs:
+%     config     - quality check settings (build_storm_database), 1x1
+%                  struct; fields:
+%                    use_peaks        - storm type has complete Peaks
+%                                       files (0/1), double
+%                    use_timeseries   - storm type has complete
+%                                       Timeseries files (0/1), double
+%                    create_wlp       - build the WLP dataset (0/1), double
+%                    create_whp       - build the WHP dataset (0/1), double
+%                    region           - CHS region, char
+%                    sp_ID            - ADCIRC savepoint ID, double
+%                    chs_dependencies - CHS_Dependencies folder, char
+%                    chs_swl_b_a      - SWL bias, absolute [m], double
+%                    chs_swl_b_r      - SWL bias, relative [-], double
+%                    print_progress   - print progress (0/1), double
+%     CHS_Data   - converted CHS files (Filename, Conv_Data),
+%                  1 x number_of_files struct
+%     prob_mass  - TC probability masses (chs_probability_mass_loader:
+%                  Param, TC_SRR, TC_Freq, TotalFreq, smpl1, smpl2,
+%                  smpl3), struct; not read for XC
+%     storm_type - storm type, 'TC' or 'XC', char
+%   Outputs:
+%     config         - input config; TC adds tc_bias_corrected (1 if the
+%                      SWL bias correction was applied, else 0), struct
+%     storm          - storm datasets of the storm type (Peaks.Default,
+%                      Peaks.WLP, Peaks.WHP, Timeseries.Default; rows
+%                      {storm ID, data}), struct
+%     removed_storms - IDs of the removed storms (field Default), struct
+%     XC_Nyrs        - XC record length [years] ([] for TC), double
+%     XC_Nstm        - XC storm count, before screening ([] for TC),
+%                      double
+%     prob_mass      - TC probability masses without the removed storms
+%                      ([] for XC), struct
+%
+%   Tier: internal
+%
+%   See also build_storm_database, chs_peaks_formatter,
+%   chs_timeseries_formatter, create_priority_dataset,
+%   chs_wave_model_header_locator, chs_probability_mass_loader.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
 %% GRAB INFORMATION FROM "config"
 use_timeseries = config.use_timeseries;

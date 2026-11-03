@@ -1,25 +1,32 @@
 function map_axes = plot_noaa_stations(catalog, polygon, parent)
-%{
-    %% DESCRIPTION
-        Map of NOAA CO-OPS stations (noaa_station_catalog.m or
-        select_noaa_stations.m rows) on geographic axes: active water level
-        stations, historical water level stations and predictions-only
-        harmonic stations in separate colors, plus the selection polygon
-        when one is given.
-
-    %% INPUTS
-        catalog: Station catalog rows to plot. | table
-        polygon: (Optional) Selection polygon: struct with fields lon and
-            lat [deg], or an N x 2 matrix [lon lat]; [] for none. | struct/double
-        parent: (Optional) Parent figure or panel (default a new
-            figure). | handle
-
-    %% OUTPUTS
-        map_axes: Geographic axes. | geoaxes
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% plot_noaa_stations  Map NOAA CO-OPS stations on geographic axes.
+%   map_axes = plot_noaa_stations(catalog)
+%   map_axes = plot_noaa_stations(catalog, polygon, parent)
+%
+%   Map of NOAA CO-OPS stations (noaa_station_catalog or
+%   select_noaa_stations rows) on geographic axes (satellite basemap):
+%   active water level stations, historical water level stations and
+%   predictions-only harmonic stations in separate colors, plus the
+%   selection polygon when one is given.
+%
+%   Inputs:
+%     catalog - station catalog rows to plot (noaa_station_catalog
+%               layout), table
+%     polygon - selection polygon (optional, default none; [] = none):
+%               struct with fields lon and lat [deg], or an N x 2 matrix
+%               [lon lat] [deg], struct or double
+%     parent  - parent figure or panel (optional, default a new figure;
+%               [] = default), graphics handle
+%   Outputs:
+%     map_axes - geographic axes, geoaxes
+%
+%   Tier: public
+%
+%   See also create_tide_file, download_noaa_tide_predictions,
+%   download_noaa_water_levels, noaa_station_catalog,
+%   noaa_station_details, select_noaa_stations.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 3 || isempty(parent)
     parent = figure();
 end

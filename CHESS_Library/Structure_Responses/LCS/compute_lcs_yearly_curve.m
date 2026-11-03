@@ -2,8 +2,35 @@
 
 
 function [Smax,SPcurves,yBox] = compute_lcs_yearly_curve(data, resp_vec, nYears)
-% COMPUTE_LCS_YEARLY_CURVE Calculates the expected yearly peak structural
-% response and statistical bounds across multiple simulated life cycles.
+% compute_lcs_yearly_curve  Yearly mean and percentiles of LCS storm maxima.
+%   [Smax, SPcurves, yBox] = compute_lcs_yearly_curve(data, resp_vec,
+%       nYears)
+%
+%   Takes the maximum of the response over each storm of every life cycle
+%   (Timeseries: from a row with step 0 to the row before the next storm;
+%   Peaks: one row per storm) and the storm's year. For each year
+%   1..nYears the storm maxima of that year are pooled over all life
+%   cycles: Smax is their mean (NaN omitted) and SPcurves their 10th,
+%   16th, 84th and 90th percentiles; a year without storms in any life
+%   cycle gives NaN. Smax is the mean of the storm maxima of the year, not
+%   of the yearly maxima of each life cycle.
+%
+%   Inputs:
+%     data     - life cycles, nLC x 1 cell of Peaks (nStorms x 10) or
+%                Timeseries (nRows x 12) matrices (lcs_columns; reads year
+%                and, for Timeseries, step)
+%     resp_vec - response per row, nLC x 1 cell of column vectors (rows of
+%                data)
+%     nYears   - number of years per life cycle (mcs_nYears), scalar
+%   Outputs:
+%     Smax     - yearly mean of the storm maxima, nYears x 1 double
+%     SPcurves - yearly 10/16/84/90th percentiles, nYears x 4 double
+%     yBox     - storm maxima of each year, nYears x 1 cell of column
+%                vectors
+%
+%   Tier: internal
+%
+%   See also chess_csr_dpa, lcs_methods, lcs_columns.
 
 num_LCs = length(data);
 % Life-Cycle Column Map

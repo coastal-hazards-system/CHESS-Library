@@ -1,37 +1,41 @@
 function segments = parse_noaa_data_inventory(xml_text)
-%{
-    %% DESCRIPTION
-        Parses the reply of the NOAA CO-OPS XML data inventory service
-        (noaa_endpoints().data_inventory) into the water level segments of a
-        station: one row per <parameter first=... last=... name=.../>.
-        Only water level products are kept:
-            'Verified 6-Minute Water Level' / 'Preliminary 6-Minute Water
-                Level' -> water_level
-            'Verified Hourly Height Water Level' -> hourly_height
-            'Verified High/Low Water Level' -> high_low
-            'Verified Daily Mean Water Level' -> daily_mean
-            'Verified Monthly Mean Water Level' -> monthly_mean
-        Other parameters (winds, temperatures, pressure, ...) are dropped.
-        A SOAP Fault (e.g. "No data inventory available from this station",
-        the reply for predictions-only stations) or a reply without
-        parameters returns an empty table.
-
-    %% INPUTS
-        xml_text: Raw XML reply (noaa_web_request.m). | char/string
-
-    %% OUTPUTS
-        segments: Table with one row per inventory segment | table
-            product_name: NOAA product name (e.g. 'Verified 6-Minute Water
-                Level'). | string
-            api_product: Data API product (water_level, hourly_height,
-                high_low, daily_mean, monthly_mean). | string
-            quality: 'verified' or 'preliminary'. | string
-            first: First time stamp of the segment (UTC). | datetime
-            last: Last time stamp of the segment (UTC). | datetime
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% parse_noaa_data_inventory  Water level segments of a NOAA inventory reply.
+%   segments = parse_noaa_data_inventory(xml_text)
+%
+%   Parses the reply of the NOAA CO-OPS XML data inventory service
+%   (data_inventory endpoint) into the water level segments of a station:
+%   one row per <parameter first=... last=... name=.../>.
+%   Only water level products are kept:
+%     'Verified 6-Minute Water Level' / 'Preliminary 6-Minute Water
+%         Level' -> water_level
+%     'Verified Hourly Height Water Level' -> hourly_height
+%     'Verified High/Low Water Level' -> high_low
+%     'Verified Daily Mean Water Level' -> daily_mean
+%     'Verified Monthly Mean Water Level' -> monthly_mean
+%   Other parameters (winds, temperatures, pressure, ...) are dropped.
+%   A SOAP Fault (e.g. "No data inventory available from this station",
+%   the reply for predictions-only stations) or a reply without
+%   parameters (e.g. '') returns an empty table.
+%
+%   Inputs:
+%     xml_text - raw XML reply (noaa_web_request), char or string
+%   Outputs:
+%     segments - one row per inventory segment, table:
+%                  product_name - NOAA product name (e.g. 'Verified
+%                      6-Minute Water Level'), string
+%                  api_product - data API product (water_level,
+%                      hourly_height, high_low, daily_mean,
+%                      monthly_mean), string
+%                  quality - 'verified' or 'preliminary', string
+%                  first - first time stamp of the segment (UTC), datetime
+%                  last - last time stamp of the segment (UTC), datetime
+%
+%   Tier: internal
+%
+%   See also noaa_station_details, download_noaa_water_levels,
+%   noaa_web_request.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 product_names = ["Verified 6-Minute Water Level", "Preliminary 6-Minute Water Level",...
     "Verified Hourly Height Water Level", "Verified High/Low Water Level",...
     "Verified Daily Mean Water Level", "Verified Monthly Mean Water Level"];

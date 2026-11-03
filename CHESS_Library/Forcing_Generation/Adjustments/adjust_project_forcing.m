@@ -1,4 +1,46 @@
 function [project_forcing, config] = adjust_project_forcing(config, structure, project_forcing, st_type)
+% adjust_project_forcing  Apply tides, SLR and toe wave height to a dataset.
+%   [project_forcing, config] = adjust_project_forcing(config, structure,
+%       project_forcing, st_type)
+%
+%   Adjustment step of one project forcing dataset (boundary_conditions_adjust):
+%     - Random tide (apply_random_tides = 1 and an existing tide_file): the
+%       tide record is added to SWL from each storm's start hour
+%       (apply_random_tide). Start hours already in config
+%       (tide_indx_<st_type>, e.g. drawn by draw_tide_indices) are kept;
+%       otherwise they are drawn here and returned in config.
+%     - Sea level rise: swl_slr is added to SWL (when not 0).
+%     - Hm0_toe: wave height at the toe from Hm0_offshore, the adjusted SWL
+%       and Tp (adjust_wave_height: depth limitation when
+%       apply_depth_limitation = 1, Hm0 = 0 where the toe is emergent).
+%       The toe is structure.toe_elevation; a floodwall (struc_type 2)
+%       without a toe berm (add_toe_berm ~= 1) uses
+%       structure.wall_bottom_elevation. Hm0_offshore is kept as is.
+%
+%   Inputs:
+%     config          - CHESS configuration, 1x1 struct; reads workflow,
+%                       tide_file, apply_random_tides, tide_indx_<st_type>
+%                       (when present), swl_slr [m], apply_depth_limitation,
+%                       gravity_constant [m/s^2], struc_type, add_toe_berm
+%     structure       - CHESS structure geometry, 1x1 struct; reads
+%                       toe_elevation and wall_bottom_elevation [m, study
+%                       datum, positive up]
+%     project_forcing - one project forcing dataset: PROS/DET struct (SWL,
+%                       Hm0_offshore, Tp; chess_forcing_formatter) or LCS
+%                       cell of life-cycle matrices (lcs_columns)
+%     st_type         - storm type, 'XC', 'TC' or 'CC', char
+%   Outputs:
+%     project_forcing - adjusted dataset: PROS/DET SWL replaced and Hm0_toe
+%                       added; LCS SWL and Hm0_toe columns set, struct or
+%                       cell
+%     config          - input config with tide_indx_<st_type> (random
+%                       tides), struct
+%
+%   Tier: internal
+%
+%   See also boundary_conditions_adjust, adjust_wave_height,
+%   apply_random_tide, forcing_storm_lengths, draw_tide_indices.
+
 %% GRAB DETAILS FROM "config"
 % Define Tide File
 tide_file = config.tide_file;

@@ -1,28 +1,49 @@
 function config = finalize_config(config)
-%{
-    %% DESCRIPTION
-        Applies run-level rules to "config": response restrictions per
-        structure type, workflow and response dependencies, defaults,
-        confidence limit formatting, response uncertainties and output
-        file paths.
-        No folder creation, loading of CHS data or user prompts. Safe to
-        call more than once (idempotent). Fields already set by the
-        caller for response uncertainties are kept.
+% finalize_config  Apply the run-level rules to config.
+%   config = finalize_config(config) applies the run-level rules: response
+%   restrictions per structure type, workflow and response dependencies,
+%   defaults, confidence limit formatting, response uncertainties and
+%   output file paths. No folder creation, CHS data loading or user
+%   prompts; idempotent. Response uncertainty fields already set by the
+%   caller are kept.
+%
+%   Rules, in order:
+%     - compute switches of responses that do not apply to struc_type are
+%       set to 0 (response_registry)
+%     - compute_p2_p3 or compute_nappe turns compute_p1 on, compute_nappe
+%       turns compute_q on, and both turn pros_compute_forcing_HC on;
+%       workflow 4 (PROS-FB) turns pros_compute_forcing_HC on, workflow 2
+%       (DET) turns it off
+%     - create_wlp and create_whp are 0 unless use_peaks and use_timeseries
+%       are both 1; compute_q_vol is 0 without Timeseries data, and
+%       compute_q_vol = 1 turns compute_q on
+%     - defaults when missing: compute_storm_duration 0, Nyrs_XC 0,
+%       csr_call_dpa 0, multiline [], lcs_restrict_sampling_rate 0,
+%       lcs_convergence_tol 0.05, lcs_convergence_confidence 0.95,
+%       lcs_convergence_prompt 1; print_progress is set to true
+%     - project_CLs is rewritten sorted as '[a b]' ('[16 84]' when it
+%       cannot be read)
+%     - dn50_u, p1_u, q_u, r2p_u not set by the caller come from
+%       primary_responses_epistemic_uncertainties.txt
+%     - out_files.config, out_files.resp_data and out_files.project_forcing
+%       come from chess_paths
+%
+%   Inputs:
+%     config - CHESS configuration, 1x1 struct; required fields:
+%              struc_type, workflow, use_peaks, use_timeseries, create_wlp,
+%              create_whp, compute_q_vol, project_CLs, outfolder,
+%              project_name, struc_id, case_name, the compute_* switches,
+%              storm_db (or region and sp_ID when storm_db is empty)
+%   Outputs:
+%     config - configuration with the rules applied, 1x1 struct
+%
+%   Tier: internal
+%
+%   See also finalize_structure_config, response_registry, chess_paths,
+%   call_input_parser.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        config: CHESS configuration. | struc
-            Required fields:
-                struc_type, workflow, use_peaks, use_timeseries,
-                create_wlp, create_whp, project_CLs, outfolder,
-                project_name, struc_id, case_name, compute_* switches,
-                storm_db (or region and sp_ID when storm_db is empty)
-
-    %% OUTPUTS
-        config: Updated CHESS configuration. | struc
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 %% APPLY STRUCTURE TYPE RESPONSES RESTRICTIONS
 % Switch Off The Compute Switches Of Responses Not Applicable To The Structure Type (response_registry.m)
 switches_off = setdiff(response_registry('output', 'switches'),...

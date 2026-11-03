@@ -1,0 +1,69 @@
+{
+  "_schemaVersion": "1.0.0",
+  "create_tide_file": {
+    "inputs": [
+      {"name": "station", "kind": "required", "type": [["char"], ["string"]], "purpose": "NOAA CO-OPS station id (e.g. '8638660')"},
+      {"name": "datum", "kind": "required", "type": [["char"], ["string"]], "purpose": "Data API datum code offered by the station (see noaa_station_details); NAVD88 and GL_LWD are mapped to NAVD and LWD"},
+      {"name": "start_date", "kind": "required", "type": [["char"], ["string"]], "purpose": "Start date (UTC), 'yyyyMMdd'"},
+      {"name": "outName", "kind": "required", "type": ["file=*.csv"], "purpose": "Output tide file (.csv)"},
+      {"name": "progress_fcn", "kind": "ordered", "type": ["function_handle"], "purpose": "Progress callback progress_fcn(fraction, message); [] for none"},
+      {"name": "options", "kind": "ordered", "type": ["struct"], "purpose": "Options struct: harmonic_predictions"}
+    ],
+    "outputs": [
+      {"name": "data_table", "type": ["table"]}
+    ]
+  },
+  "download_noaa_tide_predictions": {
+    "inputs": [
+      {"name": "station_id", "kind": "required", "type": [["char"], ["string"]], "purpose": "NOAA CO-OPS station id"},
+      {"name": "datum", "kind": "required", "type": [["char"], ["string"]], "purpose": "Data API datum code offered by the station (see noaa_station_details)"},
+      {"name": "first", "kind": "required", "type": ["datetime"], "purpose": "Start of the range (no time zone = UTC)"},
+      {"name": "last", "kind": "required", "type": ["datetime"], "purpose": "End of the range (no time zone = UTC)"},
+      {"name": "interval", "kind": "ordered", "type": ["char", "choices={'1','6','15','30','h','hilo'}"], "purpose": "Prediction interval (default 'h')"},
+      {"name": "options", "kind": "ordered", "type": ["struct"], "purpose": "Options struct: harmonic_predictions (must be true), web_options"}
+    ],
+    "outputs": [
+      {"name": "predictions", "type": ["table"]}
+    ]
+  },
+  "download_noaa_water_levels": {
+    "inputs": [
+      {"name": "station_id", "kind": "required", "type": [["char"], ["string"]], "purpose": "NOAA CO-OPS station id"},
+      {"name": "api_product", "kind": "required", "type": ["char", "choices={'water_level','hourly_height','high_low','daily_mean','monthly_mean'}"], "purpose": "Data API water level product"},
+      {"name": "datum", "kind": "required", "type": [["char"], ["string"]], "purpose": "Data API datum code offered by the station (see noaa_station_details)"},
+      {"name": "first", "kind": "required", "type": [["datetime"], ["double"]], "purpose": "Start of the range (no time zone = UTC); [] for the inventory start"},
+      {"name": "last", "kind": "required", "type": [["datetime"], ["double"]], "purpose": "End of the range (no time zone = UTC); [] for the inventory end"},
+      {"name": "options", "kind": "ordered", "type": ["struct"], "purpose": "Options struct: segments, quality, web_options"}
+    ],
+    "outputs": [
+      {"name": "water_levels", "type": ["table"]},
+      {"name": "windows", "type": ["table"]}
+    ]
+  },
+  "noaa_request_chunks": {
+    "inputs": [
+      {"name": "first", "kind": "required", "type": ["datetime"], "purpose": "First time of the range"},
+      {"name": "last", "kind": "required", "type": ["datetime"], "purpose": "Last time of the range"},
+      {"name": "api_product", "kind": "required", "type": ["char", "choices={'water_level','hourly_height','high_low','daily_mean','monthly_mean','predictions'}"], "purpose": "Data API product (sets the request size limit)"}
+    ],
+    "outputs": [
+      {"name": "chunk_first", "type": ["datetime"]},
+      {"name": "chunk_last", "type": ["datetime"]}
+    ]
+  },
+  "noaa_water_level_downloader": {
+    "inputs": [
+      {"name": "idList", "kind": "required", "type": [["char"], ["cell"], ["string"]], "purpose": "Station ids to download"},
+      {"name": "StationList", "kind": "required", "type": ["struct"], "purpose": "Station list (noaa_station_list)"},
+      {"name": "requested_datum", "kind": "required", "type": [["char"], ["string"]], "purpose": "Preferred datum (Data API code or NAVD88 / GL_LWD)"},
+      {"name": "products", "kind": "required", "type": [["char", "choices={'Verified 6-Minute Water Level','Preliminary 6-Minute Water Level','Verified Hourly Height Water Level','Verified High/Low Water Level','Verified Daily Mean Water Level','Verified Monthly Mean Water Level'}"], ["cell"], ["string"]], "purpose": "NOAA product name(s)"},
+      {"name": "opMode", "kind": "required", "type": ["numeric", "choices={1,2}"], "purpose": "1 = full record, 2 = [dBeg, dEnd]"},
+      {"name": "dBeg", "kind": "ordered", "type": [["datetime"], ["numeric"], ["char"]], "purpose": "opMode 2: window start, UTC (datetime, datenum or date text)"},
+      {"name": "dEnd", "kind": "ordered", "type": [["datetime"], ["numeric"], ["char"]], "purpose": "opMode 2: window end, UTC (datetime, datenum or date text)"}
+    ],
+    "outputs": [
+      {"name": "Sdata", "type": ["struct"]},
+      {"name": "notFound", "type": ["cell"]}
+    ]
+  }
+}

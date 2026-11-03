@@ -1,33 +1,52 @@
 function storm_validation(config, storm)
-%{
-% ------- Expected "storm" Variable Format -------
-Data Structure Fields -> storm.(st_type).(data_type).(match_type)
-    - st_type: Storm Types -> 'XC' and/or 'TC'
-    - data_type: Modeling data type -> 'Peaks' and/or 'Timeseries'
-    - match_type: Storm modeling matching type (Circulation + Wave model) ->
-        Peaks: Alows for additional alternate datasets.
-            -> 'Default': Normal matching method.storm data includes peak responses from circulation
-                          (surge) & wave models (wave height, peak period, wave direction)
-                          regardlesss of the phases.
-            -> 'WLP': Makes use of both Peaks & Timeseries data types to create new
-                      alternate Peaks dataset. For WLP matching is done as a function of the
-                      peak circulation model response. Corresponding wave model responses is
-                      matched from timeseries data type while searching for nearest data
-                      point to circulation model peak response phase.
-            -> 'WHP': Makes use of both Peaks & Timeseries data types to create new
-                      alternate Peaks dataset. For WHP matching is done as a function of the
-                      peak wave model responses. Corresponding circulation model response is
-                      matched from timeseries data type while searching for nearest data
-                      point to wave model peak responses phase.
-        Timeseries: Only supports 'Default'.
-        
-Storm Type Specific Fields -> storm.XC.XX
-    For XC storms there are two additional fields that are needed in order
-    to run CHESS workflows. XX represents the folowing:
-        -> Nyrs_XC: Record length in extra-tropical storm suite (years)
-        -> Nstm_XC: Number of extra-tropical storms in storm suite.
-% ---------------------------------------------
-%}
+% storm_validation  Check the layout of the storm variable of a user storm .mat.
+%   storm_validation(config, storm)
+%
+%   Checks the storm variable of a user storm .mat (storm_data input);
+%   called by call_input_parser and the GUI storm database wizard. Fields
+%   other than XC and TC are ignored. Errors (message only, no error ID)
+%   when storm has no XC or TC field, a storm type has no Peaks or
+%   Timeseries field, storm.XC lacks Nyrs_XC or Nstm_XC, a dataset is not
+%   an N x 2 cell, or the data of its first storm is not 1 x 5 (Peaks) or
+%   M x 6 (Timeseries).
+%
+%   Expected layout: storm.(st_type).(data_type).(match_type)
+%     st_type    - 'XC' and/or 'TC'
+%     data_type  - 'Peaks' and/or 'Timeseries'
+%     match_type - storm matching of the circulation and wave models:
+%                    'Default' - peak responses of the circulation (surge)
+%                                and wave models (wave height, peak
+%                                period, wave direction) regardless of
+%                                their phase.
+%                    'WLP' - Peaks only: alternate Peaks dataset (Water
+%                            Level Priority) built from Peaks and
+%                            Timeseries, matched on the peak circulation
+%                            model response; the wave model response is
+%                            the Timeseries value nearest to that peak's
+%                            phase.
+%                    'WHP' - Peaks only: alternate Peaks dataset (Wave
+%                            Height Priority), matched on the peak wave
+%                            model response; the circulation model
+%                            response is the Timeseries value nearest to
+%                            that peak's phase.
+%                  Timeseries supports 'Default' only.
+%   Each dataset is an N x 2 cell: column 1 storm ID, column 2 storm
+%   data, 1 x 5 [SWL Hm0 Tp wDir datenum] for Peaks, M x 6 [SWL Hm0 Tp
+%   wDir datenum dt] for Timeseries. storm.XC also holds Nyrs_XC (XC
+%   record length [years]) and Nstm_XC (number of XC storms in the storm
+%   suite); call_input_parser moves them to db_info.
+%
+%   Inputs:
+%     config - CHESS configuration, 1x1 struct; use_peaks and
+%              use_timeseries are read (no check depends on them)
+%     storm  - user storm database (layout above), struct
+%   Outputs:
+%     none (errors when the layout does not comply)
+%
+%   Tier: internal
+%
+%   See also prob_mass_validation, storm_db_check, call_input_parser.
+
 % Define Data Type Pass Flag
 pass_cnt = config.use_peaks + config.use_timeseries;
 % Get Storm Types On Storm Suite

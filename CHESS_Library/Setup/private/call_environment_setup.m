@@ -1,19 +1,36 @@
 function [config, structure] = call_environment_setup(config, run_flag)
-%{
-%% DESCRIPTION
-This function initializes the CHESS library.
+% call_environment_setup  Set up the run environment of a parsed config.
+%   [config, structure] = call_environment_setup(config, run_flag) prints
+%   the workflow welcome banner (run_flag 1), reports whether the
+%   CHS_Dependencies folder covers the region (chs_dependency_files; without
+%   it CHESS runs XC only), sets the storm database files in out_files,
+%   resolves the hotstart state (resolve_hotstart_state), zero-fills the
+%   forcing uncertainty fields for DET (workflow 2), builds the structure
+%   geometry (create_structure_geometry) and saves config and structure to
+%   out_files.config. Last step of call_input_parser.
+%
+%   Inputs:
+%     config    - parsed CHESS configuration (after finalize_config), 1x1
+%                 struct; reads workflow, region (optional, 'NoRegion' when
+%                 absent), chs_dependencies, out_files.config and the fields
+%                 read by chess_paths, resolve_hotstart_state and
+%                 create_structure_geometry
+%     run_flag  - 1 to print the welcome banner (no storm database file
+%                 yet), 0 otherwise, logical or 0/1
+%   Outputs:
+%     config    - configuration with out_files.storm_and_prob_mass,
+%                 out_files.chs_data and hotstart_level set (DET:
+%                 chs_swl_u_a, chs_swl_u_r, chs_hm0_u_a, chs_hm0_u_r = 0
+%                 when missing or empty), 1x1 struct
+%     structure - structure geometry, 1x1 struct
+%
+%   Tier: internal
+%
+%   See also call_input_parser, resolve_hotstart_state,
+%   create_structure_geometry, chess_paths.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-
-%% INPUTS
-config: Parsed CHESS project input file. MATLAB structure.
-
-%% OUTPUTS
-config: MATLAB data structure containing input file data parsed out as
-individual strucutre fields.
-
-%R DEV SIGNATURE
-Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 %% CREATE DIRECTORIES
 % Define Workflow (chess_workflows.m)
 workflow = config.workflow;

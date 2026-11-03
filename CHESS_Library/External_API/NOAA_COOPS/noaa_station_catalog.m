@@ -1,45 +1,55 @@
 function catalog = noaa_station_catalog(options)
-%{
-    %% DESCRIPTION
-        NOAA CO-OPS station catalog, fetched live (no cache) from the bulk
-        station lists of the metadata API (stations.json?type=<list>):
-            historicwl: every water level station (historical and active).
-            waterlevels: active water level stations.
-            tidepredictions: tide prediction stations, harmonic ('R') and
-                subordinate ('S').
-        The requested lists are joined by station id (one row per station,
-        sorted by id). Subordinate ('S') prediction stations are never
-        flagged for predictions, and a station listed only as 'S' in
-        tidepredictions is not added as a row.
-        A flag whose list was not requested is false (e.g. with
-        options.lists = {'tidepredictions'} the catalog holds the harmonic
-        stations only, with has_water_levels and active false).
-        Stations that come only from tidepredictions have greatlakes = false
-        (no Great Lakes station has tide predictions) and tidal = true.
-
-    %% INPUTS
-        options: (Optional) Struct with any of the fields | struct
-            lists: Lists to fetch, any of 'historicwl', 'waterlevels',
-                'tidepredictions' (default all three). | cell/string
-            web_options: Options for noaa_web_request.m. | struct
-
-    %% OUTPUTS
-        catalog: Table with one row per station | table
-            id: Station id. | string
-            name: Station name. | string
-            state: State (may be empty). | string
-            lat: Latitude [deg]. | double
-            lon: Longitude [deg]. | double
-            greatlakes: Great Lakes station. | logical
-            tidal: Tidal station. | logical
-            has_water_levels: In historicwl or waterlevels. | logical
-            active: In waterlevels. | logical
-            harmonic_predictions: Harmonic ('R') tide prediction
-                station. | logical
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% noaa_station_catalog  NOAA CO-OPS station catalog, fetched live.
+%   catalog = noaa_station_catalog()
+%   catalog = noaa_station_catalog(options)
+%
+%   NOAA CO-OPS station catalog, fetched live (no cache) from the bulk
+%   station lists of the metadata API (stations.json?type=<list>, one
+%   request per list):
+%     historicwl: every water level station (historical and active).
+%     waterlevels: active water level stations.
+%     tidepredictions: tide prediction stations, harmonic ('R') and
+%         subordinate ('S').
+%   The requested lists are joined by station id (one row per station,
+%   sorted by id). Subordinate ('S') prediction stations are never flagged
+%   for predictions, and a station listed only as 'S' in tidepredictions
+%   is not added as a row.
+%   A flag whose list was not requested is false (e.g. with
+%   options.lists = {'tidepredictions'} the catalog holds the harmonic
+%   stations only, with has_water_levels and active false).
+%   Stations that come only from tidepredictions have greatlakes = false
+%   (no Great Lakes station has tide predictions) and tidal = true.
+%   An unknown list name raises noaa:unknownList; a reply without a
+%   stations field raises noaa:requestFailed.
+%
+%   Inputs:
+%     options - struct (optional; [] = default); fields (all optional):
+%                 .lists - lists to fetch, any of 'historicwl',
+%                     'waterlevels', 'tidepredictions', cell or string,
+%                     default all three
+%                 .web_options - options for noaa_web_request, struct,
+%                     default struct()
+%   Outputs:
+%     catalog - one row per station, table:
+%                 id - station id, string
+%                 name - station name, string
+%                 state - state (may be empty), string
+%                 lat - latitude [deg] (NaN when missing), double
+%                 lon - longitude [deg] (NaN when missing), double
+%                 greatlakes - Great Lakes station, logical
+%                 tidal - tidal station, logical
+%                 has_water_levels - in historicwl or waterlevels, logical
+%                 active - in waterlevels, logical
+%                 harmonic_predictions - harmonic ('R') tide prediction
+%                     station, logical
+%
+%   Tier: public
+%
+%   See also create_tide_file, download_noaa_tide_predictions,
+%   download_noaa_water_levels, noaa_station_details,
+%   select_noaa_stations, plot_noaa_stations, noaa_station_list.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 1 || isempty(options)
     options = struct();
 end

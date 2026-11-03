@@ -1,15 +1,29 @@
-%% Monotonic_adjustment.m
-%{
-By: E. Ramos-Santiago
-Description: Script to adjust the trend of hazard curves with jumps. The
-  CHESS-SST tool can produce non-monotonic curves when the GPD threshold
-  parameter returned by the MRL selection method is too low. This causes
-  incomplete random samples and the potential to have jumps in the mean
-  curve and CLs.
-History of revisions:
-20210310-ERS: created function to patch the SST tool.
-%}
 function [y_in] = Monotonic_adjustment(x_in,y_in)
+% Monotonic_adjustment  Remove jumps from a hazard curve.
+%   y_out = Monotonic_adjustment(x_in, y_in)
+%
+%   PST can give non-monotonic curves when the MRL threshold is too low
+%   (incomplete random samples, jumps in the mean curve and CLs). On
+%   log(x_in), every segment with a positive slope (response increasing
+%   with the exceedance frequency) is replaced: its end value becomes the
+%   start value plus the mean of the two preceding slopes times the
+%   segment length. NaN values are kept in place.
+%
+%   Inputs:
+%     x_in - AEF or AEP of the curve, vector > 0
+%     y_in - hazard curve response at x_in, vector (numel(x_in))
+%   Outputs:
+%     y_out - adjusted response, 1 x numel(y_in) double (row vector; the
+%             output variable is named y_in in the code)
+%
+%   Tier: internal
+%
+%   See also CHESS_PST_Fit.
+%
+%   Developed by: E. Ramos-Santiago
+
+% History of revisions:
+% 20210310-ERS: created function to patch the SST tool.
 
 % Change inputs to column vector
 y_in=y_in(:);x_in=log(x_in(:));

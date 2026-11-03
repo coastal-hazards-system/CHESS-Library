@@ -1,34 +1,45 @@
 function config = load_reference_tide_indices(config, project_forcing)
-% load_reference_tide_indices Reuses the tide start hours of an LCS reference case.
+% load_reference_tide_indices  Reuse the tide start hours of an LCS reference.
+%   config = load_reference_tide_indices(config, project_forcing)
 %
-% When an LCS run reuses the storm sampling of a reference case
-% (config.load_project_forcing = 1, config.ref_case_name), the alternatives
-% share the same storm sequences. This function also gives them the same
-% random tides: it copies tide_indx_tc / tide_indx_xc from the reference
-% case's config file into config, so apply_random_tide uses them instead of
-% drawing new start hours (adjust_project_forcing only draws when the field
-% is empty).
+%   When an LCS run reuses the storm sampling of a reference case
+%   (load_project_forcing = 1, ref_case_name), the alternatives share the
+%   same storm sequences. This function also gives them the same random
+%   tides: it copies tide_indx_tc / tide_indx_xc from the reference case's
+%   config file into config, so draw_tide_indices and apply_random_tide
+%   keep them instead of drawing new start hours.
 %
-% The reference indices are used only when:
-%   - random tides are applied in this run (config.apply_random_tides = 1),
-%   - that storm type's life cycles were actually reused from the reference
-%     (lcs_reference_reuse.m: src = 'Reference', i.e. the reference has a usable
-%     sampling seed file holding that storm type); otherwise the life cycles were
-%     sampled fresh and their storms have nothing to do with the reference's tides,
-%   - the reference case used the same tide file,
-%   - they match this run's life cycles: same number of life cycles and the
-%     same number of storms of that type in each life cycle.
-% Otherwise new start hours are drawn as usual (a message says why).
+%   The reference indices of a storm type are used only when:
+%     - random tides are applied in this run (apply_random_tides = 1),
+%     - config holds no start hours of that type yet,
+%     - that storm type's life cycles were actually reused from the
+%       reference (lcs_reference_reuse: src = 'Reference', i.e. the
+%       reference has a usable sampling seed file holding that storm type);
+%       otherwise the life cycles were sampled fresh and their storms have
+%       nothing to do with the reference's tides,
+%     - the reference case used the same tide file,
+%     - they match this run's life cycles: same number of life cycles and
+%       the same number of storms of that type in each life cycle.
+%   Otherwise new start hours are drawn as usual (a message says why).
 %
-% Inputs:
-%       config: Run configuration (workflow 3). Uses load_project_forcing, ref_case_name,
-%               apply_random_tides, tide_file, outfolder, project_name, struc_id,
-%               case_name, storm_db or region/sp_ID (chess_paths.m)
-%               (plus the fields lcs_reference_reuse.m reads).
-%       project_forcing: LCS project forcing of this run (before adjustment).
+%   Inputs:
+%     config          - CHESS configuration (workflow 3), 1x1 struct; reads
+%                       workflow, load_project_forcing, ref_case_name,
+%                       apply_random_tides, tide_file, storm_sampling,
+%                       tide_indx_tc / _xc, outfolder, project_name,
+%                       struc_id, case_name, storm_db or region/sp_ID
+%                       (chess_paths), plus the fields lcs_reference_reuse
+%                       reads
+%     project_forcing - LCS project forcing of this run (before adjustment),
+%                       struct
+%   Outputs:
+%     config - input config with tide_indx_tc / tide_indx_xc from the
+%              reference case when they apply, struct
 %
-% Outputs:
-%       config: With tide_indx_tc / tide_indx_xc from the reference case when they apply.
+%   Tier: internal
+%
+%   See also draw_tide_indices, lcs_reference_reuse, chess_lcs,
+%   chess_paths.
 
 if ~isfield(config, 'workflow') || config.workflow ~= 3 ||...
         ~isfield(config, 'load_project_forcing') || config.load_project_forcing ~= 1 ||...

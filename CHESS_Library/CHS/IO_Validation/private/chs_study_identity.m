@@ -1,36 +1,40 @@
 function [study, errors] = chs_study_identity(file_names)
-%{
-    %% DESCRIPTION
-        CHS study identity of the storm files of an input, by file name only
-        (called by chs_storm_file_slots.m, before any unzip or .h5
-        conversion). CHS file names read
-        <region>_<storm type>_<simulation>_<post type>_SP<id>_<model>_<data type>
-        (e.g. CHS-NA_XH_SimB_Post0_SP05572_ADCIRC01_Peaks.h5; tokens and
-        water level (ADCIRC model) file from chs_file_name_parts.m). Only storm
-        files (chs_storm_file_names.m: .h5, data type Peaks or Timeseries)
-        are checked; HC/AEF and other files are ignored. Errors (each naming
-        the offending values and files):
-            - a file name given more than once (case-insensitive, e.g. the
-              same file in two zip subfolders);
-            - a name without a save point token (token 5, SP<id>);
-            - more than one water level (ADCIRC) save point or more than one
-              wave save point;
-            - more than one CHS region (token 1, e.g. CHS-NA), simulation
-              (token 3, e.g. SimB) or post type (token 4, e.g. Post0).
-
-    %% INPUTS
-        file_names: .h5 file names (folders allowed, only the name is read). | cell
-
-    %% OUTPUTS
-        study: Study identity of the storm files. | struct
-               Fields: region, simulation, post_type ('' unless unique),
-               sp_ID (ADCIRC save point), sp_ID_wave (wave save point) ([]
-               unless unique).
-        errors: Identity errors ({} when the input passes). | cell
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% chs_study_identity  Study identity (region, save points) of CHS storm files.
+%   [study, errors] = chs_study_identity(file_names)
+%
+%   CHS study identity of the storm files of an input, by file name only
+%   (called by chs_storm_file_slots, before any unzip or .h5
+%   conversion). CHS file names read
+%   <region>_<storm type>_<simulation>_<post type>_SP<id>_<model>_<data type>
+%   (e.g. CHS-NA_XH_SimB_Post0_SP05572_ADCIRC01_Peaks.h5; tokens and
+%   water level (ADCIRC model) file from chs_file_name_parts). Only storm
+%   files (chs_storm_file_names: .h5, data type Peaks or Timeseries) are
+%   checked; HC/AEF and other files are ignored. Errors (each naming the
+%   offending values and files):
+%       - a file name given more than once (case-insensitive, e.g. the
+%         same file in two zip subfolders);
+%       - a name without a save point token (token 5, SP<id>);
+%       - more than one water level (ADCIRC) save point or more than one
+%         wave save point;
+%       - more than one CHS region (token 1, e.g. CHS-NA), simulation
+%         (token 3, e.g. SimB) or post type (token 4, e.g. Post0).
+%
+%   Inputs:
+%     file_names - .h5 file names (folders allowed, only the name is
+%                  read), cell
+%   Outputs:
+%     study  - study identity of the storm files, struct; fields region,
+%              simulation, post_type (char, '' unless unique), sp_ID
+%              (ADCIRC save point) and sp_ID_wave (wave save point)
+%              (double, [] unless unique)
+%     errors - identity errors ({} when the input passes), cell of char
+%
+%   Tier: internal
+%
+%   See also chs_storm_file_slots, chs_file_name_parts,
+%   chs_storm_file_names.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 errors = {};
 study = struct('region', '', 'simulation', '', 'post_type', '', 'sp_ID', [], 'sp_ID_wave', []);
 

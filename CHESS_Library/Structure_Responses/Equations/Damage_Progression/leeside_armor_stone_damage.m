@@ -1,14 +1,66 @@
-% Program to compute breakwater/revetment stone armor stability
-% Written by Jeff Melby April 2009
-%
-% Armor damage based on Melby revision of 
-% van Gent, M., and Pozueta, B. (2004).  “?,” 
-% Proc. of Coastal Structures 2003, ASCE, Reston, VA, ?. 
-%
-% function[output] = LeeDamFunc(input)
-%============================================================
 function[S,u1p] = leeside_armor_stone_damage(SLast,...
     H, Tmm1, u1p_last, LDn, Lslp, Sslp, WL, Rc, Nz, Delta, K_ls1, K_ls2, crest_width, crest_elevation, grav, compute_S_submerged, cutoff_switch, cutoff)
+% leeside_armor_stone_damage  Leeside armor damage after one forcing row.
+%   [S, u1p] = leeside_armor_stone_damage(SLast, H, Tmm1, u1p_last, LDn,
+%       Lslp, Sslp, WL, Rc, Nz, Delta, K_ls1, K_ls2, crest_width,
+%       crest_elevation, grav, compute_S_submerged, cutoff_switch, cutoff)
+%       returns the leeside (rear-side) armor damage S after one forcing
+%       row, starting from the damage SLast of the previous row, and the
+%       crest velocity u1p of the row.
+%
+%   Melby revision of the van Gent and Pozueta (2004) rear-side stability
+%   formula (coefficients after Melby 2009). The run-up z1p (z1p_calc) and
+%   the crest velocity u1p (u1p_calc) are computed with Rc, or with the
+%   freeboard of the raised crest crest_elevation + cutoff - WL when
+%   cutoff_switch = 1. When the run-up exceeds the crest (z1p - Rc > 0)
+%   and u1p > 0:
+%     als = Lslp^(-2.5/r)*(1 + 10*exp(-Rc/H))^(1/r)
+%     Nls = u1p*Tmm1/(sqrt(Delta)*LDn*K_ls1)
+%     Nze = (SLast/(K_ls2*(als*Nls)^r))^2
+%     S   = K_ls2*sqrt(Nze + Nz)*(als*Nls)^r
+%   with r = 6 for an undamaged armor (SLast = 0) and r = 1 with
+%   K_ls2 = 0.04 (the input K_ls2 is replaced) once SLast > 0. Otherwise
+%   S = SLast; when the run-up stays below the crest u1p = u1p_last.
+%   compute_S_submerged = 1 with Rc < 0 keeps S = SLast (submerged damage
+%   is not implemented).
+%
+%   Inputs (scalars, one forcing row):
+%     SLast               - leeside damage after the previous row [-]
+%     H                   - spectral significant wave height at the toe [m]
+%     Tmm1                - spectral wave period T_m-1,0 [s] (CHESS:
+%                           Tp/1.1, converted by chess_csr_dpa)
+%     u1p_last            - crest velocity of the previous row [m/s]
+%     LDn                 - leeside armor nominal diameter Dn50 [m]
+%     Lslp                - leeside slope cot(beta) [-]
+%     Sslp                - seaward slope cot(alpha) [-]
+%     WL                  - still water level [m, study datum, positive up]
+%                           (used only when cutoff_switch = 1)
+%     Rc                  - freeboard, crest elevation - SWL [m]
+%     Nz                  - number of waves in the row, dt/Tm [-]
+%     Delta               - armor relative buoyant density [-]
+%     K_ls1, K_ls2        - leeside damage coefficients [-]
+%                           (CHESS_empirical_coefficients.txt)
+%     crest_width         - crest width [m]
+%     crest_elevation     - crest elevation [m, study datum, positive up]
+%                           (used only when cutoff_switch = 1)
+%     grav                - gravitational acceleration [m/s^2]
+%     compute_S_submerged - 0 or 1 (CHESS: 0)
+%     cutoff_switch       - 0 actual crest, 1 crest raised by cutoff
+%     cutoff              - crest elevation offset [m]
+%   Outputs:
+%     S                   - accumulated leeside damage [-]
+%     u1p                 - crest velocity exceeded by 1 percent of the
+%                           waves [m/s]
+%
+%   Tier: public
+%
+%   See also seaside_armor_stone_damage, z1p_calc, u1p_calc,
+%   load_empirical_coefficients.
+%
+%   Developed by: Jeffrey A. Melby (JAM)
+
+% HISTORY OF REVISIONS:
+%     Written by Jeff Melby April 2009
 %============================================================
 % Inside CHESS the input for period is already converted with parent code chess_csr_dpa.m /1.1;     % spectral mean wave period in sec
 %============================================================

@@ -1,0 +1,18 @@
+{
+  "_schemaVersion": "1.0.0",
+  "CHESSPlots": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "Resp", "kind": "required", "type": ["struct"]},
+      {"name": "storm", "kind": "required", "type": ["struct"]},
+      {"name": "project_forcing", "kind": "required", "type": ["struct"]},
+      {"name": "dsw", "kind": "required", "type": ["struct"]},
+      {"name": "structure", "kind": "required", "type": ["struct"]},
+      {"name": "base_fnt", "kind": "required", "type": ["double", "scalar"]},
+      {"name": "unit_system", "kind": "required", "type": ["char", "choices={'SI','Imperial'}"]}
+    ],
+    "outputs": [
+      {"name": "sp", "type": ["CHESSPlotsBase"]}
+    ]
+  }
+}

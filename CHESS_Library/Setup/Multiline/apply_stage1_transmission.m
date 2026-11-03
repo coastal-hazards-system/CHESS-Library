@@ -1,43 +1,53 @@
 function project_forcing = apply_stage1_transmission(config, project_forcing)
-%{
-    %% DESCRIPTION
-        Multi-line transect stage 2 forcing from stage 1's adjusted forcing
-        (config.multiline, set by multiline_stage2_config.m). Every
-        workflow (PROS-RB, PROS-FB, DET, LCS Peaks/Timeseries), every data,
-        match and storm type:
-            Hm0_offshore (stage 2) = Hm0_toe (stage 1) x Kt (stage 1)
-            Hm0_toe (stage 2)      = adjust_wave_height(Hm0_offshore,
-                                     Tp, SWL, stage 2 toe, apply_DL, g)
-        per replicate (z = 0 included) and per life-cycle row or time
-        step. Kt as in compute_structure_response.m for a rubble mound:
-        eurotop_wave_transmission(Hm0_toe, Tp, crest_elevation - SWL,
-        crest_width, 1/seaside_slope, g) of the stage 1 run's geometry.
-        Kt = 0 (e.g. Hm0_toe = 0 at a dry stage 1 toe) gives Hm0 = 0:
-        the waves are dissipated, surge-only responses still run.
-        SWL, Tp, wDir, dt, storm_duration, storms/life cycles and replicates are kept as
-        is: stage 1's uncertainty, random tides and SLR are already in
-        them, so stage 2 skips the sampling, the uncertainty step and the
-        adjustment step (call_chess_boundary_conditions.m: built here by
-        build_boundary_conditions.m; boundary_conditions_uncertainty.m and
-        boundary_conditions_adjust.m return it untouched). Limits: no ponding/setup between the stages,
-        no distance between them, Tp and direction unchanged.
-
-    %% INPUTS
-        config: Stage 2 run config (multiline.stage1_alt,
-                multiline.stage1_structure, workflow, toe_elevation,
-                struc_type, add_toe_berm, wall_bottom_elevation (floodwall),
-                apply_depth_limitation, gravity_constant). | struct
-        project_forcing: Optional. Forcing holding stage 1's Hm0_toe:
-                one dataset (PROS/DET struct, LCS cell of life cycles) or
-                a whole project_forcing. Omitted: stage 1's saved
-                <db>_<WF>_project_forcing.mat (chess_paths.m). | struct, cell
-
-    %% OUTPUTS
-        project_forcing: Stage 2 forcing (same layout). | struct, cell
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% apply_stage1_transmission  Multi-line stage 2 forcing from stage 1's forcing.
+%   project_forcing = apply_stage1_transmission(config)
+%   project_forcing = apply_stage1_transmission(config, project_forcing)
+%   builds the multi-line transect stage 2 forcing from stage 1's adjusted
+%   forcing (config.multiline, set by multiline_stage2_config).
+%
+%   Every workflow (PROS-RB, PROS-FB, DET, LCS Peaks/Timeseries), every
+%   data, match and storm type:
+%       Hm0_offshore (stage 2) = Hm0_toe (stage 1) x Kt (stage 1)
+%       Hm0_toe (stage 2)      = adjust_wave_height(Hm0_offshore, Tp, SWL,
+%                                stage 2 toe, apply_DL, g)
+%   per replicate (z = 0 included) and per life-cycle row or time step. Kt
+%   as in compute_structure_response for a rubble mound:
+%   eurotop_wave_transmission(Hm0_toe, Tp, crest_elevation - SWL,
+%   crest_width, 1/seaside_slope, g) of the stage 1 run's geometry. Kt = 0
+%   (e.g. Hm0_toe = 0 at a dry stage 1 toe) gives Hm0 = 0: the waves are
+%   dissipated, surge-only responses still run. The stage 2 toe is
+%   toe_elevation, or wall_bottom_elevation for a floodwall without a toe
+%   berm (as in adjust_project_forcing). SWL, Tp, wDir, dt, storm_duration,
+%   storms/life cycles and replicates are kept as is: stage 1's
+%   uncertainty, random tides and SLR are already in them, so stage 2 skips
+%   the sampling, the uncertainty step and the adjustment step
+%   (call_chess_boundary_conditions: built here by
+%   build_boundary_conditions; boundary_conditions_uncertainty and
+%   boundary_conditions_adjust return it untouched). Limits: no
+%   ponding/setup between the stages, no distance between them, Tp and
+%   direction unchanged.
+%
+%   Inputs:
+%     config          - stage 2 run configuration, 1x1 struct; reads
+%                       multiline.stage1_alt, multiline.stage1_structure,
+%                       workflow, toe_elevation, struc_type, add_toe_berm,
+%                       wall_bottom_elevation (floodwall),
+%                       apply_depth_limitation, gravity_constant (and the
+%                       chess_paths fields when project_forcing is omitted)
+%     project_forcing - forcing holding stage 1's Hm0_toe: one dataset
+%                       (PROS/DET struct, LCS cell of life cycles) or a
+%                       whole project_forcing, struct or cell (optional;
+%                       omitted: stage 1's saved
+%                       <db>_<wflow_name>_project_forcing.mat, chess_paths)
+%   Outputs:
+%     project_forcing - stage 2 forcing (same layout), struct or cell
+%
+%   Tier: internal
+%
+%   See also multiline_stage2_config, multiline_inherited_fields,
+%   eurotop_wave_transmission, adjust_wave_height.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 2
     s1 = config;
     s1.case_name = config.multiline.stage1_alt;

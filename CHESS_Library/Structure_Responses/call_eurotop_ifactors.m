@@ -1,4 +1,41 @@
 function gammas = call_eurotop_ifactors(config, structure, SWL, Hm0)
+% call_eurotop_ifactors  EurOtop influence factors of the structure.
+%   gammas = call_eurotop_ifactors(config, structure, SWL, Hm0)
+%
+%   Influence factors for Eurotop_r2p_q_Final (EurOtop 2018) at every
+%   forcing row: wall (wall_influence_factor; floodwalls only, from the
+%   wall height crest elevation - wall bottom elevation and the freeboard
+%   Rc = crest elevation - SWL; 1 otherwise), surface roughness
+%   (surface_roughness_influence_factor; roughness_ifactor > 1 means grass,
+%   Hm0 dependent), oblique waves (oblique_waves_influence_factor; always
+%   1, oblique waves are not implemented) and berm (berm_influence_factor
+%   with a toe berm, else 1).
+%
+%   Inputs:
+%     config    - CHESS configuration, 1x1 struct; reads struc_type (1
+%                 levee, 2 floodwall, 3 rubble mound) and add_toe_berm
+%                 (0/1)
+%     structure - structure geometry, 1x1 struct; reads roughness_ifactor
+%                 [-], crest_elevation and toe_elevation [m, study datum,
+%                 positive up], wall_bottom_elevation (floodwall) and,
+%                 with add_toe_berm = 1, berm_crest_elevation [m, study
+%                 datum, positive up], berm_crest_width [m] and
+%                 berm_seaward_slope (cot) [-]
+%     SWL       - still water level [m, study datum, positive up], array
+%     Hm0       - spectral significant wave height at the toe [m], size of
+%                 SWL
+%   Outputs:
+%     gammas - influence factors [-], 1x1 struct with fields gamma_v,
+%              gamma_star (wall), gamma_f (roughness), gamma_beta_r2p,
+%              gamma_beta_q (oblique waves) and gamma_b (berm), each the
+%              size of Hm0
+%
+%   Tier: internal
+%
+%   See also compute_structure_response, Eurotop_r2p_q_Final,
+%   wall_influence_factor, surface_roughness_influence_factor,
+%   oblique_waves_influence_factor, berm_influence_factor.
+
 %% GRAB DETAILS FROM "config"
 strucType = config.struc_type;
 % Surface roughness coefficient

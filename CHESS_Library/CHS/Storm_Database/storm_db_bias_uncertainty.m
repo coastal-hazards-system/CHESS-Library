@@ -1,62 +1,80 @@
 function bnu = storm_db_bias_uncertainty(chs_dependencies, region, sp_ID, sp_coords, prev_info, prompt)
-%{
-    %% DESCRIPTION
-        CHS modeling bias & uncertainty and offshore elevation of a storm
-        database, determined once when the database is built (stored in
-        db_info, storm_db_info.m). Shared by the library and the GUI storm
-        database wizard.
-        CHS_Dependencies files come from chs_dependency_files.m (read when
-        the folder exists and the region is supported).
-        Study grid row (savepoint_grid_row.m, shared with the TC
-        probability masses): one lookup gives the grid row and the offshore
-        elevation (value column of that row). The savepoint ID is matched
-        when the match is unique (CHS-LA: savepoint -> ADCIRC node through
-        the savepoint node map file), else the grid point nearest to the
-        savepoint coordinates is used (CHS-NA: nearest only, the grid holds
-        mesh nodes). Printed: a grid point more than 0.5 m from the
-        coordinates, an ID matched without coordinates. Lookup errors
-        (savepoint_grid_row:gridNotFound | noCoordinates | spNotFound) are
-        raised there.
-        Offshore elevation: the grid stores depth, positive down (study
-        datum); it is negated to an elevation, positive up. None for grids
-        without a value column (CHS-TX, CHS-PR), NaN or fill values
-        (<= -99999, e.g. CHS-GLH -999999).
-        SWL values come from the water level bias & uncertainty file
-        (Comb: PBL + ADCIRC, else WL: ADCIRC only) at the grid row; a row
-        beyond that file is an error (storm_db_bias_uncertainty:spNotFound,
-        naming the row and both files). Hm0 values come from the wave height
-        bias & uncertainty file (STWAVE/SWAN): global values, the regional average (_avg) when
-        given per savepoint. Values not available there (no
-        CHS_Dependencies for the region, no file) are entered once in the
-        command window (source 'manual'); a database being rebuilt keeps
-        its earlier 'manual'/'provided' values instead (prev_info). Hm0 bias
-        is stored only when the wave file has it (not prompted, not
-        applied).
-
-    %% INPUTS
-        chs_dependencies: CHS_Dependencies folder (config.chs_dependencies). | char
-        region: CHS region (config.region). | char
-        sp_ID: CHS ADCIRC savepoint ID (config.sp_ID). | double
-        sp_coords: Savepoint [latitude longitude] in degrees ([] or NaN: | double | 1 x 2
-                   not available).
-        prev_info: Optional. db_info of the database being rebuilt ([]: none). | struct
-        prompt: Optional (default true). false: never prompts; values not | logical
-                available stay empty with an empty source (GUI wizard).
-
-    %% OUTPUTS
-        bnu: chs_swl_b_a, chs_swl_b_r, chs_swl_u_a, chs_swl_u_r, | struct
-             chs_swl_bu_source, chs_hm0_b_a, chs_hm0_b_r, chs_hm0_u_a,
-             chs_hm0_u_r, chs_hm0_bu_source ('chs_dependencies' | 'manual'
-             | prev_info's 'manual'/'provided' | '' when not prompted),
-             offshore_elevation (minus the grid depth, positive up; [] when none),
-             offshore_elevation_source ('chs_dependencies' | ''),
-             grid_distance_m (distance from the savepoint coordinates to the
-             grid point [m]; [] without coordinates or grid), sp_lat, sp_lon
-             (savepoint coordinates; [] when not available).
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% storm_db_bias_uncertainty  Storm database bias, uncertainty, offshore elevation.
+%   bnu = storm_db_bias_uncertainty(chs_dependencies, region, sp_ID, sp_coords)
+%   bnu = storm_db_bias_uncertainty(..., prev_info, prompt)
+%
+%   CHS modeling bias & uncertainty and offshore elevation of a storm
+%   database, determined once when the database is built (stored in
+%   db_info, storm_db_info). Shared by the library and the GUI storm
+%   database wizard.
+%   CHS_Dependencies files come from chs_dependency_files (read when the
+%   folder exists and the region is supported).
+%   Study grid row (savepoint_grid_row, shared with the TC probability
+%   masses): one lookup gives the grid row and the offshore elevation
+%   (value column of that row). The savepoint ID is matched when the
+%   match is unique (CHS-LA: savepoint -> ADCIRC node through the
+%   savepoint node map file), else the grid point nearest to the
+%   savepoint coordinates is used (CHS-NA: nearest only, the grid holds
+%   mesh nodes). Printed: a grid point more than 0.5 m from the
+%   coordinates, an ID matched without coordinates. Lookup errors
+%   (savepoint_grid_row:gridNotFound | noCoordinates | spNotFound) are
+%   raised there.
+%   Offshore elevation: the grid stores depth, positive down (study
+%   datum); it is negated to an elevation, positive up. None for grids
+%   without a value column (CHS-TX, CHS-PR), NaN or fill values
+%   (<= -99999, e.g. CHS-GLH -999999).
+%   SWL values come from the water level bias & uncertainty file (Comb:
+%   PBL + ADCIRC, else WL: ADCIRC only) at the grid row; a row beyond
+%   that file is an error (storm_db_bias_uncertainty:spNotFound, naming
+%   the row and both files). Hm0 values come from the wave height bias &
+%   uncertainty file (STWAVE/SWAN): global values, the regional average
+%   (_avg) when given per savepoint. Values not available there (no
+%   CHS_Dependencies for the region, no file) are entered once in the
+%   command window (source 'manual'); a database being rebuilt keeps its
+%   earlier 'manual'/'provided' values instead (prev_info). Hm0 bias is
+%   stored only when the wave file has it (not prompted, not applied).
+%
+%   Inputs:
+%     chs_dependencies - CHS_Dependencies folder (config.chs_dependencies),
+%                        char
+%     region           - CHS region (config.region), char
+%     sp_ID            - CHS ADCIRC savepoint ID (config.sp_ID), scalar
+%                        double
+%     sp_coords        - savepoint [latitude longitude] [deg] ([] or NaN:
+%                        not available), 1x2 double
+%     prev_info        - db_info of the database being rebuilt (optional,
+%                        default []: none), struct
+%     prompt           - false: never prompts, values not available stay
+%                        empty with an empty source (GUI wizard)
+%                        (optional, default true), logical
+%   Outputs:
+%     bnu - bias & uncertainty and savepoint location, struct; fields:
+%             chs_swl_b_a, chs_swl_b_r - SWL bias, absolute [m] /
+%                 relative [-], double
+%             chs_swl_u_a, chs_swl_u_r - SWL uncertainty, absolute [m] /
+%                 relative [-], double
+%             chs_hm0_b_a, chs_hm0_b_r - Hm0 bias, absolute [m] /
+%                 relative [-] ([] when the wave file has none), double
+%             chs_hm0_u_a, chs_hm0_u_r - Hm0 uncertainty, absolute [m] /
+%                 relative [-], double
+%             chs_swl_bu_source, chs_hm0_bu_source - 'chs_dependencies',
+%                 'manual', prev_info's 'manual'/'provided', or '' when
+%                 not prompted, char
+%             offshore_elevation - minus the grid depth [m, study datum,
+%                 positive up] ([] when none), double
+%             offshore_elevation_source - 'chs_dependencies' or '', char
+%             grid_distance_m - distance from the savepoint coordinates
+%                 to the grid point [m] ([] without coordinates or grid),
+%                 double
+%             sp_lat, sp_lon - savepoint coordinates [deg] ([] when not
+%                 available), double
+%
+%   Tier: internal
+%
+%   See also storm_db_info, savepoint_grid_row, chs_dependency_files,
+%   build_storm_database.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 5
     prev_info = [];
 end

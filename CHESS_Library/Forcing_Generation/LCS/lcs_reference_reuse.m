@@ -1,57 +1,70 @@
 function reuse = lcs_reference_reuse(config)
-%{
-    %% DESCRIPTION
-        Decides, before LCS sampling, which storm types are reused from the reference
-        case (load_project_forcing = 1, ref_case_name), the sampling mode the life cycles
-        end up with, and the storm types that get the convergence check. Shared by
-        chess_lcs and the GUI (convergence dialog) so both apply the same rule:
-            - A storm type is reused only when the reference project forcing file exists
-              AND the reference's sampling seed file holds the sampling mode
-              (lcs_restrict_sampling_rate) and that storm type's sampled life cycles
-              (sampled_ids). A reference without a usable seed file reuses nothing: its
-              storm types are sampled fresh, as if load_project_forcing = 0 (seed_found
-              = false; chess_lcs warns).
-            - Reused storms were sampled under the mode stored in the seed file, which
-              then becomes the effective mode. Otherwise the configured
-              lcs_restrict_sampling_rate is the effective mode.
-            - The convergence check runs only in effective mode 0, for the storm types
-              that are sampled fresh.
-            - Hotstart level 'reuse_sampling' (config.hotstart_level, set by
-              resolve_hotstart_state.m): when no reference is used, this case's own
-              cached sampling is reused instead (its sampling seed file: sampled_ids,
-              mode and, with use_peaks = 1, raw XC peaks), the same way as
-              a reference.
-        Prints nothing: chess_lcs reports the outcome.
+% lcs_reference_reuse  Decide which LCS storm types reuse a sampling seed.
+%   reuse = lcs_reference_reuse(config)
+%
+%   Decides, before LCS sampling, which storm types are reused from the
+%   reference case (load_project_forcing = 1, ref_case_name), the sampling
+%   mode the life cycles end up with, and the storm types that get the
+%   convergence check. Shared by chess_lcs and the GUI (convergence
+%   dialog) so both apply the same rule:
+%     - A storm type is reused only when the reference project forcing
+%       file exists AND the reference's sampling seed file holds the
+%       sampling mode (lcs_restrict_sampling_rate) and that storm type's
+%       sampled life cycles (sampled_ids). A reference without a usable
+%       seed file reuses nothing: its storm types are sampled fresh, as if
+%       load_project_forcing = 0 (seed_found = false; chess_lcs warns).
+%     - Reused storms were sampled under the mode stored in the seed file,
+%       which then becomes the effective mode. Otherwise the configured
+%       lcs_restrict_sampling_rate is the effective mode.
+%     - The convergence check runs only in effective mode 0, for the storm
+%       types that are sampled fresh.
+%     - Hotstart level 'reuse_sampling' (config.hotstart_level, set by
+%       resolve_hotstart_state): when no reference is used, this case's
+%       own cached sampling is reused instead (its sampling seed file:
+%       sampled_ids, mode and, with use_peaks = 1, raw XC peaks), the same
+%       way as a reference.
+%   Prints nothing: chess_lcs reports the outcome.
+%
+%   Inputs:
+%     config - CHESS configuration (load_project_forcing, ref_case_name,
+%              outfolder, project_name, struc_id, case_name, workflow,
+%              storm_db or region/sp_ID (chess_paths), storm_sampling,
+%              lcs_restrict_sampling_rate; optional hotstart_level,
+%              out_files.project_forcing), 1x1 struct
+%   Outputs:
+%     reuse - 1x1 struct with fields:
+%       file        - reference project forcing file, char
+%       found       - load_project_forcing = 1 and the reference file
+%                     exists, logical
+%       seed_found  - found and the reference's sampling seed file holds
+%                     lcs_restrict_sampling_rate and sampled_ids, logical
+%       types       - storm types to sample, in sampling order ('CC' ->
+%                     {'XC','TC'}), cell
+%       src         - seed source per storm type (fields XC, TC):
+%                     'Reference' (reference's sampling seed file), 'Seed'
+%                     (own sampling seed file) or '' (not reused, sampled
+%                     fresh), struct
+%       ids         - reused life-cycle identity columns per storm type
+%                     (fields XC, TC): nLC x 1 cell of [storm_ID,
+%                     intensity_bin, Sim_Year, order], struct
+%       own         - the reused storms are this case's own cached
+%                     sampling, logical
+%       seed_pf     - project forcing file whose sampling seed file holds
+%                     the reused mode and raw XC peaks (reference or own),
+%                     char
+%       label       - source description for messages, char
+%       reused      - reused flag per element of types, logical
+%       mode        - effective sampling mode (0 = Full Poisson, 1 = Rate
+%                     Matched), double
+%       check_types - storm types that get the convergence check, cell
+%
+%   Tier: internal
+%
+%   See also chess_lcs, lcs_sampling_seed_file, lcs_convergence_checks,
+%   chess_paths, resolve_hotstart_state.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        config: Run configuration (load_project_forcing, ref_case_name, outfolder,
-            project_name, struc_id, case_name, workflow, storm_db or region/sp_ID
-            (chess_paths.m), storm_sampling, lcs_restrict_sampling_rate; optional
-            hotstart_level, out_files.project_forcing). | struct
-
-    %% OUTPUTS
-        reuse: | struct
-            file: Reference project forcing file. | char
-            found: load_project_forcing = 1 and the reference file exists. | logical
-            seed_found: found and the reference's sampling seed file holds
-                lcs_restrict_sampling_rate and sampled_ids. | logical
-            types: Storm types to sample, in sampling order ('CC' -> {'XC','TC'}). | cell
-            src: Seed source per storm type (fields XC, TC): 'Reference' (reference's
-                sampling seed file), 'Seed' (own sampling seed file) or '' (not reused,
-                sampled fresh). | struct
-            ids: Reused life-cycle identity columns per storm type (fields XC, TC):
-                nLC x 1 cell of [storm_ID, intensity_bin, Sim_Year, order]. | struct
-            own: The reused storms are this case's own cached sampling. | logical
-            seed_pf: Project forcing file whose sampling seed file holds the reused
-                mode and raw XC peaks (reference or own). | char
-            label: Source description for messages. | char
-            reused: Reused flag per element of types. | logical
-            mode: Effective sampling mode (0 = Full Poisson, 1 = Rate Matched). | double
-            check_types: Storm types that get the convergence check. | cell
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 % Reference Case: Same Project/PSE, Alternative ref_case_name, LCS, Same Storm DB As This Run (chess_paths.m)
 paths = chess_paths(config);
 ref_paths = chess_paths(config.outfolder, config.project_name, config.struc_id, config.ref_case_name, 3, paths.db);

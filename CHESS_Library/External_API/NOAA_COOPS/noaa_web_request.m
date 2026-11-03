@@ -1,38 +1,45 @@
 function reply_text = noaa_web_request(url, options)
-%{
-    %% DESCRIPTION
-        The single network access point of the NOAA tools: every NOAA CO-OPS
-        request of External_API\NOAA_COOPS goes through this function (tests
-        shadow it to run offline).
-        Sends an HTTP GET and returns the raw reply text.
-            HTTP 200: the reply text is returned as is (NOAA error texts sent
-                with HTTP 200, e.g. "Error: No data was found", are left to
-                the parsers: parse_noaa_csv.m).
-            HTTP 4xx: NOAA rejected the request (e.g. "Range Limit
-                Exceeded", "There is no MSL for the station", unknown
-                station). No retry; error noaa:requestFailed carrying NOAA's
-                message from the reply body.
-            Unknown host: no retry; error noaa:noConnection.
-            Timeouts, other connection errors, HTTP 5xx: retried up to
-                options.retries attempts with a pause of
-                retry_pause_s*attempt seconds, then error noaa:requestFailed.
-        matlab.net.http is used instead of webread because webread drops the
-        reply body of HTTP 4xx replies, where NOAA puts its error message.
-
-    %% INPUTS
-        url: Full request URL (query already encoded). | char/string
-        options: (Optional) Struct with any of the fields | struct
-            timeout: Connection and response timeout [s] (default 120). | double
-            retries: Maximum number of attempts (default 5). | double
-            retry_pause_s: Pause scale [s]; the pause before attempt k+1 is
-                retry_pause_s*k (default 5; tests set 0). | double
-
-    %% OUTPUTS
-        reply_text: Raw reply text. | char
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% noaa_web_request  Send one NOAA CO-OPS GET request and return the reply.
+%   reply_text = noaa_web_request(url)
+%   reply_text = noaa_web_request(url, options)
+%
+%   The single network access point of the NOAA tools: every NOAA CO-OPS
+%   request of External_API\NOAA_COOPS goes through this function (tests
+%   shadow it to run offline).
+%   Sends an HTTP GET and returns the raw reply text.
+%     HTTP 200: the reply text is returned as is (NOAA error texts sent
+%         with HTTP 200, e.g. "Error: No data was found", are left to the
+%         parsers: parse_noaa_csv).
+%     HTTP 4xx: NOAA rejected the request (e.g. "Range Limit Exceeded",
+%         "There is no MSL for the station", unknown station). No retry;
+%         error noaa:requestFailed carrying NOAA's message from the reply
+%         body.
+%     Unknown host: no retry; error noaa:noConnection.
+%     Timeouts, other connection errors, HTTP 5xx: retried up to
+%         options.retries attempts with a pause of retry_pause_s*attempt
+%         seconds, then error noaa:requestFailed.
+%   matlab.net.http is used instead of webread because webread drops the
+%   reply body of HTTP 4xx replies, where NOAA puts its error message.
+%
+%   Inputs:
+%     url     - full request URL (query already encoded), char or string
+%     options - struct (optional; [] = default); fields (all optional):
+%                 .timeout - connection and response timeout [s], double,
+%                     default 120
+%                 .retries - maximum number of attempts (at least 1),
+%                     double, default 5
+%                 .retry_pause_s - pause scale [s]; the pause before
+%                     attempt k+1 is retry_pause_s*k, double, default 5
+%                     (tests set 0)
+%   Outputs:
+%     reply_text - raw reply text, char
+%
+%   Tier: internal
+%
+%   See also noaa_station_catalog, noaa_station_details,
+%   download_noaa_water_levels, download_noaa_tide_predictions.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 2 || isempty(options)
     options = struct();
 end

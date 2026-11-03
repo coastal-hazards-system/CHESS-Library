@@ -1,44 +1,52 @@
 function Resp = chess_det(config, project_forcing, structure)
-%{
-    %% DESCRIPTION
-        CHESS: Deterministic (workflow 2). Computes structure responses
-        for every storm in one dataset (Peaks Default/WLP/WHP or
-        Timeseries), straight from the adjusted storm forcing: no
-        replicates, no uncertainty, no hazard curves.
-        Full histories are kept (one value per time step; Peaks have a
-        single step per storm). "Max" holds one value per storm: the
-        maximum of each variable over the storm, taken independently
-        (non-concurrent), except Rc, which takes the minimum (smallest
-        freeboard). Same reduction as compute_structure_response with
-        get_max = 1.
+% chess_det  Deterministic (DET) structure responses of one dataset.
+%   Resp = chess_det(config, project_forcing, structure)
+%
+%   CHESS: Deterministic (workflow 2). Computes the structure responses
+%   for every storm of one dataset (Peaks Default/WLP/WHP or Timeseries),
+%   straight from the adjusted storm forcing: no replicates, no
+%   uncertainty, no hazard curves.
+%   Full histories are kept (one value per time step; Peaks have a single
+%   step per storm). Max holds one value per storm: the maximum of each
+%   variable over the storm, taken independently (non-concurrent), except
+%   Rc, which takes the minimum (smallest freeboard). Same reduction as
+%   compute_structure_response with get_max = 1.
+%   The forcing itself (time, storm_duration, dt (Timeseries), SWL,
+%   Hm0_offshore, Hm0_toe, Tp) is not copied: read it from
+%   project_forcing, same data type, match type and storm type, same row
+%   order (one row per storm). Hm0_offshore is the database wave height
+%   (Goda pressures, damaging depth), Hm0_toe the one depth limited at the
+%   toe (every other response).
+%
+%   Inputs:
+%     config          - CHESS configuration, 1x1 struct (read by
+%                       compute_structure_response)
+%     project_forcing - one dataset, project_forcing.<data type>.<match
+%                       type>, struct with one field per storm type
+%                       (chess_forcing_formatter, adjust_project_forcing)
+%     structure       - structure geometry, 1x1 struct; h and Rc use
+%                       toe_elevation and crest_elevation [m, study datum,
+%                       positive up]
+%   Outputs:
+%     Resp - Resp.<storm type>, struct with fields:
+%              storm_id   - storm IDs, nStorms x 1 double
+%              h, Rc      - SWL - toe_elevation and crest_elevation - SWL
+%                           per storm [m], nStorms x 1 cell
+%              <response> - every response computed by
+%                           compute_structure_response (R2p, q, Dn50,
+%                           ...), nStorms x 1 cell
+%              Max        - one value per storm (nStorms x 1 double) for
+%                           storm_id, the forcing (SWL, Hm0_offshore,
+%                           Hm0_toe, Tp), h, Rc and every response, plus
+%                           time (datenum of the peak SWL), struct
+%
+%   Tier: internal
+%
+%   See also call_project_response, compute_structure_response,
+%   chess_forcing_formatter, adjust_project_forcing.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        config: CHESS configuration. | struc
-        project_forcing: One dataset, project_forcing.(data).(match). | struc
-            Fields per storm type, from chess_forcing_formatter and
-            adjust_project_forcing.
-        structure: CHESS structure geometry. | struc
-
-    %% OUTPUTS
-        Resp.(storm_type) with fields:
-            storm_id: Storm IDs. | double (nStorms x 1)
-            h, Rc: Derived forcing per storm, h = SWL - toe_elevation,
-                Rc = crest_elevation - SWL. | cell
-            <response>: Every response computed by
-                compute_structure_response (R2p, q, Dn50, ...). | cell
-            Max: One value per storm for storm_id, the forcing (SWL,
-                Hm0_offshore, Hm0_toe, Tp), h, Rc and every response,
-                plus time (datenum of the peak SWL). | struc
-        The forcing itself (time, storm_duration, dt (Timeseries), SWL,
-        Hm0_offshore, Hm0_toe, Tp) is not copied: read it from project_forcing, same data type, match
-        type and storm type, same row order (one row per storm).
-        Hm0_offshore is the database wave height (Goda pressures, damaging
-        depth), Hm0_toe the one depth limited at the toe (every other
-        response).
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 storm_types = fieldnames(project_forcing);
 for st = 1:length(storm_types)
     pf = project_forcing.(storm_types{st});

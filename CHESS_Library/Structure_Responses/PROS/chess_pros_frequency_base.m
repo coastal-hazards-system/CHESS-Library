@@ -1,4 +1,61 @@
 function data_out = chess_pros_frequency_base(config, structure, data_in, outPath, workflow)
+% chess_pros_frequency_base  Frequency-based PROS hazard curves.
+%   data_out = chess_pros_frequency_base(config, structure, data_in,
+%       outPath, workflow)
+%
+%   Computes response hazard curves from the forcing hazard curves of each
+%   storm type (pros_forcing_curves: SWL, Hm0_offshore, Hm0_toe, Tp, paired
+%   at equal AEF/AEP, for the y_table and y_plot rows). A storm type
+%   missing one of them is returned unchanged.
+%     workflow 1 (EB1, called by PROS-RB): only the secondary floodwall
+%       responses, per CL column: p2dyn, p2sta, p2total, p3dyn, p3sta,
+%       p3total, pu (goda_forces_on_vertical_p2p3 with Hm0_offshore and
+%       the p1 curve) and the nappe (floodwall_nappe_response with Hm0_toe
+%       and the q curve); skipped when the p1 or q curve they need is
+%       missing.
+%     workflow 4 (EB2, PROS-FB): every requested response
+%       (compute_structure_response) on a 10000-sample Monte Carlo of the
+%       first (best-estimate) column of the forcing curves with the
+%       database uncertainties: SWL (chs_swl_u_a, chs_swl_u_r, applied to
+%       SWL minus the mean lake level), Hm0_offshore (chs_hm0_u_a,
+%       chs_hm0_u_r), Hm0_toe (relative only, same draw) and Tp (relative
+%       sqrt(1 + chs_hm0_u_r) - 1, same draw); TC and CC uncertainties are
+%       reduced by a 0.1 partition, sqrt(u^2 - 0.1^2). storm_duration is
+%       config.storm_duration. Each response curve takes the sorted
+%       samples at the CL percentiles; R2p_SWL = SWL + R2p. The draws are
+%       not seeded.
+%   compute_q_vol is forced to 0. New entries (set_hazard_curve_entry, no
+%   fit; POT holds a note) are appended after the input entries, and an
+%   input entry of the same response is kept instead (RB first);
+%   tbl_rsp_x and tbl_rsp_y are removed.
+%
+%   Inputs:
+%     config    - CHESS configuration, 1x1 struct; reads project_name,
+%                 struc_id, case_name, gravity_constant [m/s^2],
+%                 water_density [kg/m^3], add_toe_berm, struc_type,
+%                 compute_p2_p3, compute_nappe, chs_swl_u_a, chs_swl_u_r,
+%                 chs_hm0_u_a, chs_hm0_u_r, storm_duration [hours], the
+%                 mean lake level (mean_lake_level) and the fields read by
+%                 compute_structure_response
+%     structure - structure geometry, 1x1 struct; reads crest_elevation,
+%                 toe_elevation, berm_crest_elevation, berm_crest_width,
+%                 berm_seaward_slope (toe berm), wall_bottom_elevation
+%                 (floodwall) [m, study datum, positive up]
+%     data_in   - hazard curves per storm type, struct with fields XC, TC
+%                 and/or CC, each a struct array of hazard curve entries
+%                 (set_hazard_curve_entry)
+%     outPath   - folder and prefix of the figure names (save_name;
+%                 nothing is written), char ('' allowed)
+%     workflow  - 1 (EB1 secondary responses) or 4 (EB2, every requested
+%                 response), double
+%   Outputs:
+%     data_out - data_in with the frequency-based entries appended, struct
+%
+%   Tier: internal
+%
+%   See also chess_pros, frequency_based_hazard_curve, pros_forcing_curves,
+%   set_hazard_curve_entry, compute_structure_response.
+
     % ==========================================
     % 1. INITIALIZE CONFIG & STRUCTURE DETAILS
     % ==========================================

@@ -1,0 +1,51 @@
+{
+  "_schemaVersion": "1.0.0",
+  "read_chess_input": {
+    "inputs": [
+      {"name": "file", "kind": "required", "type": ["file=*.xlsx,*.csv"], "purpose": "CHESS input file or PSE template (.xlsx or .csv)"}
+    ],
+    "outputs": [
+      {"name": "sections", "type": ["struct"]},
+      {"name": "rows", "type": ["cell"]}
+    ]
+  },
+  "call_input_parser": {
+    "inputs": [
+      {"name": "input_filename", "kind": "required", "type": ["file=*.xlsx,*.csv"], "purpose": "CHESS project input file (.xlsx or .csv)"}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]},
+      {"name": "structure", "type": ["struct"]}
+    ]
+  },
+  "chess_paths": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"], "purpose": "Config form: CHESS configuration (outfolder, project_name, struc_id, case_name, workflow, storm_db or region/sp_ID)"}
+    ],
+    "outputs": [
+      {"name": "paths", "type": ["struct"]}
+    ]
+  },
+  "chess_paths": {
+    "inputs": [
+      {"name": "action", "kind": "required", "type": ["char", "choices={'parse'}"], "purpose": "Parse form: read a run file name back into storm database, workflow and file type"},
+      {"name": "file_name", "kind": "required", "type": ["file=*.mat"], "purpose": "Parse form: run file name, with or without its folder"}
+    ],
+    "outputs": [
+      {"name": "run_file", "type": ["struct"]}
+    ]
+  },
+  "chess_paths": {
+    "inputs": [
+      {"name": "outfolder", "kind": "required", "type": ["folder"], "purpose": "Outfolder form: root output folder"},
+      {"name": "project_name", "kind": "required", "type": ["char"], "purpose": "Outfolder form: project name (project level paths only)"},
+      {"name": "pse", "kind": "ordered", "type": ["char"], "purpose": "Outfolder form: PSE name (config.struc_id), adds pse_dir"},
+      {"name": "alt", "kind": "ordered", "type": ["char"], "purpose": "Outfolder form: alternative name (config.case_name), adds alt_dir"},
+      {"name": "workflow", "kind": "ordered", "type": ["numeric", "scalar"], "purpose": "Outfolder form: workflow number 1 PROS-RB, 2 DET, 3 LCS, 4 PROS-FB (give with db)"},
+      {"name": "db", "kind": "ordered", "type": [["char"], ["string"], ["numeric"]], "purpose": "Outfolder form: storm database name (a number is used as its digits)"}
+    ],
+    "outputs": [
+      {"name": "paths", "type": ["struct"]}
+    ]
+  }
+}

@@ -1,54 +1,62 @@
 function details = noaa_station_details(station_id, options)
-%{
-    %% DESCRIPTION
-        Live details (no cache) of one NOAA CO-OPS station:
-            datums: metadata API stations/<id>/datums.json?units=metric. The
-                values are already in meters (no conversion). Only the datums
-                the data API accepts are kept (api_code CRD, IGLD, LWD,
-                MHHW, MHW, MTL, MSL, MLLW, MLW, NAVD, STND), with
-                NAVD88 -> NAVD and GL_LWD -> LWD. Great Lakes stations get an
-                IGLD row (value 0) when NOAA does not list it: their datum
-                values are listed relative to IGLD (e.g. LWD = 176.0 m).
-            water_level_segments: XML data inventory
-                (parse_noaa_data_inventory.m); empty for predictions-only
-                stations.
-            prediction_intervals: data API prediction intervals, only for
-                harmonic ('R') stations (options.harmonic_predictions true);
-                empty otherwise.
-        Great Lakes flag: taken from options.greatlakes when given (e.g. the
-        catalog row, noaa_station_catalog.m), which saves a request;
-        otherwise read from the station JSON (stations/<id>.json).
-        Requests: 2 (datums, inventory), plus 1 when options.greatlakes is
-        not given; 1 less with options.water_level_inventory false.
-
-    %% INPUTS
-        station_id: NOAA CO-OPS station id (e.g. '8518750'). | char/string
-        options: (Optional) Struct with any of the fields | struct
-            greatlakes: Great Lakes station (skips the station JSON
-                request). | logical
-            harmonic_predictions: Harmonic ('R') prediction station, from
-                the catalog (default false). | logical
-            water_level_inventory: Request the XML water level inventory
-                (default true). false skips it (e.g. the tide file UI, which
-                needs datums only); water_level_segments is then empty. | logical
-            web_options: Options for noaa_web_request.m. | struct
-
-    %% OUTPUTS
-        details: Struct with fields | struct
-            id: Station id. | char
-            greatlakes: Great Lakes station. | logical
-            datums: Table name, description, api_code (string) and
-                value [m]. | table
-            water_level_segments: parse_noaa_data_inventory.m table. | table
-            prediction_intervals: Table value ('1', '6', '15', '30', 'h',
-                'hilo') and description (string); empty for non-harmonic
-                stations. The data API answers 'hi' and 'lo' with "No
-                Predictions data was found" (checked 2026-11-01), so they are
-                not offered. | table
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% noaa_station_details  Datums and data inventory of one NOAA station.
+%   details = noaa_station_details(station_id)
+%   details = noaa_station_details(station_id, options)
+%
+%   Live details (no cache) of one NOAA CO-OPS station:
+%     datums: metadata API stations/<id>/datums.json?units=metric. The
+%         values are already in meters (no conversion). Records without a
+%         numeric value or a name are skipped, and only the datums the data
+%         API accepts are kept (api_code CRD, IGLD, LWD, MHHW, MHW, MTL,
+%         MSL, MLLW, MLW, NAVD, STND), with NAVD88 -> NAVD and
+%         GL_LWD -> LWD (noaa_datum_code). Great Lakes stations get an
+%         IGLD row (value 0) when NOAA does not list it: their datum
+%         values are listed relative to IGLD (e.g. LWD = 176.0 m).
+%     water_level_segments: XML data inventory
+%         (parse_noaa_data_inventory); empty for predictions-only stations.
+%     prediction_intervals: data API prediction intervals, only for
+%         harmonic ('R') stations (options.harmonic_predictions true);
+%         empty otherwise.
+%   Great Lakes flag: taken from options.greatlakes when given and not
+%   empty (e.g. the catalog row, noaa_station_catalog), which saves a
+%   request; otherwise read from the station JSON (stations/<id>.json).
+%   Requests: 2 (datums, inventory), plus 1 when options.greatlakes is not
+%   given; 1 less with options.water_level_inventory false.
+%
+%   Inputs:
+%     station_id - NOAA CO-OPS station id (e.g. '8518750'), char or string
+%     options    - struct (optional; [] = default); fields (all optional):
+%                    .greatlakes - Great Lakes station (skips the station
+%                        JSON request), logical, default: read from the
+%                        station JSON
+%                    .harmonic_predictions - harmonic ('R') prediction
+%                        station, from the catalog, logical, default false
+%                    .water_level_inventory - request the XML water level
+%                        inventory, logical, default true; false skips it
+%                        (e.g. the tide file UI, which needs datums only)
+%                        and water_level_segments is then empty
+%                    .web_options - options for noaa_web_request, struct,
+%                        default struct()
+%   Outputs:
+%     details - struct:
+%                 id - station id, char
+%                 greatlakes - Great Lakes station, logical
+%                 datums - table: name, description, api_code (string) and
+%                     value [m]
+%                 water_level_segments - parse_noaa_data_inventory table
+%                 prediction_intervals - table: value ('1', '6', '15',
+%                     '30', 'h', 'hilo') and description (string); empty
+%                     for non-harmonic stations. The data API answers 'hi'
+%                     and 'lo' with "No Predictions data was found"
+%                     (checked 2026-11-01), so they are not offered.
+%
+%   Tier: public
+%
+%   See also create_tide_file, download_noaa_tide_predictions,
+%   download_noaa_water_levels, noaa_station_catalog,
+%   select_noaa_stations, plot_noaa_stations, noaa_station_list.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 2 || isempty(options)
     options = struct();
 end

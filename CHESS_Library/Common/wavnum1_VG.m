@@ -1,25 +1,38 @@
-%=========================================================
-%  function wavenum
-%  Jeff Melby 4/27/09
-%
-%  Solves linear wave theory dispersion relation for
-%  wave number, k = 2pi/L
-%  Also solves using empirical estimate using relation from 
-%  Guo, J.  (2002).  “Simple and explicit solution of wave dispersion 
-%  equation,”  Coastal Engineering, Vol 45, No. 2, pp 71-74.
-%
-% 
-%     INPUT:
-%     T............wave period (HZ)
-%     depth........water depth (m or ft)
-%     grav.........acceleration of gravity (m/s^2 or ft/s^2)
-%
-%     OUTPUT:
-%     km...........wave number (1/m or 1/ft)
-%     kmest........wave number empirical estimate
-%     error........in case slope causes error
-%=========================================================
 function[km,kmest,ERROR] = wavnum1_VG(T,depth,grav)
+% wavnum1_VG  Wave number from the linear wave theory dispersion relation.
+%   [km, kmest, ERROR] = wavnum1_VG(T, depth, grav) solves the linear wave
+%   theory dispersion relation for the wave number, k = 2*pi/L, by Newton
+%   iteration. It also returns an empirical estimate using the relation from
+%   Guo, J. (2002), "Simple and explicit solution of wave dispersion
+%   equation", Coastal Engineering, Vol 45, No. 2, pp 71-74.
+%
+%   The operations are element-wise, so T and depth may be arrays (same
+%   size, or compatible sizes for implicit expansion). With arrays the
+%   branch tests act on the whole array: the shallow-water initial guess
+%   sqrt(WHSQ) is used unless every element has WHSQ > 1, the Newton loop
+%   runs until every element has converged, and ERROR is a single flag.
+%
+%   Inputs:
+%     T     - wave period [s], double scalar or array
+%     depth - water depth [m or ft], double scalar or array (same size as T,
+%             or compatible)
+%     grav  - acceleration of gravity [m/s^2 or ft/s^2], scalar double (use
+%             the same length unit as depth)
+%   Outputs:
+%     km    - wave number from the dispersion relation [1/m or 1/ft], double,
+%             size of T and depth combined
+%     kmest - wave number empirical estimate (Guo 2002) [1/m or 1/ft],
+%             double, same size as km
+%     ERROR - 1 when the iteration converged, 0 when the slope check failed
+%             (in case slope causes error) [-], scalar double (one flag for
+%             the whole array)
+%
+%   Tier: internal
+%
+%   Developed by: Jeff Melby
+
+% HISTORY: Jeff Melby 4/27/09 (wavenum).
+
 TOL = 1.0E-5;
 CORR = 2 * TOL;
 ERROR = 1;

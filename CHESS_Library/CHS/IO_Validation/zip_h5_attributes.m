@@ -1,30 +1,31 @@
 function [vertical_datum, sp_coords] = zip_h5_attributes(zip_name, h5_file)
-%{
-    %% DESCRIPTION
-        Study vertical datum and ADCIRC save point coordinates from the root
-        attributes ('Vertical Datum', 'Save Point Latitude', 'Save Point
-        Longitude') of one ADCIRC storm .h5 entry of a CHS zip folder, with
-        the same contract as chs_data_attributes.m (which reads them from
-        converted CHS data and is reused here). Only that entry is extracted
-        (zip_extract_entry.m), into a system temp folder removed on return,
-        errors included. Shared by call_input_parser.m and the GUI storm
-        database wizard (CHSStormDBImportUI.m).
-
-    %% INPUTS
-        zip_name: CHS zip folder (relative or full path).               | char
-        h5_file: ADCIRC storm .h5 entry name (name + extension).        | char
-
-    %% OUTPUTS
-        vertical_datum: Study vertical datum ('' if not found).         | char | 1 x any_length
-        sp_coords: ADCIRC save point [latitude longitude] in degrees    | double | 1 x 2
-                   ([] if either is not found).
-
-    %% ERRORS
-        The entry cannot be extracted (zip_extract_entry.m errors).
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% zip_h5_attributes  Study datum and savepoint coordinates from a CHS zip.
+%   [vertical_datum, sp_coords] = zip_h5_attributes(zip_name, h5_file)
+%
+%   Study vertical datum and ADCIRC save point coordinates from the root
+%   attributes ('Vertical Datum', 'Save Point Latitude', 'Save Point
+%   Longitude') of one ADCIRC storm .h5 entry of a CHS zip folder, with
+%   the same contract as chs_data_attributes (which reads them from
+%   converted CHS data and is reused here). Only that entry is extracted
+%   (zip_extract_entry), into a system temp folder removed on return,
+%   errors included. An entry that cannot be extracted is an error
+%   (zip_extract_entry errors). Shared by call_input_parser and the GUI
+%   storm database wizard (CHSStormDBImportUI).
+%
+%   Inputs:
+%     zip_name       - CHS zip folder (relative or full path), char
+%     h5_file        - ADCIRC storm .h5 entry name (name + extension),
+%                      char
+%   Outputs:
+%     vertical_datum - study vertical datum ('' if not found), char
+%     sp_coords      - ADCIRC save point [latitude longitude] [deg],
+%                      1x2 double ([] if either is not found)
+%
+%   Tier: internal
+%
+%   See also chs_data_attributes, zip_extract_entry, zip_h5_names.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 temp_path = tempname;
 temp_cleanup = onCleanup(@() remove_temp_folder(temp_path)); %#ok<NASGU>
 h5_path = zip_extract_entry(zip_name, h5_file, temp_path);

@@ -1,22 +1,28 @@
 function t_size = forcing_storm_lengths(workflow, data)
-%{
-    %% DESCRIPTION
-        Time steps per storm of one project forcing dataset (one data type >
-        match type > storm type), as used by the random tide: a storm covers
-        tide hours idx : idx + t_size - 1.
+% forcing_storm_lengths  Time steps per storm of one project forcing dataset.
+%   t_size = forcing_storm_lengths(workflow, data)
+%
+%   Time steps per storm of one project forcing dataset (one data type >
+%   match type > storm type), as used by the random tide: a storm covers
+%   tide hours idx : idx + t_size - 1. Peaks storms have one time step.
+%
+%   Inputs:
+%     workflow - workflow number (config workflow), double
+%     data     - PROS/DET dataset (SWL: one cell per storm), struct; or LCS
+%                dataset (one life-cycle matrix per cell; Peaks or
+%                Timeseries layout, lcs_columns), cell
+%   Outputs:
+%     t_size - PROS/DET: one cell per storm holding its row count. LCS: one
+%              cell per life cycle holding a column of per-storm lengths
+%              (empty life cycle: 0x1), cell
+%
+%   Tier: internal
+%
+%   See also apply_random_tide, tide_start_hours, draw_tide_indices,
+%   lcs_columns.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        workflow: config.workflow. | double
-        data: PROS/DET dataset struct (SWL: one cell per storm) or LCS
-            dataset (one life-cycle matrix per cell; Timeseries layout: lcs_columns.m). | struct/cell
-
-    %% OUTPUTS
-        t_size: PROS/DET: one cell per storm holding its row count. LCS: one
-            cell per life cycle holding a column of per-storm lengths. | cell
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 switch workflow
     case {1, 2, 4}
         t_size = cellfun(@(x) size(x,1), data.SWL, 'un', false);

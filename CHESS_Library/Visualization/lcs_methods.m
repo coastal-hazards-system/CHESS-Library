@@ -1,17 +1,78 @@
 classdef lcs_methods < CHESSPlotsBase
-    % LCS_METHODS Life-cycle simulation workflow plots (workflow = 3).
-    % Instantiated via CHESSPlots(...).
+    % lcs_methods  Plots of the life-cycle simulation (LCS) workflow results (workflow 3).
+    %   sp = CHESSPlots(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+    %       with config.workflow = 3 returns an lcs_methods object; the
+    %       constructor lcs_methods(...) takes the same inputs (documented
+    %       in CHESSPlots).
+    %
+    %   Data: the saved life-cycle matrices project_forcing.<data_type>.
+    %   <match_type>.<storm_type>{lc} (columns: lcs_columns) and the
+    %   responses aligned row for row (Resp...<storm_type>.<field>{lc});
+    %   armor damage under Resp...S (S_* series only when the run saved
+    %   them, DPA on). ds_query (every method): struct with storm_type,
+    %   data_type ('Peaks' or 'Timeseries') and match_type, see
+    %   aux_methods.pull_data.
+    %
+    %   Methods (in addition to the CHESSPlotsBase methods):
+    %     lcs_methods                   - constructor (create through CHESSPlots)
+    %     slope_armor_damage_plot       - cumulative armor damage S per life cycle or mean
+    %     event_sampling_distribution   - event type mix and mean recurrence rates
+    %     mound_damage_dashboard        - 5-panel rubble mound damage dashboard
+    %     sampling_scheme_dashboard     - 6-panel storm sampling diagnostics
+    %     split_into_events             - split life-cycle vectors into storm events
+    %     get_damaging_instances        - time steps where the armor damage grows
+    %     plot_mound_damaging_instances_distribution - share of damaging steps per life cycle
+    %     plot_pse_submergance_distribution - submergence time distribution by year
+    %     plot_mound_final_damage_state - final damage per life cycle and its mean
+    %     annual_response_distribution  - storm maxima of a response binned by year
+    %     generate_bin_guess            - bin edges spanning a response
+    %     compute_annual_distribution   - yearly bin counts or percentages
+    %     plot_annual_distribution      - pcolor of a yearly binned distribution
+    %     event_choices                 - storm event viewer / response table choices
+    %     refine_selection              - life cycle and year of a selection
+    %     event_controls                - control row: life cycle, year, peaks view
+    %     event_series                  - storm event viewer series
+    %     event_table                   - response table rows
+    %
+    %   Tier: public
+    %
+    %   See also CHESSPlots, CHESSPlotsBase, pros_methods, det_methods,
+    %   chess_lcs, chess_csr.
 
     methods (Access=public)
         function self = lcs_methods(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+            % lcs_methods  Create the LCS plotting object (use CHESSPlots).
+            %   self = lcs_methods(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+            %       passes every input to the CHESSPlotsBase constructor;
+            %       the inputs are documented in CHESSPlots.
+
             self = self@CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system);
         end
     end
 
     methods (Access=public)
-        % Method: Cumulative Armor Damage Plot (S)
         function ax = slope_armor_damage_plot(self, ax, ds_query, field_to_plot, lc_index)
-            % lc_index: Life Cycle(s) To Plot For S_* Fields ([] -> All). Smax/LSmax Are Means Across LCs (All Only).
+            % slope_armor_damage_plot  Plot the cumulative armor damage S of the life cycles.
+            %   ax = slope_armor_damage_plot(self, ax, ds_query, field_to_plot)
+            %   ax = slope_armor_damage_plot(self, ax, ds_query, field_to_plot, lc_index)
+            %       plots the S_* damage series of each life cycle over
+            %       cumulative storm hours, or the Smax / LSmax yearly mean
+            %       curve over simulation years. Rubble mound only
+            %       (structure.struc_type 3, else an error); Timeseries
+            %       results (data_type is set to Timeseries).
+            %
+            %   Inputs:
+            %     ax            - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query      - dataset query (storm_type, match_type)
+            %     field_to_plot - armor damage measure (response_registry kind
+            %                     'armor_damage': S_seaside_no_repairs, ...,
+            %                     Smax, LSmax)
+            %     lc_index      - (optional) life cycle(s) for S_* fields
+            %                     ([] = all); Smax / LSmax are means across
+            %                     life cycles (all only)
+            %   Outputs:
+            %     ax - the plot axes
+
             arguments
                 self
                 ax
@@ -89,9 +150,22 @@ classdef lcs_methods < CHESSPlotsBase
                 end
             end
         end
-        % Method: Event Sampling Distirbution Plot
         function ax = event_sampling_distribution(self, ax, ds_query, lc_index)
-            % lc_index: Life Cycle To Compute The Distribution For ([] Or Omitted -> All Life Cycles)
+            % event_sampling_distribution  Bar chart of the sampled event type mix.
+            %   ax = event_sampling_distribution(self, ax, ds_query)
+            %   ax = event_sampling_distribution(self, ax, ds_query, lc_index)
+            %       plots the share [%] of XC, TC low, TC mid and TC high
+            %       events in the sampled life cycles, with the mean storm
+            %       recurrence rate [events/yr] of each type in the legend.
+            %
+            %   Inputs:
+            %     ax       - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %     lc_index - (optional) life cycle(s) to count ([] or omitted
+            %                = all life cycles)
+            %   Outputs:
+            %     ax - the plot axes
+
             if nargin < 4
                 lc_index = [];
             end
@@ -173,8 +247,28 @@ classdef lcs_methods < CHESSPlotsBase
             lg = legend(ax, 'Location', 'northeast', 'FontSize', ax.FontSize); % XC Bar Is First (Left), Keep Legend Clear Of It
             title(lg, 'Mean SRR [event/yr]', 'FontSize', ax.FontSize, 'FontWeight', 'bold');
         end
-        % Method: Damage Dashboard
         function mound_damage_dashboard(self, ax, ds_query, field_to_plot, s_bin_edges, s_cb_lim)
+            % mound_damage_dashboard  Five-panel rubble mound armor damage dashboard.
+            %   mound_damage_dashboard(self, ax, ds_query, field_to_plot, s_bin_edges, s_cb_lim)
+            %       draws (1) the share of damaging time steps per life
+            %       cycle (plot_mound_damaging_instances_distribution), (2)
+            %       the submergence time distribution by year
+            %       (plot_pse_submergance_distribution), (3) the yearly mean
+            %       maximum cumulative damage and (4) the final damage per
+            %       life cycle of the same armor side
+            %       (slope_armor_damage_plot, plot_mound_final_damage_state)
+            %       and (5) the damage distribution by year
+            %       (annual_response_distribution, percent).
+            %
+            %   Inputs:
+            %     ax            - figure, grid layout or axes (subplot_manager)
+            %     ds_query      - dataset query (storm_type, data_type, match_type)
+            %     field_to_plot - armor damage series (response_registry
+            %                     damage_summary 'series', e.g.
+            %                     S_seaside_no_repairs)
+            %     s_bin_edges   - bin edges of panel 5 ([] = automatic)
+            %     s_cb_lim      - colorbar limits of panel 5 ([] = automatic)
+
             % Initialize Figure
             [gl, subplot_flag] = subplot_manager(self, ax, 2, 6);
             % Define Axes Objects
@@ -222,8 +316,10 @@ classdef lcs_methods < CHESSPlotsBase
 
             [ax5, ~] = annual_response_distribution(self, ax5, ds_query, field_to_plot, s_bin_edges, 'percent', s_cb_lim, false, false);
         end
-        % Method: Sampling Scheme Dashboard (Multi-Panel)
         function sampling_scheme_dashboard(self, ax, ds_query)
+            % sampling_scheme_dashboard  Six-panel diagnostics of the LCS storm sampling.
+            %   sampling_scheme_dashboard(self, ax, ds_query)
+            %
             % Diagnostics Of The LCS Storm Sampling For One Storm Type (ds_query.storm_type):
             %   (1) Storms Per Life Cycle Vs Poisson(lambda*N); Rate-Matched Sampling Only: Window lambda*N +/- 1
             %       (sample_tc_storm / sample_xc_storm; ERDC/CHL TR-20-5 Sec. 3.2-3.3)
@@ -239,6 +335,7 @@ classdef lcs_methods < CHESSPlotsBase
             % Inputs: ax -> Figure, Grid Layout Or Axes (subplot_manager) | ds_query -> storm_type, data_type, match_type
             % Uses: self.project_forcing (LCS), self.config (mcs_nYears, Nstm_XC, Nyrs_XC, project_CLs, lcs_* Sampling Settings),
             %       self.dsw (TC), self.storm (Panel 5)
+
             sampling = self.sampling_scheme_inputs(ds_query);
 
             %% Axes (2 x 3)
@@ -492,13 +589,22 @@ classdef lcs_methods < CHESSPlotsBase
 
     %%
     methods (Access=public)
-        % Method : Split Each LC Into Individual Events
         function chunked_events = split_into_events(self, ds_query, value_in)
-            % SPLIT_INTO_EVENTS Splits each Load Case array in value_in into
-            % a cell array of separate storm events.
+            % split_into_events  Split life-cycle vectors into storm events.
+            %   chunked_events = split_into_events(self, ds_query, value_in)
+            %       splits each life-cycle array of value_in at the storm
+            %       boundaries of the saved project forcing (Timeseries:
+            %       rows with step 0 start a storm; Peaks: one row per
+            %       storm).
             %
-            % Output:
-            % chunked_events{nLC}{event_num} contains the data for a specific event
+            %   Inputs:
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %     value_in - cell, one array per life cycle, rows aligned
+            %                with the project forcing rows
+            %   Outputs:
+            %     chunked_events - cell per life cycle;
+            %                      chunked_events{lc}{event} holds the rows
+            %                      of one storm event
 
             % 1. Load Simulation Forcing Data to find boundaries
             stm_data = aux_methods.pull_data(ds_query, self.project_forcing);
@@ -529,8 +635,25 @@ classdef lcs_methods < CHESSPlotsBase
                 chunked_events{nLC} = mat2cell(value_in{nLC}, chunk_lengths, size(value_in{nLC}, 2));
             end
         end
-        % Method: Find Damaging Timesteps
         function [C, damage_indx] = get_damaging_instances(self, ds_query, field_to_plot)
+            % get_damaging_instances  Time steps where the armor damage grows.
+            %   [C, damage_indx] = get_damaging_instances(self, ds_query, field_to_plot)
+            %       No repairs: the first step of each new damage value.
+            %       With repairs: evaluated storm by storm, a value counts
+            %       when it differs from the last value of the previous
+            %       storm. S = 0 steps are never damaging.
+            %
+            %   Inputs:
+            %     ds_query      - dataset query (storm_type, data_type, match_type)
+            %     field_to_plot - armor damage series (response_registry
+            %                     damage_summary 'series')
+            %   Outputs:
+            %     C           - cell per life cycle: damage values at the
+            %                   damaging steps (no repairs: every unique value,
+            %                   0 included)
+            %     damage_indx - cell per life cycle: row indices of the
+            %                   damaging steps
+
             arguments
                 self
                 ds_query struct
@@ -613,8 +736,21 @@ classdef lcs_methods < CHESSPlotsBase
                     damage_indx = cellfun(@(x,y) x(y),damage_indx,cellfun(@(x) x~=0,C,'un',false),'un',false);
             end
         end
-        % Method: Plot Damaging Timesteps Distribution
         function ax = plot_mound_damaging_instances_distribution(self, ax, ds_query, field_to_plot)
+            % plot_mound_damaging_instances_distribution  Share of damaging time steps per life cycle.
+            %   ax = plot_mound_damaging_instances_distribution(self, ax, ds_query, field_to_plot)
+            %       bars: percentage of the life-cycle time steps that
+            %       caused damage with the structure emergent; red line:
+            %       the same while submerged (SWL above the crest).
+            %
+            %   Inputs:
+            %     ax            - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query      - dataset query (storm_type, data_type, match_type)
+            %     field_to_plot - armor damage series (response_registry
+            %                     damage_summary 'series')
+            %   Outputs:
+            %     ax - the plot axes
+
             arguments
                 self
                 ax
@@ -666,8 +802,26 @@ classdef lcs_methods < CHESSPlotsBase
             xlim(ax, [min(X), max(X)]);
             legend(ax);
         end
-        % Method: Plot Submergence State 2D Distribution (Year vs Var)
         function ax = plot_pse_submergance_distribution(self, ax, ds_query, use_log_x, is_count, cb_log, cb_lim)
+            % plot_pse_submergance_distribution  Submergence time per storm binned by simulation year.
+            %   ax = plot_pse_submergance_distribution(self, ax, ds_query, use_log_x, is_count, cb_log, cb_lim)
+            %       sums the hours with SWL above the crest of each storm
+            %       (Timeseries dt column) and plots their distribution by
+            %       simulation year (compute_annual_distribution with
+            %       automatic edges, plot_annual_distribution). No
+            %       submergence: a no-data note.
+            %
+            %   Inputs:
+            %     ax        - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query  - dataset query (storm_type, data_type, match_type)
+            %     use_log_x - true: log X axis
+            %     is_count  - true: colorbar label reads counts (the bins hold
+            %                 percentages)
+            %     cb_log    - true: log colorbar
+            %     cb_lim    - colorbar limits ([] = data range)
+            %   Outputs:
+            %     ax - the plot axes
+
             arguments
                 self
                 ax
@@ -718,8 +872,20 @@ classdef lcs_methods < CHESSPlotsBase
 
 
         end
-        % Method: Plot Final Damage State For All LCs
         function ax = plot_mound_final_damage_state(self, ax, ds_query, field_to_plot)
+            % plot_mound_final_damage_state  Final armor damage of each life cycle and its mean.
+            %   ax = plot_mound_final_damage_state(self, ax, ds_query, field_to_plot)
+            %       Timeseries only (Peaks errors). Life cycles without
+            %       storms keep the initial damage 0.
+            %
+            %   Inputs:
+            %     ax            - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query      - dataset query (storm_type, data_type, match_type)
+            %     field_to_plot - no-repairs armor damage series (response_registry
+            %                     damage_summary 'series', with_repairs false)
+            %   Outputs:
+            %     ax - the plot axes
+
             arguments
                 self
                 ax
@@ -761,9 +927,34 @@ classdef lcs_methods < CHESSPlotsBase
     end
     %% ANNUAL BINNING METHOD
     methods (Access=public)
-        % Method: Compute & Plot Annual Distribution of Mean Max Responses
         function [ax, bin_data] = annual_response_distribution(self, ax, ds_query, field_to_plot,...
                 bin_edges, norm_type, cb_lim, grid_on, cb_log)
+            % annual_response_distribution  Storm maxima of a response binned by simulation year.
+            %   [ax, bin_data] = annual_response_distribution(self, ax, ds_query, field_to_plot, bin_edges, norm_type, cb_lim, grid_on, cb_log)
+            %       takes the maximum of the response over each storm of
+            %       every life cycle, pools the maxima by the storm's year
+            %       and bins them (compute_annual_distribution, with
+            %       overflow bins below
+            %       and above the edges) and plots the year x bin pcolor
+            %       (plot_annual_distribution). All-NaN response: a no-data
+            %       note and bin_data = [].
+            %
+            %   Inputs:
+            %     ax            - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query      - dataset query (storm_type, data_type, match_type)
+            %     field_to_plot - per-event response (response_registry
+            %                     per_event); armor damage is read from Resp...S
+            %     bin_edges     - inner bin edges ([] = generate_bin_guess,
+            %                     5 edges)
+            %     norm_type     - "count" or "percent"
+            %     cb_lim        - colorbar limits [min max] ([] = data range)
+            %     grid_on       - logical (not used by the plot)
+            %     cb_log        - logical, log colorbar
+            %   Outputs:
+            %     ax       - the plot axes
+            %     bin_data - nYears x bins array of counts or percentages
+            %                (empty bins NaN)
+
             arguments
                 self
                 ax
@@ -777,26 +968,6 @@ classdef lcs_methods < CHESSPlotsBase
             end
             % Registry Lists Cannot Be Called In Validators (R2022b)
             mustBeMember(field_to_plot, response_registry('output', 'names', 'per_event', true));
-            % lcs_bin_plot Generates a binned distribution plot over simulation years.
-            % This version handles overflow bins automatically and supports log colorbars.
-            %
-            % Inputs:
-            %   ax          - UIAxes handle (if empty, a new figure is created).
-            %   stm_data    - Cell array of storm data.
-            %   resp_vector - Cell array of response vectors.
-            %   nYears      - Number of simulation years.
-            %   resp_var    - Name of the response variable (for labeling).
-            %   bin_edges   - User-defined inner bin edges.
-            %   norm_type   - 'count' or 'percent'.
-            %   log_x_scale - Boolean (1 for log, 0 for linear) for X-axis.
-            %   x_ticks     - Custom X-axis ticks.
-            %   x_ticks_str - Custom X-axis tick labels.
-            %   cb_ticks    - Custom colorbar ticks.
-            %   cb_lim      - Custom colorbar limits [min max].
-            %   cmap_to_use - Custom colormap.
-            %   grid_on     - Boolean to show pcolor grid.
-            %   cb_log      - Boolean to use log scale for colorbar.
-
             %%%%
 
 
@@ -849,11 +1020,21 @@ classdef lcs_methods < CHESSPlotsBase
 
 
         end
-        % Method: Estimate Binning Edges
         function bin_edges = generate_bin_guess(self, resp_vector, n_bins, use_log)
-            % resp_vector: Nx1 cell array of Mx1 arrays
-            % n_bins: Number of bins desired (default 20)
-            % use_log: Boolean, true for log-spaced edges (default false)
+            % generate_bin_guess  Bin edges spanning the values of a response.
+            %   bin_edges = generate_bin_guess(self, resp_vector)
+            %   bin_edges = generate_bin_guess(self, resp_vector, n_bins, use_log)
+            %       spaces n_bins edges from the minimum to the maximum of
+            %       all cells (log: from the smallest positive value); a
+            %       constant response is padded so at least two edges
+            %       increase.
+            %
+            %   Inputs:
+            %     resp_vector - N x 1 cell of M x 1 arrays
+            %     n_bins      - (optional) number of edges (default 20)
+            %     use_log     - (optional) true: log-spaced edges (default false)
+            %   Outputs:
+            %     bin_edges - unique, sorted edges (row vector)
 
             if nargin < 2 || isempty(n_bins), n_bins = 20; end
             if nargin < 3 || isempty(use_log), use_log = false; end
@@ -894,8 +1075,27 @@ classdef lcs_methods < CHESSPlotsBase
             % 3. Clean up: ensure edges are unique and sorted
             bin_edges = unique(bin_edges);
         end
-        % Method: Compute Annual Distribution of Mean Max Responses
         function [bin_data, plot_edges] = compute_annual_distribution(self, stm_data, resp_vector, nYears, x_scale_log, is_count, bin_edges)
+            % compute_annual_distribution  Yearly bin counts or percentages of storm maxima.
+            %   [bin_data, plot_edges] = compute_annual_distribution(self, stm_data, resp_vector, nYears, x_scale_log, is_count, bin_edges)
+            %       takes the storm maxima per year (compute_lcs_yearly_curve)
+            %       and counts them in bin_edges plus overflow bins below and
+            %       above; the overflow bins are mapped to finite plot edges.
+            %
+            %   Inputs:
+            %     stm_data    - cell per life cycle of the LCS forcing matrices
+            %     resp_vector - cell per life cycle of the response, rows
+            %                   aligned with stm_data
+            %     nYears      - number of simulation years
+            %     x_scale_log - 1: log X axis (sets the overflow plot edges and
+            %                   the automatic edges)
+            %     is_count    - 1: counts, else percentages per year
+            %     bin_edges   - inner bin edges ([] = generate_bin_guess, 5
+            %                   edges)
+            %   Outputs:
+            %     bin_data   - nYears x bins array (0 shown as NaN)
+            %     plot_edges - finite edges for the pcolor plot
+
             if isempty(bin_edges)
                 bin_edges = generate_bin_guess(self, resp_vector, 5, x_scale_log);
             end
@@ -945,8 +1145,25 @@ classdef lcs_methods < CHESSPlotsBase
                 bin_data(:, end+1) = bin_data(:, end);
             
         end
-        % Method: Plot Annual Distribution of Mean Max Responses
         function [ax, pp, hb] = plot_annual_distribution(self, ax, bin_data, bin_edges, use_log_x, is_count, cb_log, cb_lim)
+            % plot_annual_distribution  pcolor of a distribution binned by simulation year.
+            %   [ax, pp, hb] = plot_annual_distribution(self, ax, bin_data, bin_edges, use_log_x, is_count, cb_log, cb_lim)
+            %
+            %   Inputs:
+            %     ax        - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     bin_data  - nYears x bins array (compute_annual_distribution)
+            %     bin_edges - plot edges (compute_annual_distribution
+            %                 plot_edges); the first and last bins are
+            %                 labelled as overflow bins
+            %     use_log_x - 1: log X axis
+            %     is_count  - 1: colorbar label "Count", else "Percentage"
+            %     cb_log    - true: log colorbar
+            %     cb_lim    - colorbar limits ([] = data range, [0 100] when
+            %                 constant)
+            %   Outputs:
+            %     ax - the plot axes
+            %     pp - the pcolor surface
+            %     hb - the colorbar
 
             % Define Axes Fields
             y_label_cb = aux_methods.tern(is_count == 1, 'Count of Total Events', 'Percentage of Total Events');
@@ -1017,7 +1234,17 @@ classdef lcs_methods < CHESSPlotsBase
     % row for row (Resp...<st>.<field>{lc}); S_* damage series only when the run saved them (DPA on). Nothing is computed.
     methods (Access=public)
         function ch = event_choices(self, ds_query)
-            % Choices: Life Cycles, Simulation Years With Storms Per Life Cycle, Timeseries Flag (Peaks-View Toggle)
+            % event_choices  Storm event viewer / response table choices of an LCS dataset.
+            %   ch = event_choices(self, ds_query)
+            %
+            %   Inputs:
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %   Outputs:
+            %     ch - struct: storm_ids ([]), is_ts (Timeseries data),
+            %          peaks_toggle (= is_ts), n_lc (number of life cycles),
+            %          years (cell per life cycle: simulation years with
+            %          storms)
+
             C = lcs_columns();
             pf = self.event_matrices(ds_query);
             ch.storm_ids = [];
@@ -1028,6 +1255,17 @@ classdef lcs_methods < CHESSPlotsBase
         end
 
         function sel = refine_selection(~, sel, choices)
+            % refine_selection  Validate the life cycle and year of a selection.
+            %   sel = refine_selection(self, sel, choices) sets sel.lc to 1
+            %       when it is not a valid life cycle and sel.year to 'All'
+            %       when it is not a year with storms in that life cycle.
+            %
+            %   Inputs:
+            %     sel     - selection struct (CHESSPlotsBase.event_selection)
+            %     choices - event_choices output (n_lc, years)
+            %   Outputs:
+            %     sel - the selection struct
+
             if ~isnumeric(sel.lc) || ~isscalar(sel.lc) || sel.lc < 1 || sel.lc > choices.n_lc
                 sel.lc = 1;
             end
@@ -1038,7 +1276,20 @@ classdef lcs_methods < CHESSPlotsBase
         end
 
         function ctrl = event_controls(~, parent, row, sel, choices, emit)
-            % Control Row: Life Cycle, Simulation Year ('All' Or One), Peaks-View Checkbox (Timeseries)
+            % event_controls  Control row: life cycle, simulation year and peaks view.
+            %   ctrl = event_controls(self, parent, row, sel, choices, emit)
+            %       builds the life cycle and year ('All' or one) dropdowns
+            %       and, for Timeseries data, the peaks-view checkbox.
+            %
+            %   Inputs:
+            %     parent  - uigridlayout holding the row
+            %     row     - grid row of the control row
+            %     sel     - selection struct (lc, year, peaks_view)
+            %     choices - event_choices output
+            %     emit    - function handle emit(field_name, value)
+            %   Outputs:
+            %     ctrl - uigridlayout of the control row
+
             ctrl = uigridlayout(parent, [1 6], 'ColumnWidth', {'fit', 90, 'fit', 90, 'fit', '1x'}, 'RowHeight', {'1x'}, 'Padding', [5 2 5 2]);
             ctrl.Layout.Row = row;
             years = choices.years{sel.lc};
@@ -1055,8 +1306,23 @@ classdef lcs_methods < CHESSPlotsBase
         end
 
         function ser = event_series(self, ds_query, response_to_view, sel)
-            % Storm Event Viewer Data. Timeseries View: Storm Hours Of The Chosen Year (One Color Per Storm) Or Of The Whole Life
-            % Cycle (One Style, Storm Start/End Lines, Years On The Axis); Peaks View / Peaks Data: One Marker Per Storm.
+            % event_series  Storm event viewer series of the LCS results.
+            %   ser = event_series(self, ds_query, response_to_view, sel)
+            %       Timeseries view: the storm hours of the chosen year (one
+            %       color per storm) or of the whole life cycle (one style,
+            %       storm start/end lines, years on the axis). Peaks view /
+            %       Peaks data: one marker per storm. Nothing is computed.
+            %
+            %   Inputs:
+            %     ds_query         - dataset query (storm_type, data_type, match_type)
+            %     response_to_view - response name (char or string)
+            %     sel              - selection struct (lc, year, peaks_view)
+            %   Outputs:
+            %     ser - struct of the storm event viewer series (x, x_kind,
+            %           storm_ids, swl, hm0_off, hm0_toe, h, rc, hb, resp
+            %           ([] when not saved), event_str and the optional
+            %           fields of CHESSPlotsBase.event_series_defaults)
+
             d = self.event_data(ds_query, sel);
             ser = rmfield(d, {'cols', 'mode', 'time_table', 'view_label', 'plot_title', 'extra', 'ids'});
             ser.storm_ids = d.ids;
@@ -1074,7 +1340,19 @@ classdef lcs_methods < CHESSPlotsBase
         end
 
         function [T, info] = event_table(self, ds_query, sel)
-            % Response Table Rows: The Viewer's Rows (Storm Hours / One Row Per Storm), All Forcing And Response Columns
+            % event_table  Response table rows of the LCS results.
+            %   [T, info] = event_table(self, ds_query, sel)
+            %
+            %   Inputs:
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %     sel      - selection struct (lc, year, peaks_view)
+            %   Outputs:
+            %     T    - table of the viewer rows (storm hours: Time, StormID,
+            %            Year, Order; or one row per storm: StormID, Year,
+            %            Order) with every forcing and response column
+            %     info - struct: mode ('ts' or 'peaks'), view_label,
+            %            plot_title, x_label
+
             d = self.event_data(ds_query, sel);
             if strcmp(d.mode, 'ts')
                 T = table(d.time_table(:), d.ids(:), d.extra.Year(:), d.extra.Order(:), 'VariableNames', {'Time', 'StormID', 'Year', 'Order'});

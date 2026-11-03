@@ -1,28 +1,34 @@
 function [level, reason_field, why_not] = hotstart_plan(config, config_old, is_lcs)
-%HOTSTART_PLAN Hotstart level a rerun of the same case will actually get.
-%{
-%% DESCRIPTION
-hotstart_level.m plus the one cache check it cannot make from the two
-configs: LCS level 'reuse_sampling' needs this case's own sampling seed
-file (lcs_sampling_seed_file.m, next to config.out_files.project_forcing)
-to hold the requested life cycles. When it does not, the level falls back
-to 'resample' and why_not says why. No side effects: shared by
-resolve_hotstart_state.m (library) and the GUI (Run dialog), which then
-act on the level with apply_hotstart_level.m.
-
-%% INPUTS
-config: Current run's config. | struct
-config_old: Cached run's config (same case). | struct
-is_lcs: LCS workflow (life cycles are sampled). | logical
-
-%% OUTPUTS
-level: 'full', 'reuse_sampling' or 'resample'. | char
-reason_field: Config field that set the level ('' for 'full'). | char
-why_not: Why LCS sampling reuse fell back to 'resample' ('' otherwise). | char
-
-%R DEV SIGNATURE
-Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% hotstart_plan  Hotstart level a rerun of the same case will actually get.
+%   [level, reason_field, why_not] = hotstart_plan(config, config_old,
+%       is_lcs) returns hotstart_level plus the one cache check it cannot
+%       make from the two configs.
+%
+%   LCS level 'reuse_sampling' needs this case's own sampling seed file
+%   (lcs_sampling_seed_file, next to out_files.project_forcing) to hold the
+%   requested life cycles (and the XC peak values when use_peaks = 1). When
+%   it does not, the level falls back to 'resample' and why_not says why.
+%   No side effects: shared by resolve_hotstart_state (library) and the GUI
+%   (Run dialog), which then act on the level with apply_hotstart_level.
+%
+%   Inputs:
+%     config     - current run's configuration, 1x1 struct; for LCS reads
+%                  out_files.project_forcing, storm_sampling, mcs_nLC and
+%                  use_peaks
+%     config_old - cached run's configuration (same case), 1x1 struct
+%     is_lcs     - LCS workflow (life cycles are sampled), logical
+%   Outputs:
+%     level        - 'full', 'reuse_sampling' or 'resample', char
+%     reason_field - config field that set the level ('' for 'full'), char
+%     why_not      - why LCS sampling reuse fell back to 'resample' (''
+%                    otherwise), char
+%
+%   Tier: internal
+%
+%   See also hotstart_level, apply_hotstart_level, resolve_hotstart_state,
+%   lcs_sampling_seed_file.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 [level, reason_field] = hotstart_level(config, config_old);
 why_not = '';
 if strcmp(level, 'reuse_sampling') && is_lcs

@@ -1,29 +1,36 @@
 function CHS_Data = convert_chs_zip(chs_zip, h5_names, print_progress, progress_fcn)
-%{
-    %% DESCRIPTION
-        Converts the named CHS .h5 files of a CHS zip folder (convert_h5_files, below).
-        The zip is unzipped into a system temp folder (tempname) that is
-        removed on every exit (success, converter error, a cancel raised by
-        progress_fcn). The .h5 files are matched by name in any case (dir
-        '*.h5' is case-sensitive off Windows). CHS_Data.Filename holds the
-        file name only (strip_chs_data_folders.m). Shared by
-        call_chs_data_formatter.m and the GUI storm database wizard
-        (CHSStormDBImportUI.import_chs_modeling).
-
-    %% INPUTS
-        chs_zip: CHS zip folder. | char
-        h5_names: .h5 file names to convert (no folders). | cell | number_of_files x 1
-        print_progress: Print progress to the command window. (0/1) | double | 1 x 1
-        progress_fcn: Optional. Called before each file as | function_handle | 1 x 1
-                      progress_fcn(jj, n, file_name) (convert_h5_files, below).
-                      Omitted or empty: command window only.
-
-    %% OUTPUTS
-        CHS_Data: Converted CHS files (Filename: name only, Conv_Data). | struct | 1 x number_of_files
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% convert_chs_zip  Convert the named CHS .h5 files of a CHS zip folder.
+%   CHS_Data = convert_chs_zip(chs_zip, h5_names, print_progress)
+%   CHS_Data = convert_chs_zip(..., progress_fcn)
+%
+%   Converts the named CHS .h5 files of a CHS zip folder with
+%   chs_h5_converter (local function convert_h5_files). The zip is
+%   unzipped into a system temp folder (tempname) that is removed on
+%   every exit (success, converter error, a cancel raised by
+%   progress_fcn). The .h5 files are matched by name in any case (dir
+%   '*.h5' is case-sensitive off Windows); a name not found is an error.
+%   CHS_Data.Filename holds the file name only (strip_chs_data_folders).
+%   Shared by call_chs_data_formatter and the GUI storm database wizard
+%   (CHSStormDBImportUI.import_chs_modeling).
+%
+%   Inputs:
+%     chs_zip        - CHS zip folder, char
+%     h5_names       - .h5 file names to convert (no folders),
+%                      number_of_files x 1 cell
+%     print_progress - print progress to the command window (0/1), double
+%     progress_fcn   - (optional, default []) called before each file as
+%                      progress_fcn(jj, n, file_name); [] = command window
+%                      only, function_handle
+%   Outputs:
+%     CHS_Data - converted CHS files (Filename: name only, Conv_Data:
+%                chs_h5_converter output), 1 x number_of_files struct
+%
+%   Tier: internal
+%
+%   See also chs_h5_converter, strip_chs_data_folders,
+%   call_chs_data_formatter, build_storm_database.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 4
     progress_fcn = [];
 end

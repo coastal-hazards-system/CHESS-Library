@@ -1,0 +1,39 @@
+{
+  "_schemaVersion": "1.0.0",
+  "storm_mat_name_parts": {
+    "inputs": [
+      {"name": "file", "kind": "required", "type": ["file=*.mat"], "purpose": "Storm .mat file name (folders allowed)"}
+    ],
+    "outputs": [
+      {"name": "parts", "type": ["struct"]}
+    ]
+  },
+  "zip_extract_entry": {
+    "inputs": [
+      {"name": "zip_name", "kind": "required", "type": ["file=*.zip"], "purpose": "Zip folder (relative or full path)"},
+      {"name": "entry_file", "kind": "required", "type": ["char"], "purpose": "Entry file name (name + extension, no folder)"},
+      {"name": "out_dir", "kind": "required", "type": ["folder"], "purpose": "Destination folder (created if missing)"}
+    ],
+    "outputs": [
+      {"name": "out_file", "type": ["char"]}
+    ]
+  },
+  "zip_h5_attributes": {
+    "inputs": [
+      {"name": "zip_name", "kind": "required", "type": ["file=*.zip"], "purpose": "CHS zip folder (relative or full path)"},
+      {"name": "h5_file", "kind": "required", "type": ["char"], "purpose": "ADCIRC storm .h5 entry name (name + extension)"}
+    ],
+    "outputs": [
+      {"name": "vertical_datum", "type": ["char"]},
+      {"name": "sp_coords", "type": ["double"]}
+    ]
+  },
+  "zip_h5_names": {
+    "inputs": [
+      {"name": "zip_name", "kind": "required", "type": ["file=*.zip"], "purpose": "Zip folder (relative or full path)"}
+    ],
+    "outputs": [
+      {"name": "h5_names", "type": ["cell"]}
+    ]
+  }
+}

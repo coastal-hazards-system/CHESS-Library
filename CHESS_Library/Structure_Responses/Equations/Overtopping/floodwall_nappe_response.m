@@ -1,21 +1,58 @@
 function [X_low, theta_low, X_up, theta_up, Bx, X_c_surge, theta_center, Bjet, Vjet, Fjet] = floodwall_nappe_response(SWL, Hm0, q, h_wall, rho_w, crest_elev)
-%{
-    Floodwall overtopping nappe geometry, ERDC/CHL TR-21-15 Report 1, Appendix F, Eqs. F.29-F.36
-    (flow over a sharp-crested weir, Figure F-8).
-    SWL, crest_elev: elevations [m, datum]. Hm0: [m]. q: overtopping rate [m^3/s per m] (library units).
-    h_wall: wall height Hw = crest - wall bottom [m]. rho_w: [kg/m^3].
-    h1 = h - Hw, h = total water depth at the wall (from the wall bottom) -> h1 = SWL + Hm0 - crest_elev
-    (head over the crest). Hm0 is added ON PURPOSE (conservative): HSDRRS Design Guidelines (2010), Ch. 4
-    "Wave and Surge Overtopping" (pp. 4-18/4-19): combined overtopping pulsates and the jet lands farther from
-    the wall when the wave crest overtops, so protection must extend farther than for surge alone. The surge-only
-    sharp-crested weir nappe (HSDRRS Eqs. 4.12-4.15 = TR-21-15 F.29-F.30) is applied with the wave crest added to
-    the head (HSDRRS uses a crest 0.7*H above SWL, Eq. 4.25; using the full Hm0 is more conservative).
-    No water head (h1 <= 0): no nappe, all outputs NaN.
-    Coordinates (Report 1, Sec. 5.6 & Fig. 53): x = 0 at the flood face of the wall, positive landward.
-    Angles are reported POSITIVE, as the angle below the leeside horizontal (the report's F.32-F.33 slope
-    angles are negative; theta here = -theta_report), so F.34 becomes BJ = Bx*sin(theta).
-    Outputs (all >= 0): distances [m], angles [deg], Vjet [m/s], Fjet [N/m].
-%}
+% floodwall_nappe_response  Floodwall overtopping nappe geometry and jet force.
+%   [X_low, theta_low, X_up, theta_up, Bx, X_c_surge, theta_center, Bjet,
+%       Vjet, Fjet] = floodwall_nappe_response(SWL, Hm0, q, h_wall, rho_w,
+%       crest_elev) returns the landing range, angle, width, velocity and
+%       force of the overtopping jet behind a floodwall.
+%
+%   Sharp-crested weir nappe of ERDC/CHL TR-21-15 Report 1, Appendix F,
+%   Eqs. F.29-F.36 (Figure F-8), with the head over the crest
+%   h1 = SWL + Hm0 - crest_elev. Hm0 is added on purpose (conservative):
+%   HSDRRS Design Guidelines (2010), Ch. 4 "Wave and Surge Overtopping"
+%   (pp. 4-18/4-19) note that combined overtopping pulsates and the jet
+%   lands farther from the wall when the wave crest overtops; the surge
+%   only nappe (HSDRRS Eqs. 4.12-4.15 = TR-21-15 F.29-F.30) is applied
+%   with the wave crest added to the head (HSDRRS uses 0.7*H above SWL,
+%   Eq. 4.25; the full Hm0 is more conservative). No head (h1 <= 0): no
+%   nappe, every output NaN. With A = -0.425, B = 0.055, C = 0.150 and
+%   D = 0.559:
+%     X_low = h1*(-B - sqrt(B^2 - 4*A*(C + h_wall/h1)))/(2*A)      (F.29)
+%     X_up  = h1*(-B - sqrt(B^2 - 4*A*(C + D + h_wall/h1)))/(2*A)  (F.30)
+%     X_c_surge = (X_up + X_low)/2                                 (F.31)
+%     theta = -atand(2*A*X/h1 + B) at X_low and X_up          (F.32, F.33)
+%     Bjet = Bx*sind(theta_center), Bx = X_up - X_low              (F.34)
+%     Vjet = q/Bjet                                                (F.35)
+%     Fjet = rho_w*Bjet*Vjet^2                                     (F.36)
+%   Coordinates (Report 1, Sec. 5.6 and Fig. 53): x = 0 at the flood face
+%   of the wall, positive landward. Angles are positive below the leeside
+%   horizontal (theta = -theta_report), so F.34 uses sin(theta).
+%
+%   Inputs (SWL, Hm0 and q with the same number of elements; outputs take
+%   the shape of SWL):
+%     SWL        - still water level [m, study datum, positive up]
+%     Hm0        - spectral significant wave height at the toe [m]
+%     q          - mean overtopping discharge [m^3/s per m]
+%                  (Eurotop_r2p_q_Final)
+%     h_wall     - wall height Hw, crest - wall bottom elevation [m], scalar
+%     rho_w      - water density [kg/m^3], scalar
+%     crest_elev - wall crest elevation [m, study datum, positive up],
+%                  scalar
+%   Outputs (size of SWL, all >= 0 or NaN):
+%     X_low        - distance to the lower nappe impact point [m] (F.29)
+%     theta_low    - jet angle at X_low [deg] (F.32)
+%     X_up         - distance to the upper nappe impact point [m] (F.30)
+%     theta_up     - jet angle at X_up [deg] (F.33)
+%     Bx           - horizontal impact width, X_up - X_low [m]
+%     X_c_surge    - distance to the jet center [m] (F.31)
+%     theta_center - mean jet angle, (theta_low + theta_up)/2 [deg]
+%     Bjet         - impinging jet width [m] (F.34)
+%     Vjet         - jet entry velocity [m/s] (F.35)
+%     Fjet         - jet force per unit wall length [N/m] (F.36)
+%
+%   Tier: public
+%
+%   See also Eurotop_r2p_q_Final, compute_structure_response.
+
 %% VECTORIZE INPUTS
 data_dims = size(SWL);
 SWL = SWL(:);

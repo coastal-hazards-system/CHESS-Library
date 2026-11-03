@@ -1,17 +1,39 @@
 function prob_mass_validation(config, prob_mass, storm)
-% --------- prob_mass fields ------------
-% 1. TC_SRR -> 1 x 4 double -> [low, mid, high, total]
-%       Tropical Cyclone Recurrence Rates [storm/yr] per Intensity Bin
-%       Intensities (center pressure deficit, dP) [hPa | mbar] -> dP<28 (low),
-%       28 <= dP < 48 (mid), dP >= 48 (high)
-% 2. TC_Freq -> number_of_tc_storms x 1 double -> [storm/yr]
-%       Tropical Cyclone Discrete Storm Weights (DSW's) or Probability mass
-% 3. TotalFreq -> 1 x 1 double -> sum(TC_Freq)
-%       Total TC storm suite frequency
-% 4. smpl1, smpl2, smpl3 -> N x 1 doubles
-%       Each field contians storm IDs associated to each intensity bin.
-%       Storm IDs must coincide with those listed on "storm" variable.
-% ----------------------------------------
+% prob_mass_validation  Check the TC probability masses of a user storm .mat.
+%   prob_mass_validation(config, prob_mass, storm)
+%
+%   Checks the prob_mass variable of a user storm .mat (storm_data
+%   input); called by call_input_parser and the GUI storm database wizard
+%   when the storm data has TC storms. Errors (message only, no error ID)
+%   when prob_mass does not hold the six fields below, when TC_SRR has
+%   neither 1 row nor 4 columns, or when smpl1, smpl2 and smpl3 are all
+%   empty. Prints a warning when TotalFreq differs from sum(TC_Freq) or
+%   the TC_SRR total from the sum of the three bin rates. The TC_Freq
+%   length is not checked against the TC storm count of storm.
+%
+%   Inputs:
+%     config    - CHESS configuration, 1x1 struct; not read
+%     prob_mass - TC probability masses, struct; fields:
+%                   TC_SRR    - TC storm recurrence rates per intensity
+%                               bin [storms/yr], 1x4 double [low, mid,
+%                               high, total]; bins by central pressure
+%                               deficit dP [hPa]: low dP < 28, mid
+%                               28 <= dP < 48, high dP >= 48
+%                   TC_Freq   - TC discrete storm weights (probability
+%                               masses) [storms/yr], N x 1 double
+%                   TotalFreq - total TC storm suite frequency,
+%                               sum(TC_Freq) [storms/yr], scalar double
+%                   smpl1, smpl2, smpl3 - storm IDs of the low, mid and
+%                               high intensity bins (IDs of the storm
+%                               variable), N x 1 double
+%     storm     - user storm database, struct; not read
+%   Outputs:
+%     none (errors or prints a warning)
+%
+%   Tier: internal
+%
+%   See also storm_validation, storm_db_check, call_input_parser.
+
     % Define Intensity Bins
     intensity_bins = {'smpl1','smpl2','smpl3'}; % low, mid, high
 % Scan Provided PM File Fields

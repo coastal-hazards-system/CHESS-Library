@@ -1,23 +1,29 @@
 function tide_indx = tide_start_hours(n_tide, t_size, tide_indx)
-%{
-    %% DESCRIPTION
-        Random tide start hours (rows of the tide record) per storm. A storm
-        of L time steps covers tide hours idx : idx + L - 1, so it fits when
-        idx + L - 1 <= n_tide. New start hours are drawn uniformly from
-        [1, n_tide - L + 1]; supplied start hours are kept, except those whose
-        storm does not fit, which are redrawn the same way (that storm only).
+% tide_start_hours  Random tide start hours that fit the tide record.
+%   tide_indx = tide_start_hours(n_tide, t_size, tide_indx)
+%
+%   Random tide start hours (rows of the tide record) per storm. A storm of
+%   L time steps covers tide hours idx : idx + L - 1, so it fits when
+%   idx + L - 1 <= n_tide. New start hours are drawn uniformly from
+%   [1, n_tide - L + 1]; supplied start hours are kept, except those whose
+%   storm does not fit, which are redrawn the same way (that storm only).
+%   A tide record shorter than the longest storm is an error
+%   (tide_start_hours:tideTooShort).
+%
+%   Inputs:
+%     n_tide    - number of hourly records in the tide file, double
+%     t_size    - time steps per storm (forcing_storm_lengths), cell
+%     tide_indx - start hours to keep ([] = draw all), cell (same shape as
+%                 t_size)
+%   Outputs:
+%     tide_indx - start hours, every storm fitting the tide record, cell
+%
+%   Tier: internal
+%
+%   See also apply_random_tide, draw_tide_indices, forcing_storm_lengths.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        n_tide: Number of hourly records in the tide file. | double
-        t_size: Time steps per storm (forcing_storm_lengths.m). | cell
-        tide_indx: Start hours to keep ([] = draw all), same shape as t_size. | cell
-
-    %% OUTPUTS
-        tide_indx: Start hours, every storm fitting the tide record. | cell
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 L_max = max([0; cell2mat(cellfun(@(x) x(:), t_size(:), 'un', false))]);
 if L_max > n_tide
     error('tide_start_hours:tideTooShort', ['The tide file holds %d hourly records, fewer than the %d time steps ',...

@@ -1,37 +1,43 @@
 function [sections, rows] = read_chess_input(file)
-%{
-    %% DESCRIPTION
-        Reads a CHESS input file or PSE template (.xlsx or .csv), shared
-        by the library (call_input_parser.m) and the GUI
-        (chessProject.get_library_template). Layout independent: every
-        'Model Variable Symbol' header cell (any row, any column; sections
-        may sit side by side in several column blocks, in any order) starts
-        a section whose title is the cell above the header. Section rows
-        are the rows below the header in that column block: symbol (header
-        column), description, units (next two columns) and value (the
-        'Value' header column of that section, else 3 columns right of the
-        symbol). A section ends at the next section title (the row above
-        the next header in the same column) or at the end of the data.
-        Blank rows (no symbol) are skipped, never treated as terminators,
-        so a .csv (blank lines kept) or a sheet with blank rows added or
-        removed reads the same. Missing cells become ''.
-
-    %% INPUTS
-        file: CHESS input file / PSE template (.xlsx or .csv).      | char
-
-    %% OUTPUTS
-        sections: One field per known section (general, forcing,        | struct
-                  geometry, properties, responses, mcs, csr, pros), each
-                  an N x 4 cell {symbol, description, units, value},
-                  matched by title keyword (contains(lower(title), key),
-                  first key in that order; a later section with the same
-                  key replaces an earlier one). Sections with other
-                  titles give no field but still contribute to rows.
-        rows: Rows of every section (header order: column-major), N x 4. | cell
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% read_chess_input  Read a CHESS input file or PSE template (.xlsx or .csv).
+%   [sections, rows] = read_chess_input(file) reads every section of the
+%   input file and returns the known sections by name and all section rows.
+%
+%   Shared by the library (call_input_parser) and the GUI
+%   (chessProject.get_library_template). Layout independent: every
+%   'Model Variable Symbol' header cell (any row, any column; sections may
+%   sit side by side in several column blocks, in any order) starts a
+%   section whose title is the cell above the header. Section rows are the
+%   rows below the header in that column block: symbol (header column),
+%   description, units (next two columns) and value (the 'Value' header
+%   column of that section, else 3 columns right of the symbol). A section
+%   ends at the next section title (the row above the next header in the
+%   same column) or at the end of the data. Blank rows (no symbol) are
+%   skipped, never treated as terminators, so a .csv (blank lines kept) or
+%   a sheet with blank rows added or removed reads the same. Missing cells
+%   become ''.
+%
+%   Inputs:
+%     file     - path of the CHESS input file or PSE template, char or
+%                string; .csv is read as comma-delimited text, any other
+%                extension (.xlsx) with readcell defaults
+%   Outputs:
+%     sections - struct with one field per known section (general,
+%                forcing, geometry, properties, responses, mcs, csr, pros),
+%                each an N x 4 cell {symbol, description, units, value}
+%                (0 x 4 when the file has no such section). Matched by
+%                title keyword (contains(lower(title), key), first key in
+%                that order; a later section with the same key replaces an
+%                earlier one). Sections with other titles give no field
+%                but still contribute to rows.
+%     rows     - N x 4 cell {symbol, description, units, value}, the rows
+%                of every section (header order: column-major)
+%
+%   Tier: public
+%
+%   See also call_input_parser, create_structure_geometry, readcell.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 [~, ~, ext] = fileparts(file);
 if strcmpi(ext, '.csv')
     raw = readcell(file, 'FileType', 'text', 'Delimiter', ',', 'EmptyLineRule', 'read');

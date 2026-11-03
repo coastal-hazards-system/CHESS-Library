@@ -1,42 +1,101 @@
-%{
-SST Input Data Structures:
-
-1. Input Data Specifications:
-
-response_data.(XX), where XX respresents
-    - data: N x 3 double data matrix, where each column represents:
-        col 01: Event response MATLAB serial date (see datenum)
-        col 02: Response data without tides
-        col 03: Response data with tides (For POT Datatypes only, For Timeseries this is ignored)
-    - flag_value: Flag value to remove from response data.  
-    - lambda: mean annual rate of events (events/year). This is for Timeseries only. 
-    - Nyrs: record length in years. This is for POT data types only.
-    - SLC: magnitude of the sea level change implicit in the storm surge
-    - response_data.DataType:'POT' or 'Timeseries'
-
-2. Probabilistic Simulation Technique (PST) Specifications:
-
-pst_options.(XX), where XX represents
-    - tLag: inter-event time in hours. This is for Timeseries only and used for POT creation. 
-    - GPD_TH_crit: indicator for specifying the GPD threshold option of the Mean Residual Life (MRL) selection process. 
-                   Options are:
-                        2) GPD_TH_crit = 1: to only evaluate the MRL threshold selected by the lambda criterion
-                        3) GPD_TH_crit = 2: to only evaluate the MRL threshold selected by the minimum error criterion
-    - ind_Skew: indicator for computing/adding skew tides to the storm surge (1-apply skew tides, 0-don't apply skew tides)
-    - use_AEP: AEP vs AEF flag (1-Use AEP for HC frequencies, 0-Use AEF for HC frequencies)
-    - prc: percentage values for computing the percentiles. Accepts a max of 4 values.
-    - apply_GPD_to_SS: Force GPD Fit 
-    - pst_options.stat_print: indicator to print script status (1-print steps, 0-don't print)
-    
-plot_options.(XX), where XX represents
-    - create_plots: 
-    - staID: Response variable name. 
-    - yaxis_Label: Hazard curve y axis label
-    - yaxis_Limits: Hazard curve y axis limits 
-    - y_log: Hazard curve y axis scale switch (1-log, 0-linear)
-    - path_out: Output path
-%}
 function [SST_output] = CHESS_PST(response_data, pst_options, plot_options)
+% CHESS_PST  Response hazard curves by peaks-over-threshold statistics.
+%   SST_output = CHESS_PST(response_data, pst_options, plot_options)
+%
+%   Peaks-over-threshold statistics (PST; SST was the former name) of the
+%   CHS probabilistic coastal hazard analysis, used for extratropical (XC)
+%   responses: a peaks-over-threshold (POT) sample, given (DataType 'POT')
+%   or extracted from a time series (DataType 'Timeseries', CHESS_POT),
+%   is bootstrapped and fitted with a generalized Pareto distribution
+%   (GPD) above a mean residual life (MRL) threshold, giving the mean
+%   hazard curve and its confidence limits (CL) (CHESS_PST_Fit).
+%   The inputs are checked first (errors for invalid fields). POT rows
+%   with the flag value or with NaN, Inf or <= 0 (response, and response
+%   with tides when ind_Skew = 1) are removed; Timeseries rows with the
+%   flag value, NaN or Inf are removed and Nyrs is the number of days with
+%   data / 365.25. An error is raised when no valid data is left (POT: 3
+%   or fewer unique values). Duplicate POT values get 1e-6 added. Errors
+%   of the fit or the plots are not raised: they are returned in
+%   SST_output.ME. The known gpfit and table warnings are silenced by ID
+%   until the function returns.
+%
+%   Inputs:
+%     response_data - response sample, struct; fields:
+%       .data       - [time, response, response_with_tides], N x 3
+%                     double: column 1 event time (MATLAB datenum; used
+%                     for Timeseries only), column 2 response without
+%                     tides, column 3 response with tides (POT with
+%                     ind_Skew = 1 only; ignored for Timeseries)
+%       .DataType   - 'POT' or 'Timeseries', char
+%       .flag_value - response value to remove ([] = none)
+%       .Nyrs       - record length [years], scalar > 0 (POT; computed
+%                     for Timeseries)
+%       .lambda     - mean annual rate of events [1/yr], scalar > 0
+%                     (Timeseries; ignored for POT)
+%       .SLC        - sea level change implicit in the response [response
+%                     units], scalar >= 0 (POT; 0 for Timeseries)
+%       .gprMdl     - skew tide Gaussian process regression model
+%                     (RegressionGP, predicts the skew tide mean and
+%                     standard deviation from the surge), required when
+%                     ind_Skew = 1; the field must exist ([] otherwise)
+%     pst_options - PST settings, struct; fields:
+%       .GPD_TH_crit     - MRL threshold criterion: 1 sample intensity
+%                          (about 2 events/yr), 2 minimum weighted mean
+%                          square error (WMSE)
+%       .apply_GPD_to_SS - 1 always fit the GPD; 0 use the empirical curve
+%                          when the POT sample has < 20 events or Nyrs <
+%                          20 years
+%       .bootstrap_sims  - bootstrap simulations, >= 100 (non-numeric or
+%                          < 100 = 100)
+%       .ind_Skew        - add skew tides from gprMdl (0/1; POT only,
+%                          forced to 0 for Timeseries)
+%       .tLag            - inter-event time [hours], scalar > 0
+%                          (Timeseries; ignored for POT)
+%       .use_AEP         - frequencies as AEP (1) or AEF (0)
+%       .prc             - CL percentiles [%], up to 4 values
+%                          ([] = [2.28 15.87 84.13 97.72])
+%       .stat_print      - clear the command window and print the
+%                          progress (0/1)
+%     plot_options - plot settings, struct; fields:
+%       .create_plots - write the figures and output .mat (0/1)
+%       .staID        - variable name for titles and file names, char
+%                       ([] = 'resp')
+%       .yaxis_Label  - y axis label, char ([] = '')
+%       .yaxis_Limits - y axis limits ([] = automatic)
+%       .y_log        - y axis log scale of the bootstrap figure (0/1)
+%       .path_out     - output folder, char ([] = current folder); files
+%                       go in <path_out>/PST_outputs
+%   Outputs:
+%     SST_output - hazard curves, struct; fields:
+%       .staID        - plot_options.staID
+%       .RL           - record length Nyrs [years]
+%       .MRL_output   - MRL threshold selection (CHESS_MRL Summary and
+%                       Selection tables, when the GPD is fitted) with the
+%                       bootstrap GPD parameters pd_TH_wOut, pd_k_wOut,
+%                       pd_sigma, pd_k_mod (shape limited to [-0.5 0.3])
+%                       and Status ('' or the reason the GPD was not fit)
+%       .HC_plt_x     - plot grid AEF (AEP when use_AEP = 1) from 1e-6 to
+%                       10, 631 x 1
+%       .HC_plt       - response at HC_plt_x, columns [bootstrap mean,
+%                       prc CLs], 631 x (1 + numel(prc))
+%       .HC_tbl_x     - table AEP 1/[2 5 10 ... 1e6] (18 values) or AEF
+%                       1/[0.1 0.2 0.5 ... 1e4] (16 values)
+%       .HC_tbl       - response at HC_tbl_x (same columns), negatives NaN
+%       .HC_tbl_rsp_y - response levels 0.01:0.01:20, 2000 x 1
+%       .HC_tbl_rsp_x - AEF/AEP of each HC_tbl_rsp_y level (same columns),
+%                       < 1e-4 set to NaN
+%       .HC_emp       - empirical curve, table (Response, Rank, CCDF,
+%                       Hazard = AEF or AEP, ARI)
+%       .ME           - MException of a failed fit or plot (after a
+%                       failed fit only staID is set; HC_plt_x, HC_tbl_x
+%                       and HC_tbl_rsp_y are then missing)
+%   With create_plots = 1 the figures (CHESS_PST_plot, bootstrap check)
+%   and CHESS_<staID>_SST_output.mat are written in <path_out>/PST_outputs.
+%
+%   Tier: public
+%
+%   See also CHESS_JPM, aef2aep, aep2aef.
+
 %% Other settings
 if pst_options.stat_print == 1
     clc;

@@ -1,10 +1,50 @@
 function [storm_data, ts_storm2rm] = chs_timeseries_formatter(swl_timeseries, hm0_timeseries, storms2rm,...
     STWAVE_headers_location, Tp_special, print_progress)
-%{
-    %% DESCRIPTION
-    An optimized, vectorized version of the CHS time-series parser.
-    Eliminates iterative datetime parsing and redundant logical scans.
-%}
+% chs_timeseries_formatter  Match ADCIRC and wave model Timeseries per storm.
+%   [storm_data, ts_storm2rm] = chs_timeseries_formatter(swl_timeseries,
+%       hm0_timeseries, storms2rm, STWAVE_headers_location, Tp_special,
+%       print_progress)
+%
+%   Builds the Timeseries.Default dataset of one storm type. Both tables
+%   are sorted by Storm ID and paired by row. For each storm the ADCIRC
+%   water level is kept within the wave model time range, then both are
+%   linearly interpolated to an hourly time step over their common time
+%   range. A raw peak (SWL, Hm0, Tp, wave dir) missed by the interpolation
+%   is written at the hourly time step nearest its time, so each
+%   hydrograph keeps its raw peak. Rows with flagged values (SWL < -90;
+%   Hm0, Tp or wave dir < -400) or NaN are dropped. Tp_special = 1 gives
+%   Tp = 1.2 * Tm. A storm in storms2rm or with a single water level value
+%   gets NaN data, a storm left with no rows gets empty data; both are
+%   added to ts_storm2rm.
+%
+%   Inputs:
+%     swl_timeseries          - converted ADCIRC Timeseries table
+%                               (Table_StormData: Storm ID, yyyymmddHHMM,
+%                               Water Elevation; one row per storm, cells
+%                               hold the series), table
+%     hm0_timeseries          - converted wave model Timeseries table
+%                               (Storm ID, yyyymmddHHMM and the columns
+%                               named in STWAVE_headers_location), table
+%     storms2rm               - IDs of storms already removed (Peaks
+%                               screening; [] without Peaks), double
+%     STWAVE_headers_location - wave model column names (fields Hm0, Tp,
+%                               wDir; chs_wave_model_header_locator),
+%                               struct
+%     Tp_special              - 1 when the wave file gives the mean period
+%                               Tm instead of Tp, else 0, double
+%     print_progress          - print the completion percentage (0/1),
+%                               double
+%   Outputs:
+%     storm_data  - Timeseries dataset, number_of_storms x 2 cell
+%                   {storm ID, M x 6 [SWL Hm0 Tp wave_dir datenum dt]};
+%                   dt is the time step (1 hour) as a datenum span [days]
+%     ts_storm2rm - unique IDs of storms2rm and of the storms removed
+%                   here, column double
+%
+%   Tier: internal
+%
+%   See also call_chs_storm_quality_check, chs_wave_model_header_locator,
+%   chs_timeseries_peak_replacer, chs_peaks_formatter.
 
 %% DEFINE INPUTS AND PRE-ALLOCATE
 if print_progress

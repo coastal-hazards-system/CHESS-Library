@@ -1,0 +1,53 @@
+{
+  "_schemaVersion": "1.0.0",
+  "chs_dependencies_message": {
+    "inputs": [
+      {"name": "storm_sampling", "kind": "required", "type": ["char", "choices={'TC','CC'}"], "purpose": "Requested storm sampling that needs CHS_Dependencies"},
+      {"name": "region", "kind": "required", "type": ["char"], "purpose": "CHS region (config.region)"}
+    ],
+    "outputs": [
+      {"name": "msg", "type": ["char"]}
+    ]
+  },
+  "chs_dependency_files": {
+    "inputs": [
+      {"name": "chs_dependencies_folder", "kind": "required", "type": ["folder"], "purpose": "CHS_Dependencies folder (config.chs_dependencies; '' allowed)"},
+      {"name": "region", "kind": "required", "type": ["char"], "purpose": "CHS region (config.region; '' lists available_regions)"}
+    ],
+    "outputs": [
+      {"name": "files", "type": ["struct"]}
+    ]
+  },
+  "storm_db_info": {
+    "inputs": [
+      {"name": "action", "kind": "required", "type": ["char", "choices={'create'}"], "purpose": "Create form: build db_info"},
+      {"name": "bnu", "kind": "required", "type": ["struct"], "purpose": "Create form: storm_db_bias_uncertainty output"},
+      {"name": "tc_bias_corrected", "kind": "required", "type": ["numeric"], "purpose": "Create form: 1 if the TC SWL bias correction was applied, else 0"},
+      {"name": "Nyrs_XC", "kind": "required", "type": ["numeric"], "purpose": "Create form: XC record length [years] ([] without XC)"},
+      {"name": "Nstm_XC", "kind": "required", "type": ["numeric"], "purpose": "Create form: XC storm count ([] without XC)"},
+      {"name": "source_file", "kind": "required", "type": [["char"], ["string"]], "purpose": "Create form: input the database was built from (name + extension)"}
+    ],
+    "outputs": [
+      {"name": "db_info", "type": ["struct"]}
+    ]
+  },
+  "storm_db_info": {
+    "inputs": [
+      {"name": "action", "kind": "required", "type": ["char", "choices={'apply'}"], "purpose": "Apply form: copy db_info into config"},
+      {"name": "db_info", "kind": "required", "type": ["struct"], "purpose": "Apply form: storm database details"},
+      {"name": "config", "kind": "required", "type": ["struct"], "purpose": "Apply form: CHESS configuration"}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]}
+    ]
+  },
+  "storm_db_info": {
+    "inputs": [
+      {"name": "action", "kind": "required", "type": ["char", "choices={'valid'}"], "purpose": "Valid form: db_info holds every required field"},
+      {"name": "db_info", "kind": "required", "type": ["struct"], "purpose": "Valid form: storm database details"}
+    ],
+    "outputs": [
+      {"name": "tf", "type": ["logical"]}
+    ]
+  }
+}

@@ -1,37 +1,50 @@
 function res = lcs_convergence_check(lambda, N, nLC, tol, c, p, stm_type, quiet)
-%{
-    %% DESCRIPTION
-        Estimates how many life cycles a full Poisson LCS (lcs_restrict_sampling_rate = 0)
-        needs so the life-cycle storm count statistics are converged, and prints a short
-        report. The storm count of a life cycle is Poisson(lambda*N).
-        Two requirements, the largest governs:
-            - Mean: relative half-width of the c-confidence interval of the mean storm
-              count <= tol -> nLC_mean = ceil((z/tol)^2 / (lambda*N)), z = norminv((1+c)/2).
-            - Percentiles: smallest candidate nLC (25*2^k, up to 102400) whose sample
-              percentiles (prctile, MATLAB default) are within max(1, tol*x_p) storms of
-              the exact Poisson percentile x_p in a fraction c of 1000 repeats.
-        Percentiles below the storm-free share exp(-lambda*N) are 0 storms (reported only).
-        quiet = true skips the printed report (e.g. plots and the GUI dialog).
-        The random draws of this check do not affect the LCS: the global random number
-        generator state is restored on exit (also on error).
+% lcs_convergence_check  Life cycles needed for converged LCS storm counts.
+%   res = lcs_convergence_check(lambda, N, nLC, tol, c, p, stm_type)
+%   res = lcs_convergence_check(..., quiet)
+%
+%   Estimates how many life cycles a full Poisson LCS
+%   (lcs_restrict_sampling_rate = 0) needs so the life-cycle storm count
+%   statistics are converged, and prints a short report. The storm count
+%   of a life cycle is Poisson(lambda*N). Two requirements, the largest
+%   governs:
+%     - Mean: relative half-width of the c-confidence interval of the mean
+%       storm count <= tol -> nLC_mean = ceil((z/tol)^2 / (lambda*N)),
+%       z = norminv((1+c)/2).
+%     - Percentiles: smallest candidate nLC (25*2^k, up to 102400) whose
+%       sample percentiles (prctile, MATLAB default) are within
+%       max(1, tol*x_p) storms of the exact Poisson percentile x_p in a
+%       fraction c of 1000 repeats.
+%   Percentiles below the storm-free share exp(-lambda*N) are 0 storms
+%   (reported only). The random draws of this check do not affect the
+%   LCS: the global random number generator state is restored on exit
+%   (also on error).
+%
+%   Inputs:
+%     lambda   - storm rate [storms/yr], scalar double
+%     N        - life-cycle length, mcs_nYears [years], scalar double
+%     nLC      - number of life cycles, mcs_nLC, scalar double
+%     tol      - relative tolerance, lcs_convergence_tol [-], scalar double
+%     c        - confidence level, lcs_convergence_confidence [-], scalar
+%                double
+%     p        - percentile levels [%], from project_CLs (e.g. [16 84]),
+%                double vector
+%     stm_type - storm type label for the report ('XC', 'TC'), char
+%     quiet    - (optional, default false) true: no printed report (e.g.
+%                plots and the GUI dialog), logical
+%   Outputs:
+%     res - lamN (lambda*N), cv (1/sqrt(lamN)), p0 (storm-free share
+%           exp(-lamN)), zero_pct (levels of p below p0, as fractions),
+%           nLC_mean, nLC_pct (Inf above the cap), nLC_req (largest of
+%           both), nLC, converged (nLC >= nLC_req) and nLC_cap (102400),
+%           1x1 struct
+%
+%   Tier: internal
+%
+%   See also lcs_convergence_checks, chess_lcs.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        lambda: Storm rate [storms/yr]. | double
-        N: Life cycle length, config.mcs_nYears [yr]. | double
-        nLC: Number of life cycles, config.mcs_nLC. | double
-        tol: Relative tolerance, config.lcs_convergence_tol. | double
-        c: Confidence level, config.lcs_convergence_confidence. | double
-        p: Percentile levels [%], from config.project_CLs (e.g. [16 84]). | double
-        stm_type: Storm type label for the report ('TC', 'XC'). | char
-        quiet: Optional, true -> no printed report (default false). | logical
-
-    %% OUTPUTS
-        res: lamN, cv, p0, zero_pct, nLC_mean, nLC_pct (Inf if above the cap),
-             nLC_req, nLC, nLC_cap, converged. | struct
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 if nargin < 8
     quiet = false;
 end

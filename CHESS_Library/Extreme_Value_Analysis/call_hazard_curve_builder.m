@@ -1,29 +1,69 @@
 function  [Output]= call_hazard_curve_builder(config, TC_Prob, Resp, storm_type, use_aep, outPath)
-% CALL_STRUCTURE_CURVE_BUILDER Computes hazard curve for provided forcing
-% and structure responses using CHESS's SST & JPM. Supports hazard curve
-% calculations for: SWL, Tp, Hm0_offshore, Hm0_toe, R2p, R2p+SWL, q, Dn50, Dn50_Lee, p1.
-% Responses hold one column per replicate: the z = 0 replicate is dropped
-% (drop_z0.m) before fitting and kept in POT (overlays). Forcing curves
-% SWL, Tp, Hm0_offshore (pros_forcing_curves.m) come in as the z = 0 column
-% only; Hm0_toe comes in with every replicate, like a response.
-% Additionally, computes structure secondary responses from resulting
-% hazard curves. This is meant to be used in a response base context and
-% not as a caller function for CHESS SST/JPM.
+% call_hazard_curve_builder  Fit PROS response-based hazard curves.
+%   Output = call_hazard_curve_builder(config, TC_Prob, Resp, storm_type,
+%       use_aep, outPath)
 %
-% Example usage:
+%   PROS-RB step of chess_pros: fits one hazard curve per field of Resp
+%   (structure responses and the forcing curves of pros_forcing_curves)
+%   for one storm type: XC with peaks-over-threshold statistics
+%   (CHESS_PST, DataType 'POT', record length Nyrs_XC times the number of
+%   fitted replicates, GPD threshold by minimum WMSE, GPD always fitted,
+%   100 bootstrap simulations) and TC with the joint probability method
+%   (CHESS_JPM, the discrete storm weights TC_Prob split evenly over the
+%   replicates). This is the response-based caller of PST/JPM for CHESS,
+%   not a general PST/JPM front end.
+%   Responses hold one column per replicate: the z = 0 replicate is
+%   dropped (drop_z0) before fitting and kept in POT (overlays). The
+%   forcing curves SWL, Tp and Hm0_offshore come in as the z = 0 column
+%   only and use JPM integration method 2 (PCHA ITCS: JPM adds the
+%   replicates); Hm0_toe comes in with every replicate and uses method 1
+%   (PCHA ATCS), like a response. Uncertainties, uncertainty treatment,
+%   labels and y scale come from response_library_headers. Great Lakes
+%   water levels (registry datum_elevation rows) are fitted as surge: the
+%   mean lake level (mean_lake_level) is removed before the fit and added
+%   back to the curves. SLC = 0 (the forcing SWL already holds swl_slr).
+%   Events PST/JPM discard (NaN, Inf, <= 0 after the lake level shift)
+%   are counted and reported in the figure title. Variables with no valid
+%   value (all NaN or all 0) and variables whose PST/JPM call errors are
+%   skipped. In PROS-FB (workflow 4) the forcing curves are titled PROS-RB.
 %
-% [Output]= call_hazard_curve_builder(config, project_forcing, Resp, storm_type)
+%   Inputs:
+%     config     - CHESS configuration, 1x1 struct; reads case_name,
+%                  struc_id, project_name, project_CLs (CL percentiles,
+%                  e.g. '[84 90]'), Nyrs_XC, pros_use_aep, workflow, the
+%                  uncertainty fields read by response_library_headers
+%                  and the mean lake level (mean_lake_level)
+%     TC_Prob    - TC discrete storm weights (probability masses) [1/yr],
+%                  number_of_storms x 1 double (project_forcing.TC.TC_Prob);
+%                  [] for XC
+%     Resp       - variables to fit, struct; one field per response or
+%                  forcing curve, number_of_storms x number_of_replicates
+%                  double (z = 0 column included); a field named TC_Prob
+%                  is ignored
+%     storm_type - 'XC' (PST) or 'TC' (JPM), char
+%     use_aep    - hazard curve frequencies as AEP (1) or AEF (0), scalar
+%                  double (chess_pros passes config.pros_use_aep)
+%     outPath    - folder of the hazard curve figure names (save_name),
+%                  char
+%   Outputs:
+%     Output - hazard curve entries, 1 x number_of_fitted_variables struct
+%              ([] when none); the set_hazard_curve_entry fields (var, CL
+%              = [50 project_CLs], x_plot/y_plot, x_table/y_table, POT =
+%              the Resp field with every replicate, y_label, title,
+%              y_log_scale, save_name, n_events, n_dropped, lake_offset)
+%              plus:
+%                .x_table_ARI - average recurrence interval of every table
+%                               row [years]
+%                .tbl_rsp_x   - AEP of each tbl_rsp_y response level, one
+%                               column per CL (always AEP; used by
+%                               call_hazard_curve_combiner)
+%                .tbl_rsp_y   - response levels 0.01:0.01:20 plus the lake
+%                               offset [response units], 2000 x 1
 %
-% Inputs:
+%   Tier: internal
 %
-%   1. config: MATLAB structure containing parsed input file.
-%   2. project_forcing: MATLAB structure containing formatted project_forcing.
-%   3. Resp: MATLAB structure containing project structure responses.
-%   4. storm_type: String specifying the storm type to call ('XC' or 'TC').
-%
-% Outputs:
-%
-%   1.
+%   See also CHESS_PST, CHESS_JPM, set_hazard_curve_entry,
+%   call_hazard_curve_combiner, chess_pros, drop_z0.
 
 
 disp('            Building hazard curves....');

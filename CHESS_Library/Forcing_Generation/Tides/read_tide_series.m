@@ -1,23 +1,28 @@
 function tide = read_tide_series(tide_file)
-%{
-    %% DESCRIPTION
-        Tide record of a tide file: the last column, header row skipped
-        (create_tide_file.m layout: Date, Prediction [m]). Parsed files are
-        cached for the MATLAB session (apply_random_tide.m runs once per
-        dataset, draw_tide_indices.m once per run, the storm event viewer on
-        every draw). A cached record is used only while the file's
-        modification date and size are unchanged, so an edited or replaced
-        file is read again. `clear read_tide_series` empties the cache.
+% read_tide_series  Read the tide record of a tide file (cached per session).
+%   tide = read_tide_series(tide_file)
+%
+%   Tide record of a tide file: the last column, header row skipped
+%   (create_tide_file layout: Date, Prediction [m]). A file found only on
+%   the MATLAB path is resolved to its full path first. Parsed files are
+%   cached for the MATLAB session (apply_random_tide runs once per dataset,
+%   draw_tide_indices once per run, the storm event viewer on every draw).
+%   A cached record is used only while the file's modification date and
+%   size are unchanged, so an edited or replaced file is read again.
+%   "clear read_tide_series" empties the cache.
+%
+%   Inputs:
+%     tide_file - tide file path, char or string
+%   Outputs:
+%     tide - tide record (last column of the file; create_tide_file: [m]),
+%            column double
+%
+%   Tier: internal
+%
+%   See also create_tide_file, apply_random_tide, draw_tide_indices.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        tide_file: Tide file path. | char/string
-
-    %% OUTPUTS
-        tide: Tide record (last column). | numeric column vector
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 persistent cache
 if isempty(cache)
     cache = containers.Map('KeyType', 'char', 'ValueType', 'any');

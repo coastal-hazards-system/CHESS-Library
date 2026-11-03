@@ -1,4 +1,38 @@
 function cc_resp = call_hazard_curve_combiner(config, tc_resp, xc_resp, use_aep)
+% call_hazard_curve_combiner  Combine TC and XC hazard curves into CC curves.
+%   cc_resp = call_hazard_curve_combiner(config, tc_resp, xc_resp, use_aep)
+%
+%   PROS-RB step of chess_pros for storm_sampling 'CC': pairs the TC and
+%   XC entries of call_hazard_curve_builder by variable name (TC order;
+%   variables without a pair are dropped) and builds the combined curve
+%   with combine_hazard_curves at the TC table and plot frequencies
+%   (converted to AEP when use_aep = 0) with AEP >= 5e-4. Variables whose
+%   registry row (response_registry) has cc_rule 'skip' are not combined;
+%   rows with cc_confidence_limit_method 'als_relative' build the CLs from
+%   the config relative uncertainty field named in the row
+%   (relative_uncertainty). Each CC entry starts as a copy of the TC entry
+%   (tbl_rsp_x and tbl_rsp_y removed) with 'TC' replaced by 'CC' in the
+%   title and save_name, n_events and n_dropped as [XC, TC], and POT set to
+%   a note.
+%
+%   Inputs:
+%     config  - CHESS configuration, 1x1 struct; reads the relative
+%               uncertainty fields named by the registry rows
+%     tc_resp - TC hazard curve entries (call_hazard_curve_builder
+%               output), struct array
+%     xc_resp - XC hazard curve entries (call_hazard_curve_builder
+%               output), struct array
+%     use_aep - TC x_table/x_plot are AEP (1) or AEF (0), scalar double
+%   Outputs:
+%     cc_resp - combined hazard curve entries, 1 x number_of_combined
+%               struct (TC entry fields without tbl_rsp_x and tbl_rsp_y;
+%               x_table, x_plot and x_table_ARI cut to AEP >= 5e-4)
+%
+%   Tier: internal
+%
+%   See also call_hazard_curve_builder, combine_hazard_curves,
+%   response_registry, chess_pros.
+
 %% COMBINE HAZARD CURVES FOR PRIMARY RESPONSES
 % Define AEP's or AEF's
 if use_aep == 1

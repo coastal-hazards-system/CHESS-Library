@@ -1,5 +1,68 @@
 function [Resp] = call_project_response(config, project_forcing, structure)
-% CALL_PROJECT_RESPONSE Computes structure response based on a workflow config.
+% call_project_response  Compute the structure responses of a CHESS run.
+%   Resp = call_project_response(config, project_forcing, structure)
+%
+%   Pipeline step after call_chess_boundary_conditions. Copies the
+%   resolved offshore elevation (config offshore_elevation and
+%   offshore_elevation_source) into the structure and appends the
+%   structure to the run config file, creates the workflow folder of the
+%   alternative (chess_paths wf_dir) and runs every dataset of the
+%   request:
+%     workflows 1 and 4 (PROS-RB, PROS-FB) - chess_pros: hazard curves
+%         per storm type;
+%     workflow 2 (DET)                     - chess_det: responses per
+%         storm, no replicates or uncertainty;
+%     workflow 3 (LCS)                     - chess_csr with the empirical
+%         coefficients of load_empirical_coefficients: responses per life
+%         cycle and, for rubble mounds, reliability (Peaks) or damage
+%         progression (Timeseries, csr_call_dpa = 1); prints a notice when
+%         the life cycles are rate restricted (lcs_sampling_mode 1).
+%   Datasets: every Peaks match type of project_forcing when use_peaks = 1
+%   (PROS and DET skip WLP and WHP unless create_wlp / create_whp is 1)
+%   and Timeseries Default when use_timeseries = 1. Peaks datasets run
+%   with compute_q_vol = 0 (the overtopping volume is Timeseries only).
+%   PROS hazard curve figure names (save_name) start with
+%   <wf_dir>\<RB or FB>1_<match type> (Peaks) or <wf_dir>\<RB or FB>3
+%   (Timeseries).
+%
+%   Files written:
+%     out_files.config    - structure appended (with offshore_elevation
+%                           and offshore_elevation_source)
+%     out_files.resp_data - Resp (-v7.3)
+%
+%   Inputs:
+%     config          - CHESS configuration (call_input_parser,
+%                       call_chs_data_formatter,
+%                       call_chess_boundary_conditions), 1x1 struct;
+%                       reads workflow (1 PROS-RB, 2 DET, 3 LCS, 4
+%                       PROS-FB), use_peaks, use_timeseries, create_wlp,
+%                       create_whp (0/1), out_files (config, resp_data),
+%                       offshore_elevation and offshore_elevation_source
+%                       (when present), plus the fields read by the
+%                       workflow functions
+%     project_forcing - forcing of the run (call_chess_boundary_conditions),
+%                       project_forcing.<data type>.<match type>.<storm
+%                       type>, struct; PROS and DET: per-storm forcing
+%                       (chess_forcing_formatter, adjust_project_forcing);
+%                       LCS: nLC x 1 cell of life-cycle matrices
+%                       (lcs_columns)
+%     structure       - structure geometry of the run (call_input_parser),
+%                       1x1 struct
+%   Outputs:
+%     Resp - responses, struct: Resp.Peaks.<match type> (Default, WLP,
+%            WHP) and Resp.Timeseries.Default, each:
+%              PROS - hazard curve entries per storm type (XC, TC, CC),
+%                     chess_pros
+%              DET  - per storm type: storm_id, h, Rc, the responses
+%                     (full histories) and Max, chess_det
+%              LCS  - per storm type: the responses per life cycle plus
+%                     PF_Summary and Reliab_Summary (Peaks) or S
+%                     (Timeseries) for rubble mounds, chess_csr
+%
+%   Tier: public
+%
+%   See also call_chess_boundary_conditions, compute_structure_response,
+%   call_input_parser, call_chs_data_formatter, chess_paths.
 
     %% ================= CONFIGURATION & VARIABLE MAPPING =================
     % Modify these variables to change how fields are read from 'config'

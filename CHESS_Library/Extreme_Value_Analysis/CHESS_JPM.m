@@ -1,89 +1,94 @@
-%% CHESS_JPM_Tool.m
-%{
-SST Input Data Structures:
-
-1. Input Data Specifications:
-
-response_data.(XX), where XX respresents
-    - data: N x 4 double data matrix, where each column represents:
-        col 01: Event response MATLAB serial date (see datenum)
-        col 02: Response data without tides
-        col 03: Skew tides.
-        col 04: TC event Discrete Storm Weights (DSW) 
-    - flag_value: Flag value to remove from response data.  
-    - Ua: Event response absolute uncertainty 
-    - Ur: Event response relative uncertainty 
-    - SLC: magnitude of the sea level change implicit in the storm surge
-    - tide_std: Uncertainty associated to tides.
-
-2. Joint Probability Method (JPM) Specifications:
-
-jpm_options.(XX), where XX represents
-    - integration_method: 1 - PCHA ATCS, 2 - PCHA ITCS. Integration methodologies 
-                          share the same integration equation but have unique ways of incorporating
-                          the uncertainties. Current options are described as follows:
-          *integrate_Method = 1 (PCHA ATCS):Refers to the Probabilistic Coastal Hazard Analysis (PCHA)
-                                            with Augmented Tropical Cyclone Suite (ATCS) methodology. This approach is
-                                            preferred when hazard curves with associated confidence limit (CL) curves
-                                            are to be estimated using the synthetic storm suite augmented through Gaussian
-                                            process metamodelling (GPM). The different uncertainties are incorporated into
-                                            either the response or the percentiles, depending on the settings specified for
-                                            tide_application and uncert_treatment. With the exception of when ind_skew = 1, the
-                                            uncertainties are distributed randomly before application. This methodology
-                                            has been applied in the following studies:
-                                            a) South Atlantic Coast Study (SACS) - Phases 1 (PRUSVI), 2 (NCSFL) and 3 (SFLMS)
-                                            b) Louisiana Coast Protection and Restoration (LACPR) Study
-                                            c) Coastal Texas Study (CTXS) - Revision
-          *integrate_Method = 2 (PCHA ITCS):Refers to the PCHA Standard methodology. This
-                                            approach is preferred when hazards with CLs are to be estimated using the
-                                            synthetic storm suite is used "as is" (not augmented). The absolute and
-                                            relative uncertainties are initially partitioned. Then, the different
-                                            uncertainties are incorporated into either the response or the percentiles,
-                                            depending on the settings specified for tide_application and uncert_treatment. With the
-                                            exception of when ind_skew = 1, the uncertainties are normally
-                                            distributed using a discrete Gaussian before application. This methodology
-                                            has been used in the following studies:
-                                            a) North Atlantic Coast Comprehensive Study (NACCS)
-                                            b) Coastal Texas Study (CTXS) - Initial study
-    - uncertainty_treatment: Indicates the uncertainty treatment to use; specified as a character vector.
-                             Determines how the absolute (U_a) and relative (U_r) uncertainties are applied.
-                             Current options are:
-            *uncert_treatment = 'absolute': only U_a is applied
-            *uncert_treatment = 'relative': only U_r is applied
-            *uncert_treatment = 'combined': both U_a and U_r are applied
-    - tide_application: Indicates how the tool should apply the tide uncertainty.
-                        This uncertainty will be applied differently depending on the selected
-                        integration method (integrate_Method) and uncertainty treatment (uncert_treatment).
-                        Available options are as follows:
-
-          *tide_application = 0:The tide uncertainty is not applied.
-          *tide_application = 1:The tide_std is combined with U_a, U_r or both, 
-                                and then applied to the confidence limits.
-          *tide_application = 2:Tide uncertainty is applied to the response before
-                                any of the other uncertainties. The value of 
-                                input ind_Skew determines how it is added.
-                                When ind_Skew = 1: Skew tides (response_data.data(:, 3)) are
-                                added to the response. When ind_Skew = 0: 'SD': the tide 
-                                uncertainty is distributed and then added to the response.
-                                The distribution is random when integrate_Method = 'PCHA ATCS'.
-                                Otherwise, the uncertainty is distributed using a discrete Gaussian
-                                distribution when integrate_Method = 'PCHA ITCS'.
-    - ind_Skew: indicator for computing/adding skew tides to the storm surge (1-apply skew tides, 0-don't apply skew tides)
-    - use_AEP: AEP vs AEF flag (1-Use AEP for HC frequencies, 0-Use AEF for HC frequencies)
-    - prc: percentage values for computing the percentiles. Accepts a max of 4 values.
-    - stat_print: indicator to print script status (1-print steps, 0-don't print)
-    
-plot_options.(XX), where XX represents
-    - create_plots: 
-    - staID: Response variable name. 
-    - yaxis_Label: Hazard curve y axis label
-    - yaxis_Limits: Hazard curve y axis limits 
-    - y_log: Hazard curve y axis scale switch (1-log, 0-linear)
-    - path_out: Output path
-%}
-
-%}
 function [JPM_output] = CHESS_JPM(response_data, jpm_options, plot_options)
+% CHESS_JPM  Response hazard curves by the joint probability method.
+%   JPM_output = CHESS_JPM(response_data, jpm_options, plot_options)
+%
+%   Joint probability method (JPM) of the CHS probabilistic coastal hazard
+%   analysis (PCHA) for synthetic tropical cyclone (TC) responses: the
+%   responses are sorted in descending order and the cumulative sum of
+%   their discrete storm weights (DSW) gives the annual exceedance
+%   frequency (AEF) of each response; the best-estimate curve and its
+%   confidence limits (CL) are interpolated in log(AEF) on a plot grid, a
+%   frequency table and a response table (CHESS_JPM_integration).
+%   The inputs are checked first (errors for invalid fields); rows with
+%   the flag value, NaN, Inf or response <= 0 are removed (error when none
+%   is left). Integration methods:
+%     1 PCHA ATCS (augmented TC suite, e.g. SACS, LACPR, CTXS revision):
+%       the responses are used as given; with tide_application 2 and
+%       ind_Skew 0 the tide uncertainty is drawn at random (rng default).
+%     2 PCHA ITCS (storm suite as is, e.g. NACCS, CTXS initial): each
+%       response is replicated over the 444 discrete standard normal
+%       scores of the TC set (z = 0 dropped, DSW / 444), a first partition
+%       of the uncertainties (0.1 absolute, 0.1 relative) is applied to
+%       the response and Ua and Ur are reduced to sqrt(U^2 - 0.1^2).
+%   CL curves, z = norminv(prc/100), Ut = tide_std when tide_application
+%   = 1 (else 0):
+%     'absolute': y + z*sqrt(Ua^2 + Ut^2)
+%     'relative': y + z*y*sqrt((y*Ur)^2 + Ut^2)
+%     'combined': y + z/sqrt(1/Ua^2 + 1/(y*Ur)^2 + 1/Ut^2) (the Ut term
+%                 only when Ut ~= 0)
+%
+%   Inputs:
+%     response_data - response and uncertainties, struct; fields:
+%       .data       - [time, response, skew_tide, dsw], N x 4 double:
+%                     column 1 event time (MATLAB datenum; not used),
+%                     column 2 response without tides, column 3 skew tide
+%                     (used when tide_application = 2 and ind_Skew = 1;
+%                     else set to 0), column 4 discrete storm weight
+%                     (probability mass) [1/yr]
+%       .flag_value - response value to remove ([] = none)
+%       .Ua         - absolute uncertainty [response units], scalar >= 0
+%                     (set to 0 for 'relative')
+%       .Ur         - relative uncertainty [-], scalar >= 0 (set to 0 for
+%                     'absolute')
+%       .SLC        - sea level change implicit in the response [response
+%                     units], scalar >= 0 ([] = 0)
+%       .tide_std   - tide standard deviation [response units], scalar > 0
+%                     when tide_application = 1, or 2 with ind_Skew = 0
+%                     (set to 0 otherwise)
+%     jpm_options - JPM settings, struct; fields:
+%       .integration_method    - 1 (PCHA ATCS) or 2 (PCHA ITCS)
+%       .uncertainty_treatment - 'absolute', 'relative' or 'combined'
+%       .tide_application      - 0 no tide uncertainty, 1 tide_std
+%                                combined with the CL uncertainty, 2 tides
+%                                added to the response (skew tides when
+%                                ind_Skew = 1, else tide_std times a
+%                                normal score)
+%       .ind_Skew              - add the skew tides of data column 3 (0/1;
+%                                forced to 0 unless tide_application = 2)
+%       .use_AEP               - frequencies as AEP (1) or AEF (0)
+%       .prc                   - CL percentiles [%], up to 4 values
+%                                ([] = [2.28 15.87 84.13 97.72])
+%       .stat_print            - clear the command window and print the
+%                                progress (0/1)
+%     plot_options - plot settings, struct; fields:
+%       .create_plots - write the hazard curve figure and output .mat (0/1)
+%       .staID        - variable name for titles and file names, char
+%                       ([] = 'resp')
+%       .yaxis_Label  - y axis label, char ([] = '')
+%       .yaxis_Limits - y axis limits ([] = automatic)
+%       .y_log        - y axis log scale flag (0/1; checked, not used by
+%                       the JPM figure)
+%       .path_out     - output folder, char ([] = current folder); files
+%                       go in <path_out>/JPM_outputs
+%   Outputs:
+%     JPM_output - hazard curves, struct; fields:
+%       .staID        - plot_options.staID
+%       .HC_plt_x     - plot grid AEF from 1e-6 to 10 (log spaced), 631 x 1
+%       .HC_plt       - response at HC_plt_x, columns [best estimate,
+%                       prc CLs], 631 x (1 + numel(prc))
+%       .HC_tbl_x     - table AEP 1/[2 5 10 ... 1e6] (18 values) or AEF
+%                       1/[0.1 0.2 0.5 ... 1e6] (22 values)
+%       .HC_tbl       - response at HC_tbl_x (same columns), negatives NaN
+%       .HC_tbl_rsp_y - response levels 0.01:0.01:20, 2000 x 1
+%       .HC_tbl_rsp_x - AEF (AEP when use_AEP = 1) of each HC_tbl_rsp_y
+%                       level (same columns)
+%   With create_plots = 1 the figure JPM_HC_<staID>_<PCHA_ATCS or
+%   PCHA_ITCS>.png (CHESS_JPM_plot) is written in <path_out>/JPM_outputs.
+%
+%   Tier: public
+%
+%   See also CHESS_PST, aef2aep, aep2aef.
+
 %% General settings
 if jpm_options.stat_print == 1
     clc;

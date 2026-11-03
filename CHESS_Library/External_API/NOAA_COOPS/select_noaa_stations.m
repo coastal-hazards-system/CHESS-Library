@@ -1,28 +1,37 @@
 function [selected, selected_rows] = select_noaa_stations(catalog, selection)
-%{
-    %% DESCRIPTION
-        Selects stations of a NOAA station catalog (noaa_station_catalog.m).
-        Every filter given in selection is applied (logical AND); an empty
-        selection keeps every station. Ids and states are matched exactly
-        (ismember); polygons use inpolygon on (lon, lat).
-
-    %% INPUTS
-        catalog: Station catalog (noaa_station_catalog.m). | table
-        selection: (Optional) Struct with any of the fields | struct
-            ids: Station ids. | cell/string
-            states: State codes (e.g. {'NY', 'NJ'}). | cell/string
-            polygon_csv: CSV file with the polygon vertices, longitude in
-                column 1 and latitude in column 2. | char
-            polygon_lon, polygon_lat: Polygon vertices [deg]. | double
-            active_only: Keep active stations only. | logical
-
-    %% OUTPUTS
-        selected: Catalog rows selected. | table
-        selected_rows: Selected rows of the catalog. | logical
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% select_noaa_stations  Select stations of a NOAA station catalog.
+%   [selected, selected_rows] = select_noaa_stations(catalog)
+%   [selected, selected_rows] = select_noaa_stations(catalog, selection)
+%
+%   Selects stations of a NOAA station catalog (noaa_station_catalog).
+%   Every filter given in selection is applied (logical AND); an empty
+%   selection keeps every station. Ids and states are matched exactly
+%   (ismember); polygons use inpolygon on (lon, lat).
+%
+%   Inputs:
+%     catalog   - station catalog (noaa_station_catalog), table
+%     selection - struct (optional; [] = default); fields (all optional):
+%                   .ids - station ids, cell or string
+%                   .states - state codes (e.g. {'NY', 'NJ'}), cell or
+%                       string
+%                   .polygon_csv - file with the polygon vertices
+%                       (readmatrix), longitude in column 1 and latitude in
+%                       column 2 [deg], char
+%                   .polygon_lon, .polygon_lat - polygon vertices [deg]
+%                       (both needed), double
+%                   .active_only - keep active stations only, logical,
+%                       default false
+%   Outputs:
+%     selected      - catalog rows selected, table
+%     selected_rows - selected rows of the catalog, logical column
+%
+%   Tier: public
+%
+%   See also create_tide_file, download_noaa_tide_predictions,
+%   download_noaa_water_levels, noaa_station_catalog,
+%   noaa_station_details, plot_noaa_stations.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 2 || isempty(selection)
     selection = struct();
 end

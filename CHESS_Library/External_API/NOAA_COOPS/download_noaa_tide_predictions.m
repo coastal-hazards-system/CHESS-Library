@@ -1,39 +1,51 @@
 function predictions = download_noaa_tide_predictions(station_id, datum, first, last, interval, options)
-%{
-    %% DESCRIPTION
-        Downloads NOAA CO-OPS harmonic tide predictions of one station from
-        the data API (product=predictions, csv, time_zone=gmt,
-        units=metric), in requests of up to 3655 days
-        (noaa_request_chunks.m), concatenated, sorted and de-duplicated on
-        DateTime.
-        Harmonic ('R') stations only: subordinate ('S') stations are never
-        used. The caller passes the catalog flag
-        (noaa_station_catalog.m harmonic_predictions) as
-        options.harmonic_predictions; without it the function raises
-        noaa:notHarmonic and sends no request.
-        A request answered with "no data" raises warning noaa:noDataInChunk;
-        any other NOAA error raises noaa:requestFailed.
-
-    %% INPUTS
-        station_id: NOAA CO-OPS station id. | char/string
-        datum: Data API datum code (e.g. 'MSL', 'MLLW', 'NAVD'). | char/string
-        first, last: Requested range (converted to UTC; a datetime without
-            time zone is taken as UTC). | datetime
-        interval: (Optional) Prediction interval: '1', '6', '15', '30',
-            'h' (default) or 'hilo' (the data API rejects 'hi' and
-            'lo'). | char/string
-        options: Struct with the fields | struct
-            harmonic_predictions: true for a harmonic ('R') station
-                (required). | logical
-            web_options: (Optional) Options for noaa_web_request.m. | struct
-
-    %% OUTPUTS
-        predictions: Table DateTime (UTC), Prediction [m on datum], plus
-            Type for 'hilo'. | table
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% download_noaa_tide_predictions  Download NOAA harmonic tide predictions.
+%   predictions = download_noaa_tide_predictions(station_id, datum, first,
+%       last, interval, options)
+%
+%   Downloads NOAA CO-OPS harmonic tide predictions of one station from
+%   the data API (product=predictions, csv, time_zone=gmt, units=metric),
+%   in requests of up to 3655 days (noaa_request_chunks), concatenated,
+%   sorted and de-duplicated on DateTime.
+%   Harmonic ('R') stations only: subordinate ('S') stations are never
+%   used. The caller passes the catalog flag (noaa_station_catalog
+%   harmonic_predictions) as options.harmonic_predictions; without it (or
+%   with it false) the function raises noaa:notHarmonic and sends no
+%   request. An interval outside the list below raises
+%   noaa:unknownInterval.
+%   A request answered with "no data" raises warning noaa:noDataInChunk;
+%   any other NOAA error raises noaa:requestFailed.
+%
+%   Inputs:
+%     station_id  - NOAA CO-OPS station id, char or string
+%     datum       - Data API datum code (e.g. 'MSL', 'MLLW', 'NAVD'), one
+%                   the station offers (see noaa_station_details). Sent as
+%                   given: datums endpoint names (NAVD88, GL_LWD) are not
+%                   converted here (noaa_datum_code does that), char or
+%                   string
+%     first, last - requested range (converted to UTC; a datetime without
+%                   time zone is taken as UTC), datetime
+%     interval    - prediction interval: '1', '6', '15', '30' [min], 'h'
+%                   (hourly) or 'hilo' (high/low) (default 'h'; [] =
+%                   default; the data API rejects 'hi' and 'lo'), char or
+%                   string
+%     options     - struct; fields:
+%                     .harmonic_predictions - true for a harmonic ('R')
+%                         station; required (missing, empty options or
+%                         false raises noaa:notHarmonic), logical
+%                     .web_options - options for noaa_web_request
+%                         (optional), struct, default struct()
+%   Outputs:
+%     predictions - table: DateTime (UTC), Prediction [m, on the datum],
+%                   plus Type (string) for 'hilo'
+%
+%   Tier: public
+%
+%   See also create_tide_file, download_noaa_water_levels,
+%   noaa_station_catalog, noaa_station_details, select_noaa_stations,
+%   plot_noaa_stations.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 5 || isempty(interval)
     interval = 'h';
 end

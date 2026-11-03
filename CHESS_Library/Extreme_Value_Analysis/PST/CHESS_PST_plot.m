@@ -1,4 +1,27 @@
 function CHESS_PST_plot(SST_output, pst_options, plot_options)
+% CHESS_PST_plot  Save the PST hazard curve, MRL and GPD shape figures.
+%   CHESS_PST_plot(SST_output, pst_options, plot_options)
+%
+%   Saves (invisible figures, in path_out): unless the MRL selection
+%   criterion is 'None', the MRL panels (rate, WMSE, mean excess, GPD shape
+%   and scale against the threshold; SST_MRL_<staID>.png, only when
+%   MRL_output.Status is empty) and the histogram of the bootstrap GPD
+%   shape parameters before and after the limits
+%   (SST_CompareGPDShape_<staID>.png); always the hazard curve with its
+%   CLs and the empirical points (SST_HC_<staID>_TH_<criterion>.png).
+%   Needs MRL_output.Selection (a GPD fit).
+%
+%   Inputs:
+%     SST_output   - hazard curves (CHESS_PST output), struct
+%     pst_options  - PST settings (prc, up to 4 values; use_AEP), struct
+%     plot_options - plot settings (yaxis_Limits, yaxis_Label, path_out),
+%                    struct
+%   Outputs: none (PNG files written)
+%
+%   Tier: internal
+%
+%   See also CHESS_PST, CHESS_PST_Fit.
+
 % Colors for percentiles plots
 cs={'r-.','b--','b--','r-.'};
 prc=round(pst_options.prc);

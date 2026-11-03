@@ -1,6 +1,27 @@
 function storm_type_data = chs_timeseries_peak_replacer(storm_type_data)
-% Replaces The Maximum Of Each Hydrograph Column (SWL, Hm0, Tp, wDir) With The Value Of The Peaks Dataset
-% storm_type_data: storm.<TC or XC> (Peaks.Default [SWL Hm0 Tp wDir peak_datenum] and Timeseries.Default)
+% chs_timeseries_peak_replacer  Set the Timeseries peaks to the Peaks values.
+%   storm_type_data = chs_timeseries_peak_replacer(storm_type_data)
+%
+%   For each storm of the Peaks.Default dataset found in the
+%   Timeseries.Default dataset (matched by storm ID; a storm missing from
+%   the Timeseries is skipped), the maximum of each hydrograph column
+%   (SWL, Hm0, Tp, wave dir) is replaced by the Peaks value of that
+%   column. build_storm_database calls it for every storm type that has
+%   both Peaks and Timeseries files.
+%
+%   Inputs:
+%     storm_type_data - storm datasets of one storm type (storm.TC or
+%                       storm.XC) with Peaks.Default ({storm ID, 1x5
+%                       [SWL Hm0 Tp wave_dir peak_datenum]}) and
+%                       Timeseries.Default ({storm ID, M x 6 [SWL Hm0 Tp
+%                       wave_dir datenum dt]}), struct
+%   Outputs:
+%     storm_type_data - same, with the Timeseries.Default hydrograph
+%                       maxima replaced, struct
+%
+%   Tier: internal
+%
+%   See also build_storm_database, chs_timeseries_formatter.
 dPeaks = storm_type_data.('Peaks').('Default');
 timeseries_ids = cell2mat(storm_type_data.('Timeseries').('Default')(:,1));
 % For Each Storm ID

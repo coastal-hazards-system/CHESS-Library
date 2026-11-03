@@ -1,43 +1,62 @@
-%% CHESS_MRL.m
-%{
-SOFTWARE NAME:
-    CHESS-SST-Fit (Statistics)
-
-DESCRIPTION:
-   This script applies the mean residual life (MRL) methodology to
-   objectively select the parameters of the Generalized Pareto Distribution
-function.
-
-INPUT ARGUMENTS:
-  - POT_samp: empirical distribution of the Peaks-Over-Threshold sample, as
-      computed in CHESS_SST_Fit.m
-  - Nyrs: record length in years of the input time series data set;
-      specified as a positive scalar
-     
-AUTHORS:
-    Norberto C. Nadal-Caraballo, PhD (NCNC)
-    Efrain Ramos-Santiago (ERS)
-
-HISTORY OF REVISIONS:
-20200903-ERS: revised.
-20201015-ERS: revised. Updated documentation.
-20201215-ERS: added break in for loop to avoid evaluating thresholds
-    returning excesses of same magnitude.
-20210325-ERS: organized the threshold computation; the 3rd threshold not included
-    in the output anymore; output organized into table arrays stored in a structure array.
-20210406-ERS: identified error when input sample size <10. When this
-    happens, an empty array is returned and the Default GPD threshold computed
-    in the three fit scripts.
-20210412-ERS: now selecting a minima when no inflexion point exists; avoiding the script to crash.
-20210429-ERS: now removing noise from the min WMSE through kernel
-    regression. Also corrected the minimum WMSE criterion based on Langousis. Removed patch
-    applied on 20210412.
-20210430-ERS: script will stop and return empty arrays when no minima is
-    found by WRMS criterion.
-
-***************  ALPHA  VERSION  **  FOR INTERNAL TESTING ONLY ************
-%}
 function [MRL_output] = CHESS_MRL(GPD_TH_crit, PEAKS, Nyrs)
+% CHESS_MRL  GPD threshold by the mean residual life (MRL) method.
+%   MRL_output = CHESS_MRL(GPD_TH_crit, PEAKS, Nyrs)
+%
+%   Every sorted sample value (up to the 10th largest) is a candidate
+%   threshold u. For each u: mean excess e(u) and weight (number above u
+%   over the variance of the excesses); a weighted linear fit of e(u)
+%   against u over the thresholds >= u gives the weighted mean square
+%   error (WMSE) and a GPD fit above u gives the shape and scale
+%   (thresholds up to the 20th largest value). The WMSE is smoothed by a
+%   kernel local mean (KernReg_LocalMean, bandwidth = ksdensity bandwidth
+%   / 7) and its local minima are the candidates: 'CritWMSE' takes the
+%   lowest threshold, 'CritSI' the one whose rate is closest to 2
+%   events/yr (rates < 1 excluded; else the highest rate). Needs more
+%   than 20 values; with 20 or fewer, or without a local WMSE minimum,
+%   MRL_output keeps a NaN Summary row and an empty Selection criterion.
+%
+%   Inputs:
+%     GPD_TH_crit - criterion kept: 1 sample intensity ('CritSI'), 2
+%                   minimum WMSE ('CritWMSE'), scalar
+%     PEAKS       - POT sample (bootstrapped empirical responses), column
+%                   vector
+%     Nyrs        - record length [years], scalar > 0
+%   Outputs:
+%     MRL_output - threshold selection, struct; fields:
+%       .Summary   - one row per candidate threshold, table (Threshold,
+%                    MeanExcess, Weight, WMSE, GPD_Shape, GPD_Scale,
+%                    Events, Rate [1/yr])
+%       .Selection - selected threshold, 1-row table (Criterion,
+%                    Threshold, id_Summary, Events, Rate)
+%
+%   Tier: internal
+%
+%   See also CHESS_PST_Fit, KernReg_LocalMean.
+%
+%   Developed by: Norberto C. Nadal-Caraballo, PhD (NCNC); Efrain
+%   Ramos-Santiago (ERS)
+
+% SOFTWARE NAME:
+%     CHESS-SST-Fit (Statistics)
+%
+% HISTORY OF REVISIONS:
+% 20200903-ERS: revised.
+% 20201015-ERS: revised. Updated documentation.
+% 20201215-ERS: added break in for loop to avoid evaluating thresholds
+%     returning excesses of same magnitude.
+% 20210325-ERS: organized the threshold computation; the 3rd threshold not included
+%     in the output anymore; output organized into table arrays stored in a structure array.
+% 20210406-ERS: identified error when input sample size <10. When this
+%     happens, an empty array is returned and the Default GPD threshold computed
+%     in the three fit scripts.
+% 20210412-ERS: now selecting a minima when no inflexion point exists; avoiding the script to crash.
+% 20210429-ERS: now removing noise from the min WMSE through kernel
+%     regression. Also corrected the minimum WMSE criterion based on Langousis. Removed patch
+%     applied on 20210412.
+% 20210430-ERS: script will stop and return empty arrays when no minima is
+%     found by WRMS criterion.
+%
+% ***************  ALPHA  VERSION  **  FOR INTERNAL TESTING ONLY ************
 
 %% Step 1: Use sorted POT dataset as initial values of threshold parameter.
 th = sort(PEAKS, 'ascend'); %threshold parameter; sorted in ascending order

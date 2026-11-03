@@ -1,4 +1,34 @@
 function JPM_outputs = CHESS_JPM_integration(response_data, jpm_options, plot_options)
+% CHESS_JPM_integration  JPM integration of a checked response sample.
+%   JPM_outputs = CHESS_JPM_integration(response_data, jpm_options,
+%       plot_options)
+%
+%   Integration step of CHESS_JPM (inputs already checked and cleaned
+%   there). Applies the integration method (2: replication over the 444
+%   TC discrete standard normal scores without z = 0 and the 0.1
+%   uncertainty partition), the tide treatment and the SLC, sorts the
+%   responses in descending order, accumulates the discrete storm weights
+%   into AEF, builds the CL curves from the uncertainty treatment and
+%   interpolates in log(AEF) on the plot grid, the frequency table and the
+%   response table. Responses <= 0 or NaN after these steps are dropped.
+%
+%   Inputs:
+%     response_data - checked response sample (CHESS_JPM response_data:
+%                     data N x 4, Ua, Ur, SLC, tide_std), struct
+%     jpm_options   - JPM settings (CHESS_JPM jpm_options: use_AEP,
+%                     integration_method, tide_application, ind_Skew,
+%                     uncertainty_treatment, prc), struct
+%     plot_options  - plot settings (staID used), struct
+%   Outputs:
+%     JPM_outputs - hazard curves (staID, HC_plt, HC_tbl, HC_tbl_rsp_x,
+%                   HC_tbl_rsp_y, HC_plt_x, HC_tbl_x; see CHESS_JPM),
+%                   struct
+%
+%   Tier: internal
+%
+%   See also CHESS_JPM, CHESS_JPM_plot, discrete_standard_normal_scores,
+%   drop_z0.
+
 %% INITIALIZE RESPONSE FIELDS
 % Get Input Dataset
 Resp = response_data.data(:, 2); % Response Data

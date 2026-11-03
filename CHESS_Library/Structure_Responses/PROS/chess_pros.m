@@ -1,4 +1,51 @@
 function HC_out = chess_pros(config, project_forcing, structure, outPath)
+% chess_pros  PROS hazard curves of one dataset.
+%   HC_out = chess_pros(config, project_forcing, structure, outPath)
+%
+%   CHESS: PROS, workflows 1 (PROS-RB) and 4 (PROS-FB). For every sampled
+%   storm type (XC for XC and CC sampling, TC for TC and CC):
+%     1. responses per storm: maxima of the responses fitted by PROS-RB
+%        (compute_structure_response, get_max = 1);
+%     2. with pros_compute_forcing_HC = 1, the forcing curves
+%        (pros_forcing_curves): SWL, Hm0_offshore and the Tp at the
+%        Hm0_offshore peak from the z = 0 replicate, Hm0_toe as the
+%        per-storm maximum of every replicate;
+%     3. hazard curves (call_hazard_curve_builder; TC with TC_Prob).
+%   CC sampling combines the TC and XC curves (call_hazard_curve_combiner).
+%   tbl_rsp_x and tbl_rsp_y are removed from the XC and TC entries.
+%   The secondary responses (response_registry pros_secondary_eb1: P2/P3
+%   and nappe) are left out of the RB fits and computed by
+%   chess_pros_frequency_base (EB1) when requested.
+%   PROS-FB (workflow 4) forces pros_compute_forcing_HC = 1 and
+%   compute_q_vol = 0, fits only the forcing curves and computes every
+%   requested response with chess_pros_frequency_base (EB2).
+%
+%   Inputs:
+%     config          - CHESS configuration, 1x1 struct; reads workflow,
+%                       storm_sampling, pros_use_aep (0/1),
+%                       pros_compute_forcing_HC (0/1), the response_registry
+%                       compute switches and the fields read by the
+%                       functions above
+%     project_forcing - one PROS dataset, struct with fields XC and/or TC:
+%                       per-storm forcing with replicates (SWL,
+%                       Hm0_offshore, Hm0_toe, Tp, storm_duration, dt for
+%                       Timeseries; TC also TC_Prob), chess_forcing_formatter
+%                       and adjust_project_forcing
+%     structure       - structure geometry, 1x1 struct
+%     outPath         - folder and prefix of the hazard curve figure names
+%                       (save_name of each entry; nothing is written), char
+%   Outputs:
+%     HC_out - hazard curves, struct with fields XC, TC and CC (as
+%              sampled), each a struct array of hazard curve entries
+%              (set_hazard_curve_entry: var, CL, x_plot, y_plot, x_table,
+%              y_table, ...), frequency-based entries appended
+%
+%   Tier: internal
+%
+%   See also call_project_response, compute_structure_response,
+%   call_hazard_curve_builder, call_hazard_curve_combiner,
+%   chess_pros_frequency_base, pros_forcing_curves.
+
 %% INITIALIZE FIELDS AND PROMT USER
 % Get AEP vs AEF Flag
 use_aep = config.pros_use_aep;

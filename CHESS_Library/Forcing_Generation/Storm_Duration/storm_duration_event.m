@@ -1,21 +1,50 @@
 function r = storm_duration_event(x, t, frac, shift_threshold, min_duration_hr)
-% Storm Duration Of One Storm From One Signal (SWL, Hm0, ...): Threshold Crossings Around The Peak
-%   A = max(x) - min(x), Z_th = min(x) + frac*A. Crossings Of Z_th Use Linear Interpolation Between Samples.
-%   t1 = Nearest Up-Crossing Before The Peak, t2 = Nearest Down-Crossing After It, Duration = t2 - t1 [hr].
-%   A Side With No Crossing Uses The Record Edge And Is Flagged (edge_start/edge_end). With shift_threshold, A Record
-%   That Starts Or Ends Above Z_th Raises Z_th Just Above The Lowest Point On That Side Of The Peak (threshold_shifted);
-%   A Peak On The Record's First/Last Sample Has No Point On That Side, So That Side Keeps The Record Edge.
-%   The Duration Is Floored At min_duration_hr (t1/t2 Stay The Computed Crossings, No Further Search; duration_raw_hr
-%   Keeps The Crossing Duration, min_applied Flags The Floor).
-%
+% storm_duration_event  Storm duration of one storm from one signal.
+%   r = storm_duration_event(x, t)
 %   r = storm_duration_event(x, t, frac, shift_threshold, min_duration_hr)
-%       x: Signal Of One Storm (Vector)
-%       t: Times Of x (datenum Days Or datetime)
-%       frac: Fraction Of The Amplitude (Default 0.95)
-%       shift_threshold: true = Shift Z_th When The Record Starts/Ends Above It (Default false)
-%       min_duration_hr: Minimum Duration [hr] (Default 1)
-%       r: struct With sig_min, sig_max, threshold_base, threshold, threshold_shifted, peak_time, t1, t2, duration_hr,
-%          duration_raw_hr, min_applied, record_hr, n_crossings, edge_start, edge_end
+%
+%   Threshold crossings around the peak of one signal (SWL, Hm0, ...):
+%   A = max(x) - min(x), Z_th = min(x) + frac*A. Crossings of Z_th use
+%   linear interpolation between samples. t1 = nearest up-crossing before
+%   the peak, t2 = nearest down-crossing after it, duration = t2 - t1
+%   [hours]. A side with no crossing uses the record edge and is flagged
+%   (edge_start/edge_end). With shift_threshold, a record that starts or
+%   ends above Z_th raises Z_th just above the lowest point on that side of
+%   the peak (threshold_shifted); a peak on the record's first/last sample
+%   has no point on that side, so that side keeps the record edge. The
+%   duration is floored at min_duration_hr (t1/t2 stay the computed
+%   crossings, no further search; duration_raw_hr keeps the crossing
+%   duration, min_applied flags the floor).
+%
+%   Inputs:
+%     x               - signal of one storm, double vector
+%     t               - times of x (datenum [days] or datetime), vector
+%                       (same length as x)
+%     frac            - fraction of the amplitude [-] (optional, default
+%                       0.95; [] = default), scalar double
+%     shift_threshold - shift Z_th when the record starts/ends above it
+%                       (optional, default false; [] = default), logical
+%     min_duration_hr - minimum duration [hours] (optional, default 1;
+%                       [] = default), scalar double
+%   Outputs:
+%     r - 1x1 struct with fields:
+%           sig_min, sig_max        - signal minimum and maximum (units of x)
+%           threshold_base          - Z_th before any shift (units of x)
+%           threshold               - Z_th used (units of x)
+%           threshold_shifted       - Z_th was shifted, logical
+%           peak_time, t1, t2       - peak and crossing times, datetime
+%           duration_hr             - duration with the floor [hours]
+%           duration_raw_hr         - crossing duration t2 - t1 [hours]
+%           min_applied             - floor applied, logical
+%           record_hr               - record length [hours]
+%           n_crossings             - number of Z_th crossings, double
+%           edge_start, edge_end    - no crossing on that side (record
+%                                     edge used), logical
+%
+%   Tier: internal
+%
+%   See also estimate_storm_durations, timeseries_storm_durations.
+
 if nargin < 5 || isempty(min_duration_hr)
     min_duration_hr = 1;
 end

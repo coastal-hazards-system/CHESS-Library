@@ -1,0 +1,28 @@
+{
+  "_schemaVersion": "1.0.0",
+  "discrete_standard_normal_scores": {
+    "inputs": [
+      {"name": "storm_type", "kind": "required", "type": ["char", "choices={'XC','TC'}"]}
+    ],
+    "outputs": [
+      {"name": "z_scores", "type": ["double"]}
+    ]
+  },
+  "lcs_columns": {
+    "inputs": [
+      {"name": "data_type", "kind": "ordered", "type": ["char", "choices={'Peaks','Timeseries'}"]}
+    ],
+    "outputs": [
+      {"name": "C", "type": ["struct"]}
+    ]
+  },
+  "storm_types_for_sampling": {
+    "inputs": [
+      {"name": "storm_sampling", "kind": "required", "type": ["char", "choices={'XC','TC','CC'}"]},
+      {"name": "order", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "storm_types", "type": ["cell"]}
+    ]
+  }
+}

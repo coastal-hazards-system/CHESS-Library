@@ -1,26 +1,30 @@
 function [vertical_datum, sp_coords] = chs_data_attributes(CHS_Data)
-%{
-    %% DESCRIPTION
-        Pulls the CHS study vertical datum and ADCIRC save point coordinates
-        from converted CHS data (output of convert_chs_zip). Lets
-        callers that only have a CHS_Data .mat (no .h5 files) recover the
-        same details read from the .h5 root attributes ('Vertical Datum',
-        'Save Point Latitude', 'Save Point Longitude'). Read from the first
-        ADCIRC storm file (chs_file_name_parts.m: Peaks/Timeseries; HC/AEF
-        files are ignored). The coordinates locate the savepoint in the
-        CHS_Dependencies study grid (storm_db_bias_uncertainty.m).
-
-    %% INPUTS
-        CHS_Data: Converted CHS files (Filename, Conv_Data).            | struct | 1 x number_of_files
-
-    %% OUTPUTS
-        vertical_datum: Study vertical datum ('' if not found).         | char | 1 x any_length
-        sp_coords: ADCIRC save point [latitude longitude] in degrees    | double | 1 x 2
-                   ([] if either is not found).
-
-    %% DEV SIGNATURE
-    Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% chs_data_attributes  Vertical datum and savepoint coordinates from CHS_Data.
+%   [vertical_datum, sp_coords] = chs_data_attributes(CHS_Data)
+%
+%   Pulls the CHS study vertical datum and ADCIRC save point coordinates
+%   from converted CHS data (output of convert_chs_zip). Lets callers
+%   that only have a CHS_Data .mat (no .h5 files) recover the same
+%   details read from the .h5 root attributes ('Vertical Datum', 'Save
+%   Point Latitude', 'Save Point Longitude'). Read from the first ADCIRC
+%   storm file (chs_file_name_parts: Peaks/Timeseries; HC/AEF files are
+%   ignored). The coordinates locate the savepoint in the
+%   CHS_Dependencies study grid (storm_db_bias_uncertainty).
+%
+%   Inputs:
+%     CHS_Data - converted CHS files (Filename, Conv_Data),
+%                1 x number_of_files struct
+%   Outputs:
+%     vertical_datum - study vertical datum ('' if not found), char
+%     sp_coords      - ADCIRC save point [latitude longitude] [deg] ([] if
+%                      either is not found), 1x2 double
+%
+%   Tier: internal
+%
+%   See also zip_h5_attributes, chs_file_name_parts,
+%   storm_db_bias_uncertainty, call_input_parser.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 vertical_datum = '';
 sp_coords = [];
 % ADCIRC Reference File (First Storm File Found)

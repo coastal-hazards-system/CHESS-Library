@@ -1,28 +1,37 @@
 function config = finalize_structure_config(config)
-%{
-    %% DESCRIPTION
-        Applies structure-level rules to "config" before the structure
-        geometry is created. Only requires structure type and geometry
-        fields (no workflow, forcing or response inputs), so it can be
-        called as soon as a structure is defined.
-        No file I/O. Safe to call more than once (idempotent).
+% finalize_structure_config  Apply the structure-level rules to config.
+%   config = finalize_structure_config(config) applies the structure-level
+%   rules before the structure geometry is created. Needs only the
+%   structure type and geometry fields (no workflow, forcing or response
+%   inputs), so it can run as soon as a structure is defined. No file I/O;
+%   idempotent.
+%
+%   Toe berms are hidden until their conceptual models are set: for every
+%   structure type add_toe_berm = 0, berm_seaward_slope = 1,
+%   berm_crest_width = 0 and berm_crest_elevation = 0. A floodwall without
+%   a toe berm sits on its wall bottom: toe_elevation =
+%   wall_bottom_elevation.
+%
+%   Inputs:
+%     config - CHESS configuration, 1x1 struct; reads:
+%                struc_type            - structure type (1 Levee,
+%                                        2 Floodwall, 3 Rubblemound),
+%                                        double
+%                add_toe_berm          - toe berm switch (optional, default
+%                                        0), 0/1
+%                wall_bottom_elevation - wall bottom elevation [m, study
+%                                        datum, positive up] (required for
+%                                        floodwalls), double
+%   Outputs:
+%     config - configuration with add_toe_berm, the berm fields and (for
+%              floodwalls) toe_elevation set, 1x1 struct
+%
+%   Tier: internal
+%
+%   See also finalize_config, create_structure_geometry, call_input_parser.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        config: CHESS configuration. | struc
-            Required fields:
-                struc_type: Structure type (1 - Levee, 2 - Floodwall,
-                            3 - Rubblemound)
-            Optional fields:
-                add_toe_berm: Toe berm switch (0/1). Defaults to 0.
-                wall_bottom_elevation: Required for floodwalls without berm.
-
-    %% OUTPUTS
-        config: Updated CHESS configuration. | struc
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
-%% DEFAULTS
 % Toe Berm Switch Not Provided
 if ~isfield(config, 'add_toe_berm') || isempty(config.add_toe_berm)
     config.add_toe_berm = 0;

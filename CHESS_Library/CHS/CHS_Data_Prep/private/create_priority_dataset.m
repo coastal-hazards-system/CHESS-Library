@@ -1,4 +1,51 @@
 function [storm_data, ts_storm2rm] = create_priority_dataset(peaks_table, timeseries_table_surge, timeseries_table_wave, storms2rm, wave_headers, Tp_special, priority_type, print_progress)
+% create_priority_dataset  Build the WLP or WHP Peaks dataset of a storm type.
+%   [storm_data, ts_storm2rm] = create_priority_dataset(peaks_table,
+%       timeseries_table_surge, timeseries_table_wave, storms2rm,
+%       wave_headers, Tp_special, priority_type, print_progress)
+%
+%   Pairs the Peaks values of one model with the Timeseries values of the
+%   other. All tables are sorted by Storm ID and paired by row.
+%   'wlp' (Water Level Priority): peaks_table is the ADCIRC Peaks table;
+%   its SWL is paired with the wave Timeseries Hm0, Tp and wave dir at the
+%   time step nearest the SWL peak time, within +/- 3 hours. When no wave
+%   time step is that close, the peak time becomes the time of the ADCIRC
+%   Timeseries maximum within the wave Timeseries time range (the SWL
+%   stays the Peaks value).
+%   'whp' (Wave Height Priority): peaks_table is the wave model Peaks
+%   table; its Hm0, Tp and wave dir are paired with the ADCIRC Timeseries
+%   SWL at the time step nearest the wave peak time, within +/- 3 hours.
+%   Tp_special = 1 gives Tp = 1.2 * Tm. A storm in storms2rm, with a
+%   single value in the paired Timeseries or with no match gets NaN data
+%   and is added to ts_storm2rm.
+%
+%   Inputs:
+%     peaks_table            - converted Peaks table, ADCIRC for 'wlp' or
+%                              wave model for 'whp' (Storm ID,
+%                              yyyymmddHHMM, data columns), table
+%     timeseries_table_surge - converted ADCIRC Timeseries table (Storm ID,
+%                              yyyymmddHHMM, Water Elevation), table
+%     timeseries_table_wave  - converted wave model Timeseries table,
+%                              table
+%     storms2rm              - IDs of storms already removed, double
+%     wave_headers           - wave model column names (fields Hm0, Tp,
+%                              wDir; chs_wave_model_header_locator),
+%                              struct
+%     Tp_special             - 1 when the wave file gives the mean period
+%                              Tm instead of Tp, else 0, double
+%     priority_type          - 'wlp' or 'whp', char
+%     print_progress         - print progress (0/1), double
+%   Outputs:
+%     storm_data  - WLP or WHP dataset, number_of_storms x 2 cell
+%                   {storm ID, 1x5 [SWL Hm0 Tp wave_dir peak_datenum]}
+%     ts_storm2rm - unique IDs of storms2rm and of the storms removed
+%                   here, double
+%
+%   Tier: internal
+%
+%   See also call_chs_storm_quality_check, chs_peaks_formatter,
+%   chs_timeseries_formatter, chs_wave_model_header_locator.
+
 %% DEFINE INPUTS
 ts_storm2rm = storms2rm;
 % Define Time Window Around Peak To Pull Response From Timeseries

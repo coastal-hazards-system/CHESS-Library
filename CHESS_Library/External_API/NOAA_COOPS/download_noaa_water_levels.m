@@ -1,49 +1,66 @@
 function [water_levels, windows] = download_noaa_water_levels(station_id, api_product, datum, first, last, options)
-%{
-    %% DESCRIPTION
-        Downloads measured water levels of one NOAA CO-OPS station from the
-        data API (csv, time_zone=gmt, units=metric).
-            1. [first, last] is intersected with the station's inventory
-               segments of the product and quality (options.segments, or
-               the XML data inventory fetched live); overlapping windows are
-               merged, so no time is requested twice.
-            2. Each window is split into requests within NOAA's size limit
-               (noaa_request_chunks.m).
-            3. Replies are parsed (parse_noaa_csv.m), concatenated, sorted
-               and de-duplicated on DateTime.
-            4. Regular products (water_level 6 min, hourly_height 1 h,
-               daily_mean 1 day, monthly_mean 1 month) are put on a regular
-               grid from the first window start to the last window end; gaps
-               (inside and between windows) are NaN. high_low is never
-               filled.
-        A request answered with "no data" leaves NaN on regular grids and
-        raises warning noaa:noDataInChunk. Any other NOAA error raises
-        noaa:requestFailed (noaa_web_request.m, parse_noaa_csv.m).
-        No window (product not in the inventory, or no overlap with
-        [first, last]): empty table and no request.
-
-    %% INPUTS
-        station_id: NOAA CO-OPS station id. | char/string
-        api_product: water_level, hourly_height, high_low, daily_mean or
-            monthly_mean. | char/string
-        datum: Data API datum code (e.g. 'MSL', 'NAVD', 'IGLD'). | char/string
-        first, last: Requested range (converted to UTC; a datetime without
-            time zone is taken as UTC); [] for the start/end of the inventory. | datetime
-        options: (Optional) Struct with any of the fields | struct
-            segments: Inventory segments (parse_noaa_data_inventory.m
-                layout: api_product, quality, first, last). | table
-            quality: 'verified' (default) or 'preliminary' (6-minute
-                water_level only). | char/string
-            web_options: Options for noaa_web_request.m. | struct
-
-    %% OUTPUTS
-        water_levels: Table DateTime (UTC), WaterLevel [m on datum], plus
-            Type for high_low. | table
-        windows: Downloaded windows, table first, last (UTC). | table
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% download_noaa_water_levels  Download NOAA measured water levels.
+%   water_levels = download_noaa_water_levels(station_id, api_product,
+%       datum, first, last)
+%   [water_levels, windows] = download_noaa_water_levels(..., options)
+%
+%   Downloads measured water levels of one NOAA CO-OPS station from the
+%   data API (csv, time_zone=gmt, units=metric).
+%     1. [first, last] is intersected with the station's inventory
+%        segments of the product and quality (options.segments, or the
+%        XML data inventory fetched live); overlapping windows are merged,
+%        so no time is requested twice.
+%     2. Each window is split into requests within NOAA's size limit
+%        (noaa_request_chunks).
+%     3. Replies are parsed (parse_noaa_csv), concatenated, sorted and
+%        de-duplicated on DateTime.
+%     4. Regular products (water_level 6 min, hourly_height 1 h,
+%        daily_mean 1 day, monthly_mean 1 month) are put on a regular grid
+%        from the first window start (rounded up to the step; start of the
+%        month for monthly_mean) to the last window end; gaps (inside and
+%        between windows) are NaN. high_low is never filled.
+%   A request answered with "no data" leaves NaN on regular grids and
+%   raises warning noaa:noDataInChunk. Any other NOAA error raises
+%   noaa:requestFailed (noaa_web_request, parse_noaa_csv). An unknown
+%   api_product raises noaa:unknownProduct.
+%   No window (product not in the inventory, or no overlap with
+%   [first, last]): empty table and no data request.
+%
+%   Inputs:
+%     station_id  - NOAA CO-OPS station id, char or string
+%     api_product - 'water_level', 'hourly_height', 'high_low',
+%                   'daily_mean' or 'monthly_mean', char or string
+%     datum       - Data API datum code (e.g. 'MSL', 'NAVD', 'IGLD'), one
+%                   the station offers (see noaa_station_details). Sent as
+%                   given: datums endpoint names (NAVD88, GL_LWD) are not
+%                   converted here (noaa_datum_code does that), char or
+%                   string
+%     first, last - requested range (converted to UTC; a datetime without
+%                   time zone is taken as UTC); [] for the start / end of
+%                   the inventory, datetime
+%     options     - struct (optional; [] = default); fields (all
+%                   optional):
+%                     .segments - inventory segments
+%                         (parse_noaa_data_inventory layout: api_product,
+%                         quality, first, last), table, default: the XML
+%                         data inventory fetched live (one request)
+%                     .quality - 'verified' or 'preliminary' (6-minute
+%                         water_level only), char or string, default
+%                         'verified'
+%                     .web_options - options for noaa_web_request, struct,
+%                         default struct()
+%   Outputs:
+%     water_levels - table: DateTime (UTC), WaterLevel [m, on the datum],
+%                    plus Type (string) for high_low
+%     windows      - downloaded windows, table: first, last (UTC)
+%
+%   Tier: public
+%
+%   See also create_tide_file, download_noaa_tide_predictions,
+%   noaa_station_catalog, noaa_station_details, select_noaa_stations,
+%   plot_noaa_stations, noaa_water_level_downloader.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 6 || isempty(options)
     options = struct();
 end

@@ -1,53 +1,55 @@
 function [data, no_data] = parse_noaa_csv(reply_text, value_name)
-%{
-    %% DESCRIPTION
-        Parses a csv reply of the NOAA CO-OPS data API (format=csv,
-        time_zone=gmt) into a table. Recognized layouts (by header):
-            'Date Time, Water Level, Sigma, O or I (for verified), F, R, L,
-                Quality': 6-minute water_level (8 columns).
-            'Date Time, Water Level, Sigma, I, L': hourly_height.
-            'Date Time, Water Level,TY, I, L': high_low (Type column kept).
-            'Date Time, Water Level, I, L': daily_mean.
-            'Year, Month, Highest, MHHW, MHW, MSL, ...': monthly_mean;
-                DateTime = first of the month, value = MSL column (the
-                monthly mean water level on the requested datum).
-            'Date Time, Prediction[, Type]': predictions (Type for
-                hilo/hi/lo).
-        The value is always the 2nd column of the 'Date Time' layouts; empty
-        values become NaN.
-
-        NOAA replies:
-            "No data" (a data line containing "No data was found", e.g.
-                "Error: No data was found. This product may not be offered
-                at this station at the requested time.", or a header with no
-                rows): an empty table with the layout columns and
-                no_data = true. This is how callers tell "no data" from a
-                failure: no_data is true only for these replies, and every
-                other NOAA error raises.
-            Any other error: error noaa:requestFailed carrying NOAA's message.
-                Covers a header followed by 'Error: ...', 'No Predictions
-                data was found. Please make sure the Datum input is valid.',
-                a blank line followed by 'Wrong Date ... Range Limit
-                Exceeded ...', 'There is no MSL for the station',
-                'Great Lakes stations don't have Predictions data.', an empty
-                reply and any reply without a recognized header.
-
-    %% INPUTS
-        reply_text: Raw reply text (noaa_web_request.m). | char/string
-        value_name: Name of the value column (e.g. 'WaterLevel',
-            'Prediction'). | char
-
-    %% OUTPUTS
-        data: Table with columns | table
-            DateTime: Time stamp (TimeZone 'UTC'). | datetime
-            <value_name>: Value [m] (NaN where NOAA left it empty). | double
-            Type: (high_low and hilo/hi/lo predictions only) Tide type
-                (e.g. 'H', 'HH', 'L', 'LL'). | string
-        no_data: true when NOAA replied that no data was found. | logical
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% parse_noaa_csv  Parse a NOAA CO-OPS data API csv reply into a table.
+%   [data, no_data] = parse_noaa_csv(reply_text, value_name)
+%
+%   Parses a csv reply of the NOAA CO-OPS data API (format=csv,
+%   time_zone=gmt) into a table. Recognized layouts (by header):
+%     'Date Time, Water Level, Sigma, O or I (for verified), F, R, L,
+%         Quality': 6-minute water_level (8 columns).
+%     'Date Time, Water Level, Sigma, I, L': hourly_height.
+%     'Date Time, Water Level,TY, I, L': high_low (Type column kept).
+%     'Date Time, Water Level, I, L': daily_mean.
+%     'Year, Month, Highest, MHHW, MHW, MSL, ...': monthly_mean;
+%         DateTime = first of the month, value = MSL column (the monthly
+%         mean water level on the requested datum).
+%     'Date Time, Prediction[, Type]': predictions (Type for hilo/hi/lo).
+%   The value is always the 2nd column of the 'Date Time' layouts; empty
+%   values become NaN.
+%
+%   NOAA replies:
+%     "No data" (a data line containing "No data was found", e.g. "Error:
+%         No data was found. This product may not be offered at this
+%         station at the requested time.", or a header with no rows): an
+%         empty table with the layout columns and no_data = true. This is
+%         how callers tell "no data" from a failure: no_data is true only
+%         for these replies, and every other NOAA error raises.
+%     Any other error: error noaa:requestFailed carrying NOAA's message.
+%         Covers a header followed by 'Error: ...', 'No Predictions data
+%         was found. Please make sure the Datum input is valid.', a blank
+%         line followed by 'Wrong Date ... Range Limit Exceeded ...',
+%         'There is no MSL for the station', 'Great Lakes stations don't
+%         have Predictions data.', an empty reply and any reply without a
+%         recognized header.
+%
+%   Inputs:
+%     reply_text - raw reply text (noaa_web_request), char or string
+%     value_name - name of the value column (e.g. 'WaterLevel',
+%                  'Prediction'), char
+%   Outputs:
+%     data    - table:
+%                 DateTime - time stamp (TimeZone 'UTC'), datetime
+%                 <value_name> - value [m] (NaN where NOAA left it empty),
+%                     double
+%                 Type - (high_low and hilo/hi/lo predictions only) tide
+%                     type (e.g. 'H', 'HH', 'L', 'LL'), string
+%     no_data - true when NOAA replied that no data was found, logical
+%
+%   Tier: internal
+%
+%   See also noaa_web_request, download_noaa_water_levels,
+%   download_noaa_tide_predictions.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 reply_lines = strtrim(regexp(char(reply_text), '\r?\n', 'split'));
 reply_lines = reply_lines(~cellfun(@isempty, reply_lines));
 if isempty(reply_lines)

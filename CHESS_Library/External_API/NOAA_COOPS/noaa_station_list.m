@@ -1,51 +1,66 @@
 function [StationList, not_found] = noaa_station_list(ids, options)
-%{
-    %% DESCRIPTION
-        Builds the StationList (one element per station) used by
-        noaa_water_level_downloader.m, live from NOAA CO-OPS (no cache):
-        the catalog row (noaa_station_catalog.m) plus the station details
-        (noaa_station_details.m: datums, inventory segments, prediction
-        intervals). Loop over every catalog id to pull every station.
-        Ids missing from the catalog are returned in not_found. A station
-        whose details request is rejected by NOAA (noaa:requestFailed) keeps
-        its catalog fields, with no datums and no water level products, and
-        raises warning noaa:stationDetailsFailed; noaa:noConnection stops
-        the loop.
-
-    %% INPUTS
-        ids: NOAA CO-OPS station ids. | cell/string/char
-        options: (Optional) Struct with any of the fields | struct
-            catalog: Station catalog (default: noaa_station_catalog with
-                all three lists, fetched once). | table
-            progress_fcn: Called as progress_fcn(station_index,
-                station_count, id) before each station. | function_handle
-            web_options: Options for noaa_web_request.m. | struct
-
-    %% OUTPUTS
-        StationList: Struct array with fields | struct
-            id, name, state: Station id, name and state. | char
-            lon, lat: Longitude and latitude [deg]. | double
-            greatlakes: Great Lakes station. | logical
-            active_indx: Active water level station. | logical
-            datums: Struct array name, description, api_code, value [m]
-                (noaa_station_details.m). | struct
-            WL_products: NOAA product name of each inventory segment (e.g.
-                'Verified Hourly Height Water Level'). | string
-            WL_api_product: Data API product of each segment. | string
-            WL_quality: 'verified' or 'preliminary' per segment. | string
-            startDate, endDate: First and last time stamp of each segment
-                (UTC). | datetime
-            record_length: Span of each segment. | calendarDuration
-            predictions_products: Struct array value, description of the
-                prediction intervals (harmonic 'R' stations only; empty
-                otherwise). | struct
-            has_water_levels: Measured water level station. | logical
-            harmonic_predictions: Harmonic ('R') prediction station. | logical
-        not_found: Ids missing from the catalog. | cell
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% noaa_station_list  Station list for noaa_water_level_downloader.
+%   [StationList, not_found] = noaa_station_list(ids)
+%   [StationList, not_found] = noaa_station_list(ids, options)
+%
+%   Builds the StationList (one element per station) used by
+%   noaa_water_level_downloader, live from NOAA CO-OPS (no cache): the
+%   catalog row (noaa_station_catalog) plus the station details
+%   (noaa_station_details: datums, inventory segments, prediction
+%   intervals). Loop over every catalog id to pull every station.
+%   Ids missing from the catalog are returned in not_found. A station
+%   whose details request is rejected by NOAA (noaa:requestFailed) keeps
+%   its catalog fields, with no datums and no water level products, and
+%   raises warning noaa:stationDetailsFailed; any other error (e.g.
+%   noaa:noConnection) stops the loop.
+%
+%   Inputs:
+%     ids     - NOAA CO-OPS station ids, cell, string or char
+%     options - struct (optional; [] = default); fields (all optional):
+%                 .catalog - station catalog, table, default:
+%                     noaa_station_catalog with all three lists, fetched
+%                     once
+%                 .progress_fcn - called as progress_fcn(station_index,
+%                     station_count, id) before each station,
+%                     function_handle, default none
+%                 .web_options - options for noaa_web_request, struct,
+%                     default struct()
+%   Outputs:
+%     StationList - struct array (column), fields:
+%                     id, name, state - station id, name and state, char
+%                     lon, lat - longitude and latitude [deg], double
+%                     greatlakes - Great Lakes station, logical
+%                     active_indx - active water level station, logical
+%                     datums - struct array name, description, api_code,
+%                         value [m] (noaa_station_details)
+%                     WL_products - NOAA product name of each inventory
+%                         segment (e.g. 'Verified Hourly Height Water
+%                         Level'), string
+%                     WL_api_product - data API product of each segment,
+%                         string
+%                     WL_quality - 'verified' or 'preliminary' per
+%                         segment, string
+%                     startDate, endDate - first and last time stamp of
+%                         each segment (UTC), datetime
+%                     record_length - span of each segment,
+%                         calendarDuration
+%                     predictions_products - struct array value,
+%                         description of the prediction intervals
+%                         (harmonic 'R' stations only; empty otherwise)
+%                     has_water_levels - measured water level station,
+%                         logical
+%                     harmonic_predictions - harmonic ('R') prediction
+%                         station, logical
+%     not_found   - ids missing from the catalog, cell column
+%
+%   Tier: public
+%
+%   See also noaa_water_level_downloader, create_tide_file,
+%   download_noaa_tide_predictions, download_noaa_water_levels,
+%   noaa_station_catalog, noaa_station_details, select_noaa_stations,
+%   plot_noaa_stations.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 2 || isempty(options)
     options = struct();
 end

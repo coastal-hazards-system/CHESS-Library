@@ -1,4 +1,82 @@
 function [Resp] = compute_structure_response(config, structure, project_forcing, get_max)
+% compute_structure_response  Structure responses of one dataset's forcing.
+%   Resp = compute_structure_response(config, structure, project_forcing,
+%       get_max)
+%
+%   Computes every response whose response_registry compute switch is on
+%   in config and that applies to the structure type (switches of other
+%   structure types are set to 0). compute_p2_p3 turns compute_p1 on;
+%   compute_nappe and compute_q_vol turn compute_q on.
+%     Levee and rubble mound: R2p, R2p_SWL, q, q_wave_ot
+%       (Eurotop_r2p_q_Final; with compute_r2p, compute_q or
+%       compute_q_vol); rubble mound Dn50 and Dn50_Lee
+%       (ann_rubblemound_stability; number of waves from storm_duration,
+%       never dt).
+%     Floodwall: q, q_wave_ot (Eurotop_r2p_q_Final); p1
+%       (goda_forces_on_vertical_p1); p2dyn, p2sta, p2total, p3dyn,
+%       p3sta, p3total, pu (goda_forces_on_vertical_p2p3; NaN where p1 is
+%       NaN); X_low, theta_low, X_up, theta_up, Bx, X_c_surge,
+%       theta_center, Bjet, Vjet, Fjet (floodwall_nappe_response; NaN
+%       where q is NaN).
+%     Every type: Hm0t (Hm0_toe times the eurotop_wave_transmission Kt;
+%       PROS-RB uses the z = 0 replicate Hm0_toe with the Kt of every
+%       replicate); DamDepthElev, DamDepth (damaging_depth; offshore
+%       elevation from structure.offshore_elevation, else
+%       config.offshore_elevation); Q_vol, Q_vol_wave_ot (Timeseries only:
+%       running sum of q.*dt over each storm [m^3/m], a storm's total is
+%       its last value; off for Peaks).
+%   Hm0_toe drives every toe response, Hm0_offshore the Goda pressures and
+%   the damaging depth. Influence factors come from call_eurotop_ifactors.
+%   Periods: Tm = Tp/1.2, T_m-1,0 = Tp/1.1, Ts = Tp. Depths: h = SWL - toe
+%   elevation (floodwall without a toe berm: wall bottom elevation), hb =
+%   SWL - berm crest elevation (toe elevation without a toe berm), Rc =
+%   crest elevation - SWL; elevations are signed.
+%   Errors: compute_structure_response:unsupportedStructureType,
+%   compute_structure_response:unsupportedWorkflow (Hm0t).
+%
+%   Inputs:
+%     config          - CHESS configuration, 1x1 struct; reads struc_type
+%                       (1 levee, 2 floodwall, 3 rubble mound), workflow
+%                       (1 PROS-RB, 2 DET, 3 LCS, 4 PROS-FB),
+%                       gravity_constant [m/s^2], water_density [kg/m^3],
+%                       add_toe_berm, every response_registry compute
+%                       switch, compute_damaging_depth_Ks and, when the
+%                       structure has none, offshore_elevation
+%     structure       - structure geometry, 1x1 struct; reads
+%                       crest_elevation, crest_width, toe_elevation,
+%                       offshore_slope, roughness_ifactor, berm_* (toe
+%                       berm), seaside_slope and leeside_slope (types 1,
+%                       3), armor_delta, seaside_design_S,
+%                       leeside_design_S, cem_P (type 3),
+%                       wall_bottom_elevation (type 2), offshore_elevation
+%                       (optional); elevations [m, study datum, positive
+%                       up]
+%     project_forcing - forcing of one dataset and storm type:
+%                       workflows 1, 2, 4: struct with SWL, Hm0_toe,
+%                       Hm0_offshore, Tp, storm_duration [days] and,
+%                       Timeseries only, dt [days], each nStorms x 1 cell
+%                       of nSteps x n_replicates (chess_forcing_formatter,
+%                       adjust_project_forcing);
+%                       workflow 3: life cycles, nLC x 1 cell of Peaks
+%                       (10 columns) or Timeseries (12 columns) matrices
+%                       (lcs_columns)
+%     get_max         - 1 = keep only the responses fitted by PROS-RB
+%                       (response_registry fitted_by_pros_rb) and take
+%                       their maximum over each storm (workflows 1, 2, 4;
+%                       no effect for workflow 3); 0 = full histories
+%   Outputs:
+%     Resp - responses, struct with one field per computed response
+%            (units in response_registry), each a cell the size of the
+%            forcing cell array holding arrays the size of the forcing;
+%            with get_max = 1 each field is a double with one row per
+%            storm; [] when no response is requested
+%
+%   Tier: internal
+%
+%   See also call_project_response, response_registry,
+%   call_eurotop_ifactors, Eurotop_r2p_q_Final, ann_rubblemound_stability,
+%   damaging_depth, lcs_columns.
+
 %% GRAB DETAILS FROM "config"
 % Strucutre Type
 struc_type = config.struc_type;

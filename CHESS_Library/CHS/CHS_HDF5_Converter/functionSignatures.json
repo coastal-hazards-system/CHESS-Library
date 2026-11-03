@@ -1,0 +1,22 @@
+{
+  "_schemaVersion": "1.0.0",
+  "chs_h5_converter": {
+    "inputs": [
+      {"name": "Filein", "kind": "required", "type": ["file=*.h5"], "purpose": "CHS .h5 file (CHS file name rule)"}
+    ],
+    "outputs": [
+      {"name": "cData", "type": ["struct"]}
+    ]
+  },
+  "convert_chs_zip": {
+    "inputs": [
+      {"name": "chs_zip", "kind": "required", "type": ["file=*.zip"], "purpose": "CHS zip folder"},
+      {"name": "h5_names", "kind": "required", "type": ["cell"], "purpose": ".h5 file names to convert (no folders)"},
+      {"name": "print_progress", "kind": "required", "type": ["numeric"], "purpose": "Print progress to the command window (0/1)"},
+      {"name": "progress_fcn", "kind": "ordered", "type": ["function_handle"], "purpose": "Called before each file as progress_fcn(jj, n, file_name)"}
+    ],
+    "outputs": [
+      {"name": "CHS_Data", "type": ["struct"]}
+    ]
+  }
+}

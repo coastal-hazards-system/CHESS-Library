@@ -1,98 +1,105 @@
-%{
-LICENSING:
-    This code is part of CHESS software suite developed by the U.S. Army
-    Engineer Research and Development Center Coastal and Hydraulics Laboratory
-    (hereinafter “ERDC-CHL”). This material is distributed in accordance with DoD
-    Instruction 5230.24. Recipient agrees to abide by all notices, and distribution
-    and license markings. The controlling DOD office is the U.S. Army Engineer
-    Research and Development Center (hereinafter, "ERDC"). This material shall be
-    handled and maintained in accordance with For Official Use Only, Export Control,
-    and AR 380-19 requirements. ERDC-CHL retains all right, title and interest in
-    CHESS and any portion thereof and in all copies, modifications and derivative
-    works of CHESS and any portions thereof including, without limitation, all
-    rights to patent, copyright, trade secret, trademark and other proprietary or
-    intellectual property rights. Recipient has no rights, by license or otherwise, to
-    use, disclose or disseminate CHESS, in whole or in part.
-
-DISCLAIMER:
-    CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT HOLDERS.
-    ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS OR IMPLIED WITH RESPECT
-    TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL, AND EXPRESSLY DISCLAIMS ALL WARRANTIES
-    OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF
-    MERCHANTABILITY, NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
-    CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE AND RESULTS OF THE
-    USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL
-    WARRANTIES AND LIABILITIES REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND
-    DISTRIBUTES IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST ERDC-CHL, THE
-    UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD
-    HARMLESS ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
-    LIABILITIES, DEMANDS, DAMAGES.
-
-SCRIPT NAME:
-    CSR_Peaks_DLL2.m.
-
-CALLED BY:
-    MCS_CSR_Main_Script.m
-
-PURPOSE:
-    This script is used to compute the rubblemound structure reliability and
-    probability of failure using the sample storms from the Monte Carlo
-    Simulation (MCS_DLL1.m).
-
-INPUTS:
-    |   Vars Name   |  Vars Type  |               Description                |
-    |---------------|-------------|------------------------------------------|
-    |  input_param  |    String   |  File name of input CSV file             |
-    |---------------|-------------|------------------------------------------|
-    |  LC_MCSimOUT  |  Structure  |  Peaks data of sampled storms            |
-    |---------------|-------------|------------------------------------------|
-
-OUTPUTS:
-    |   Vars Name   |  Vars Type  |               Description                |
-    |---------------|-------------|------------------------------------------|
-    | PF_Summary,   |  Tables     |  Probability of failure and reliability  |
-    | Reliab_Summary|             |  of structure.                           |
-    |---------------|-------------|------------------------------------------|
-
-INPUTS HEADERS:
-    LC_MCSimOUT:
-        Size (# of LC's, 8) -> (Rows,Col)
-        (01) Year                         [-]
-        (02) Cyclone Type                 [XC=0; TC=1]
-        (03) Same year counter            [-]
-        (04) Water Level                  [meters, MSL]
-        (05) Wave Height                  [meters]
-        (06) Peak Wave Period             [seconds]
-        (07) Wave Direction               [degrees; N=0, E=+90, S=+/-180, W=-90]
-        (08) Storm Duration               [hours]
-
-EXTERNAL FUNCTIONS:
-    Wave Transformation:
-        wavnum1_VG(Tp,h,grav)
-   
-AUTHORS:
-    By:  Jeffrey A. Melby, PhD,
-    Norberto Nadal-Caraballo, PhD,
-    and Victor M. Gonzalez,PE
-
-MODIFICATIONS:
-    |   DATE (mm/dd/yyyy)   |      EDITOR      |         SUMMARY               |
-    |-----------------------|------------------|-------------------------------|
-    |      06/05/2020       |   Fabian Garcia  |  Code optimization,clean-up,  |
-    |                       |                  |  and incorporation onto       |
-    |                       |                  |  streamlined workflow.        |
-    |-----------------------|------------------|-------------------------------|
-    
-RELEVANT PUBLICATIONS:
-    Source Material:
-        TBD
-    Application Of Methodology:
-        (01) Gonzalez, Victor M. et. al. 2020. "Alabama Barrier Island Restauration Assesment life-cycle
-                structure response modeling." ERDC/CHL TR-20-5. Vicksburg, MS: US Army Engineer Research
-                and Development Center.
-%}
-
 function [PF_Summary,Reliab_Summary] = chess_csr_peaks(config, structure, emp_coeff, LC_MCSimOUT)
+% chess_csr_peaks  Rubble mound armor reliability from LCS Peaks storms.
+%   [PF_Summary, Reliab_Summary] = chess_csr_peaks(config, structure,
+%       emp_coeff, LC_MCSimOUT)
+%
+%   Reliability and probability of failure of the seaside and leeside
+%   armor of a rubble mound for the storms sampled in every life cycle
+%   (Peaks: one row per storm). For every storm:
+%     seaside limit state G_ss = R_ss - F_ss (Melby and Kobayashi 2011,
+%       momentum flux; damage level seaside_design_S, coefficients km1
+%       and k_si);
+%     leeside limit state G_ls = R_ls - F_ls (Van Gent and Pozueta 2004,
+%       Melby 2009, r = 6; damage level leeside_design_S, coefficients
+%       k_ls1 and k_ls2);
+%     overall G = min(G_ss, G_ls).
+%   Forcing: SWL, Hm0_toe, Tp (Tm = Tp/1.2, T_m-1,0 = Tp/1.1), h = SWL -
+%   toe elevation (0.01 when negative) and the number of waves Nz =
+%   storm_duration/Tm. Stone sizes: Dn = (mass/((1 + armor_delta)*
+%   water_density))^(1/3).
+%   The reliability of a life cycle is 1 - (storms with G < 0)/(storms in
+%   the life cycle), 1 for a life cycle without storms; the probability of
+%   failure is 1 - reliability.
+%
+%   Inputs:
+%     config      - CHESS configuration, 1x1 struct; reads water_density
+%                   [kg/m^3], gravity_constant [m/s^2] and project_CLs
+%                   (percentiles, char, e.g. '[84 90]')
+%     structure   - structure geometry, 1x1 struct; reads
+%                   seaside_design_S, leeside_design_S [-], armor_delta
+%                   [-], seaside_mass, leeside_mass [kg], seaside_slope,
+%                   leeside_slope (cot) [-], cem_P [-], toe_elevation,
+%                   crest_elevation [m, study datum, positive up] and
+%                   crest_width [m]
+%     emp_coeff   - armor damage coefficients
+%                   (load_empirical_coefficients), struct; reads km1,
+%                   k_si, k_ls1, k_ls2
+%     LC_MCSimOUT - life cycles of one storm type, nLC x 1 cell of Peaks
+%                   matrices (nStorms x 10, lcs_columns; reads SWL,
+%                   Hm0_toe, Tp and storm_duration [days])
+%   Outputs:
+%     PF_Summary     - probability of failure over the life cycles, table
+%                      with rows Mean, '<p>%' for each project_CLs
+%                      percentile and Std (population) and columns
+%                      Row_Name, Overall, Seaside, Leeside
+%     Reliab_Summary - reliability over the life cycles, same layout
+%
+%   Tier: internal
+%
+%   See also chess_csr, chess_csr_dpa, load_empirical_coefficients,
+%   lcs_columns.
+%
+%   Developed by: Jeffrey A. Melby, PhD; Norberto Nadal-Caraballo, PhD;
+%   Victor M. Gonzalez, PE
+
+% LICENSING:
+%     This code is part of CHESS software suite developed by the U.S. Army
+%     Engineer Research and Development Center Coastal and Hydraulics Laboratory
+%     (hereinafter “ERDC-CHL”). This material is distributed in accordance with DoD
+%     Instruction 5230.24. Recipient agrees to abide by all notices, and distribution
+%     and license markings. The controlling DOD office is the U.S. Army Engineer
+%     Research and Development Center (hereinafter, "ERDC"). This material shall be
+%     handled and maintained in accordance with For Official Use Only, Export Control,
+%     and AR 380-19 requirements. ERDC-CHL retains all right, title and interest in
+%     CHESS and any portion thereof and in all copies, modifications and derivative
+%     works of CHESS and any portions thereof including, without limitation, all
+%     rights to patent, copyright, trade secret, trademark and other proprietary or
+%     intellectual property rights. Recipient has no rights, by license or otherwise, to
+%     use, disclose or disseminate CHESS, in whole or in part.
+%
+% DISCLAIMER:
+%     CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT HOLDERS.
+%     ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS OR IMPLIED WITH RESPECT
+%     TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL, AND EXPRESSLY DISCLAIMS ALL WARRANTIES
+%     OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF
+%     MERCHANTABILITY, NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
+%     CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE AND RESULTS OF THE
+%     USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL
+%     WARRANTIES AND LIABILITIES REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND
+%     DISTRIBUTES IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST ERDC-CHL, THE
+%     UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD
+%     HARMLESS ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
+%     LIABILITIES, DEMANDS, DAMAGES.
+%
+% SCRIPT NAME:
+%     CSR_Peaks_DLL2.m.
+%
+% MODIFICATIONS:
+%     |   DATE (mm/dd/yyyy)   |      EDITOR      |         SUMMARY               |
+%     |-----------------------|------------------|-------------------------------|
+%     |      06/05/2020       |   Fabian Garcia  |  Code optimization,clean-up,  |
+%     |                       |                  |  and incorporation onto       |
+%     |                       |                  |  streamlined workflow.        |
+%     |-----------------------|------------------|-------------------------------|
+%
+% RELEVANT PUBLICATIONS:
+%     Source Material:
+%         TBD
+%     Application Of Methodology:
+%         (01) Gonzalez, Victor M. et. al. 2020. "Alabama Barrier Island Restauration Assesment life-cycle
+%                 structure response modeling." ERDC/CHL TR-20-5. Vicksburg, MS: US Army Engineer Research
+%                 and Development Center.
+
 %% GRAB INPUTS FROM "config"
 % Water density (kg/m^3)
 dw = config.water_density;

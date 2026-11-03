@@ -1,15 +1,18 @@
 function customColormap = chess_colormap(target)
-%{
-    %% DESCRIPTION
-        Applies the CHESS colormap (magenta-blue transition into jet) to a
-        figure, axes or other colormap-bearing graphics object.
+% chess_colormap  Apply the CHESS colormap (magenta-blue into jet).
+%   customColormap = chess_colormap(target) sets the 64-color CHESS
+%       colormap (8 colors from magenta to blue followed by jet(56)) on
+%       target and returns it.
+%
+%   Inputs:
+%     target - figure, axes or other colormap-bearing graphics object
+%   Outputs:
+%     customColormap - the colormap applied, 64 x 3 double (optional)
+%
+%   Tier: internal
+%
+%   See also det_methods, lcs_methods.
 
-    %% INPUTS
-        target: Figure, axes or graphics object to color. | graphics object | 1 x 1
-
-    %% OUTPUTS
-        customColormap: The colormap applied (optional). | double | 64 x 3
-%}
 % Define the number of colors
 numColors = 64;
 % Number of colors for the transition zone

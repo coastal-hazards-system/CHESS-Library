@@ -1,4 +1,24 @@
 function CHESS_JPM_plot(JPM_output, jpm_options, plot_options)
+% CHESS_JPM_plot  Save the JPM hazard curve figure.
+%   CHESS_JPM_plot(JPM_output, jpm_options, plot_options)
+%
+%   Plots the best-estimate curve and the CL curves of CHESS_JPM against
+%   AEP or AEF (log x axis, reversed) and saves the figure (invisible) as
+%   <path_out>/JPM_HC_<staID>_<PCHA_ATCS or PCHA_ITCS>.png.
+%
+%   Inputs:
+%     JPM_output   - hazard curves (CHESS_JPM output: staID, HC_plt,
+%                    HC_plt_x), struct
+%     jpm_options  - JPM settings (prc, up to 4 values; use_AEP;
+%                    integration_method), struct
+%     plot_options - plot settings (yaxis_Limits, yaxis_Label, path_out),
+%                    struct
+%   Outputs: none (PNG file written)
+%
+%   Tier: internal
+%
+%   See also CHESS_JPM, CHESS_JPM_integration.
+
 %
 % Colors for percentiles plots
 cs={'r-.','b--','b--','r-.'};

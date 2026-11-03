@@ -1,11 +1,55 @@
 classdef pros_methods < CHESSPlotsBase
-    % PROS_METHODS PROS/frequency-domain workflow plots (workflow = 1 or 4).
-    % Instantiated via CHESSPlots(...).
+    % pros_methods  Plots of the PROS workflow results (workflows 1 and 4).
+    %   sp = CHESSPlots(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+    %       with config.workflow = 1 (PROS-RB, response-based) or 4
+    %       (PROS-FB, frequency-based) returns a pros_methods object.
+    %       pros_methods defines no constructor: the inputs (documented in
+    %       CHESSPlots) go to the CHESSPlotsBase constructor.
+    %
+    %   Resp holds the hazard curves of the run: per dataset
+    %   (Resp.<data_type>.<match_type>.<storm_type>) a struct array, one
+    %   element per response or forcing curve (var, x_plot, y_plot,
+    %   x_table, y_table, CL, POT, n_dropped, y_label, title,
+    %   y_log_scale). ds_query / ds_names (every method): struct with
+    %   storm_type ('XC', 'TC' or 'CC'), data_type and match_type, see
+    %   aux_methods.pull_data.
+    %
+    %   Methods (in addition to the CHESSPlotsBase methods):
+    %     hc_plot                         - hazard curve with confidence levels and overlays
+    %     frequency_based_comparison_plot - RB hazard curve with the FB curve overlaid
+    %     get_aef                         - AEF of event responses
+    %     event_choices                   - storm event viewer / response table choices
+    %     refine_selection                - replicate, AEF/AEP and CL of a selection
+    %     event_controls                  - control row: storm, z or AEF/AEP and CL
+    %     event_series                    - storm event viewer series
+    %     event_table                     - response table rows
+    %
+    %   Tier: public
+    %
+    %   See also CHESSPlots, CHESSPlotsBase, det_methods, lcs_methods,
+    %   chess_pros, frequency_based_hazard_curve.
+
  %% PUBLIC METHODS
     methods (Access=public)
-        % Method: Response Hazard Curve Plot 
         function ax = hc_plot(self, ax, ds_names, field_to_plot, add_events)
-            % Plots CHESS: PROS Hazard Curve for specified field on Resp data structure.
+            % hc_plot  Plot the PROS hazard curve of one response or forcing variable.
+            %   ax = hc_plot(self, ax, ds_names, field_to_plot, add_events)
+            %       draws the best estimate and confidence level curves
+            %       against AEF [1/yr] (down to 1e-4) or AEP (down to 1e-3,
+            %       config.pros_use_aep == 1) on a reversed log axis. A
+            %       field missing from the results gives a no-data note.
+            %
+            %   Inputs:
+            %     ax            - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_names      - dataset query (storm_type, data_type, match_type)
+            %     field_to_plot - curve name (the var of a Resp element)
+            %     add_events    - event overlay: 0 off, 1 run sample (the POT
+            %                     replicates the curve was built from, z = 0
+            %                     excluded), 2 storm values (the POT z = 0
+            %                     replicate placed on the best estimate curve);
+            %                     no overlay for CC or when POT is a note
+            %   Outputs:
+            %     ax - the plot axes
 
             % Pull Requested Data Out Of SS Data Structure
             sim_data = aux_methods.pull_data(ds_names, self.Resp);
@@ -107,11 +151,26 @@ classdef pros_methods < CHESSPlotsBase
                 set(htitle,'String','Confidence Levels');
             end
         end
-        % Method: Response-Based (RB) vs Frequency-Based (FB) Hazard Curve
         function ax = frequency_based_comparison_plot(self, ax, ds_query, response_name, fb_curve)
-            % RB Hazard Curve Of The Run (hc_plot, Solid/Dashed) With The FB Curve Of The Same Response Overlaid (Dotted, Same
-            % Color Per Confidence Level). fb_curve: frequency_based_hazard_curve.m Output ([] = Not Available); Omitted ->
-            % Computed Here From The Saved Forcing Hazard Curves Of ds_query
+            % frequency_based_comparison_plot  RB hazard curve with the FB curve of the same response.
+            %   ax = frequency_based_comparison_plot(self, ax, ds_query, response_name)
+            %   ax = frequency_based_comparison_plot(self, ax, ds_query, response_name, fb_curve)
+            %       draws the response-based (RB) hazard curve of the run
+            %       (hc_plot, solid/dashed) and overlays the frequency-based
+            %       (FB) curve of the same response (dotted, same color per
+            %       confidence level). An unavailable FB curve gives a note.
+            %
+            %   Inputs:
+            %     ax            - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query      - dataset query (storm_type, data_type, match_type)
+            %     response_name - response name
+            %     fb_curve      - (optional) frequency_based_hazard_curve output
+            %                     ([] = not available); omitted: computed here
+            %                     from the saved forcing hazard curves of
+            %                     ds_query
+            %   Outputs:
+            %     ax - the plot axes
+
             if nargin < 5
                 fb_curve = frequency_based_hazard_curve(self.config, self.structure,...
                     aux_methods.pull_data(ds_query, self.Resp), ds_query.storm_type, response_name);
@@ -159,19 +218,28 @@ classdef pros_methods < CHESSPlotsBase
                 'NumColumns', numel(rb_lines));
             comparison_legend.Title.String = 'Best Estimate and Confidence Levels';
         end
-        % Method: Estimate AEF Associated To Event Responses
         function [data_out, idx] = get_aef(self, response_vector, benchmark_aef, benchmark_hc, dsw, resp_indx)
-            % GET_AEF Find associated AEF value to provided event responses.
+            % get_aef  AEF of event responses, from a hazard curve or from storm weights.
+            %   [data_out, idx] = get_aef(self, response_vector, benchmark_aef, benchmark_hc)
+            %   [data_out, idx] = get_aef(self, response_vector, benchmark_aef, benchmark_hc, dsw, resp_indx)
+            %       sorts the responses in descending order. Without dsw:
+            %       interpolates log(AEF) of the benchmark curve at each
+            %       response (responses clamped to the curve range; NaN
+            %       when the curve has fewer than 2 finite points). With
+            %       dsw: AEF = cumulative sum of the sorted storm weights,
+            %       unique AEF values only.
             %
-            % Inputs:
-            %   storm_id        - Array of integers
-            %   response_vector - Array of floats
-            %   benchmark_aef   - Array of floats
-            %   benchmark_hc    - Array of floats
-            %   dsw             - (Optional) Array of floats
-            %
-            % Output:
-            %   data_out        - Struct containing storm_id, aef, and response
+            %   Inputs:
+            %     response_vector - event responses, vector
+            %     benchmark_aef   - AEF of the benchmark hazard curve
+            %     benchmark_hc    - responses of the benchmark hazard curve
+            %     dsw             - (optional) storm weights, same size as
+            %                       response_vector ([] = use the curve)
+            %     resp_indx       - (optional) indices carried along with the
+            %                       responses (used only with dsw)
+            %   Outputs:
+            %     data_out - struct: aef, response (sorted) and resp_indx
+            %     idx      - descending sort order of response_vector
 
             % Handle optional 'dsw' argument (Treat empty or missing as None)
             if nargin < 5 || isempty(dsw)
@@ -326,7 +394,18 @@ classdef pros_methods < CHESSPlotsBase
     % the z = 0 column and, instead of responses, the hazard curve values at the chosen AEF/AEP and CLs (overlay lines).
     methods (Access=public)
         function ch = event_choices(self, ds_query)
-            % Choices: Storm IDs Of The Saved Forcing, Timeseries Flag, Peaks-View Toggle (Workflow 1), z Values (1) / AEF-CL List (4)
+            % event_choices  Storm event viewer / response table choices of a PROS dataset.
+            %   ch = event_choices(self, ds_query)
+            %
+            %   Inputs:
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %   Outputs:
+            %     ch - struct: storm_ids (of the saved forcing), is_ts
+            %          (Timeseries data), peaks_toggle (Timeseries and
+            %          workflow 1), z_values (workflow 1: replicate z
+            %          scores), aefs and cls (workflow 4: hazard curve table
+            %          AEF/AEP values and confidence levels)
+
             pf = self.event_forcing(ds_query);
             ch.storm_ids = pf.storm_id(:);
             ch.is_ts = strcmp(ds_query.data_type, 'Timeseries');
@@ -347,6 +426,18 @@ classdef pros_methods < CHESSPlotsBase
         end
 
         function sel = refine_selection(self, sel, choices)
+            % refine_selection  Validate the replicate, AEF/AEP and CL of a selection.
+            %   sel = refine_selection(self, sel, choices)
+            %       workflow 1: sel.z_col defaults to the z = 0 replicate
+            %       column; workflow 4: sel.aef defaults to the table value
+            %       closest to 0.01 and sel.cl to 'All'.
+            %
+            %   Inputs:
+            %     sel     - selection struct (CHESSPlotsBase.event_selection)
+            %     choices - event_choices output (z_values, aefs, cls)
+            %   Outputs:
+            %     sel - the selection struct
+
             switch self.config.workflow
                 case 1 % Replicate Column (Default: z = 0)
                     n = numel(choices.z_values);
@@ -366,8 +457,23 @@ classdef pros_methods < CHESSPlotsBase
         end
 
         function ctrl = event_controls(self, parent, row, sel, choices, emit)
-            % Control Row: Storm ID (+ Peaks View, Workflow 1) | Workflow 1: z Slider Snapping To The Replicates |
-            % Workflow 4: AEF/AEP And CL Dropdowns
+            % event_controls  Control row: storm, replicate z or AEF/AEP and CL.
+            %   ctrl = event_controls(self, parent, row, sel, choices, emit)
+            %       builds the storm ID dropdown (+ peaks view, workflow 1)
+            %       and, for workflow 1, a z slider snapping to the
+            %       replicates or, for workflow 4, the AEF/AEP and CL
+            %       dropdowns.
+            %
+            %   Inputs:
+            %     parent  - uigridlayout holding the row
+            %     row     - grid row of the control row
+            %     sel     - selection struct (storm_id, peaks_view, z_col,
+            %               aef, cl)
+            %     choices - event_choices output
+            %     emit    - function handle emit(field_name, value)
+            %   Outputs:
+            %     ctrl - uigridlayout of the control row
+
             ctrl = uigridlayout(parent, [1 8], 'ColumnWidth', {'fit', 100, 'fit', 'fit', 110, 'fit', 130, '1x'}, ...
                 'RowHeight', {'1x'}, 'Padding', [5 2 5 2]);
             ctrl.Layout.Row = row;
@@ -413,8 +519,25 @@ classdef pros_methods < CHESSPlotsBase
         end
 
         function ser = event_series(self, ds_query, response_to_view, sel)
-            % Storm Event Viewer Data: One Storm (Timeseries View) Or The Per-Storm Maxima (Peaks View / Peaks Data, Rc Minimum)
-            % At The Selected Replicate. Workflow 4: No Response Line, Overlay Lines From The Hazard Curve Instead.
+            % event_series  Storm event viewer series of the PROS results.
+            %   ser = event_series(self, ds_query, response_to_view, sel)
+            %       one storm (Timeseries view) or the per-storm maxima
+            %       (peaks view / Peaks data, Rc minimum) at the selected
+            %       replicate; workflow 1 recomputes the responses of that
+            %       replicate column (compute_structure_response).
+            %       Workflow 4: no response line, overlay lines from the
+            %       hazard curve at the selected AEF/AEP and CLs instead.
+            %
+            %   Inputs:
+            %     ds_query         - dataset query (storm_type, data_type, match_type)
+            %     response_to_view - response name (char or string)
+            %     sel              - selection struct (storm_id, peaks_view,
+            %                        z_col, aef, cl)
+            %   Outputs:
+            %     ser - struct: x, x_kind, storm_ids, swl, hm0_off, hm0_toe,
+            %           h, rc, hb, resp ([] when not available), event_str
+            %           and, for workflow 4, overlay
+
             d = self.event_data(ds_query, sel);
             ser.x = d.x;
             ser.x_kind = d.x_kind;
@@ -438,8 +561,22 @@ classdef pros_methods < CHESSPlotsBase
         end
 
         function [T, info] = event_table(self, ds_query, sel)
-            % Response Table Rows: Same Data As The Viewer, All Forcing And Response Columns. Workflow 4 Adds The Hazard Curve
-            % Values At The Chosen AEF/AEP (<response>_BE, <response>_CL<n>, Constant Down The Rows)
+            % event_table  Response table rows of the PROS results.
+            %   [T, info] = event_table(self, ds_query, sel)
+            %
+            %   Inputs:
+            %     ds_query - dataset query (storm_type, data_type, match_type)
+            %     sel      - selection struct (storm_id, peaks_view, z_col,
+            %                aef, cl)
+            %   Outputs:
+            %     T    - table with the viewer data (Time, or StormID and
+            %            Time) and every forcing and response column;
+            %            workflow 4 adds the hazard curve values at the
+            %            chosen AEF/AEP (<response>_BE, <response>_CL<n>,
+            %            constant down the rows)
+            %     info - struct: mode ('ts' or 'peaks'), view_label,
+            %            plot_title, x_label
+
             d = self.event_data(ds_query, sel);
             if strcmp(d.mode, 'ts')
                 T = table(d.time_table(:), 'VariableNames', {'Time'});

@@ -1,39 +1,49 @@
 function [slots, errors, study] = chs_storm_file_slots(file_names, request)
-%{
-    %% DESCRIPTION
-        CHS storm file check, by file name only (run it before any unzip or
-        .h5 conversion). The study identity is checked first
-        (chs_study_identity.m: a file name given twice, more than one
-        ADCIRC or wave save point, simulation or post type are errors).
-        Every CHS storm file (chs_storm_file_names.m: .h5, data type Peaks
-        or Timeseries; other files such as HC/AEF files are ignored) goes
-        to a slot: storm type (name token 2: XH/XC -> XC, TS/TC -> TC) x
-        data type (Peaks/Timeseries), read by chs_file_name_parts.m. A slot
-        is either empty or holds exactly one water level (ADCIRC model) file
-        and one wave (STWAVE/SWAN/WAM) file: a half pair or a duplicate is an error naming the slot and its
-        files. When the slots are valid and a request is given, the request
-        is checked against the complete slots:
-            storm_sampling: XC/TC need that storm type, CC needs both.
-            use_peaks / use_timeseries: Peaks / Timeseries of every requested storm type.
-            create_wlp / create_whp: Peaks and Timeseries of every requested storm type.
-
-    %% INPUTS
-        file_names: .h5 file names (folders allowed, only the name is read). | cell
-        request: Request to check ([] = slots only). Fields: | struct
-                 storm_sampling ('XC','TC','CC'), use_peaks, use_timeseries,
-                 create_wlp, create_whp (0/1).
-
-    %% OUTPUTS
-        slots: One row per slot (XC Peaks, XC Timeseries, TC Peaks, TC Timeseries). | table
-               Variables: storm_type, data_type, water_level (file names),
-               wave (file names), complete (one water level + one wave file).
-        errors: Identity and slot errors, else request errors ({} when the input passes). | cell
-        study: Study identity (region, simulation, post_type, sp_ID, sp_ID_wave), | struct
-               from chs_study_identity.m.
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% chs_storm_file_slots  Sort CHS storm files into slots and check a request.
+%   [slots, errors, study] = chs_storm_file_slots(file_names)
+%   [slots, errors, study] = chs_storm_file_slots(file_names, request)
+%
+%   CHS storm file check, by file name only (run it before any unzip or
+%   .h5 conversion). The study identity is checked first
+%   (chs_study_identity: a file name given twice, more than one ADCIRC or
+%   wave save point, simulation or post type are errors). Every CHS
+%   storm file (chs_storm_file_names: .h5, data type Peaks or
+%   Timeseries; other files such as HC/AEF files are ignored) goes to a
+%   slot: storm type (name token 2: XH/XC -> XC, TS/TC -> TC) x data type
+%   (Peaks/Timeseries), read by chs_file_name_parts. A slot is either
+%   empty or holds exactly one water level (ADCIRC model) file and one
+%   wave (STWAVE/SWAN/WAM) file: a half pair or a duplicate is an error
+%   naming the slot and its files. When the slots are valid and a
+%   request is given, the request is checked against the complete slots:
+%       storm_sampling: XC/TC need that storm type, CC needs both.
+%       use_peaks / use_timeseries: Peaks / Timeseries of every requested
+%           storm type.
+%       create_wlp / create_whp: Peaks and Timeseries of every requested
+%           storm type.
+%
+%   Inputs:
+%     file_names - .h5 file names (folders allowed, only the name is
+%                  read), cell
+%     request    - request to check (optional, default []: slots only),
+%                  struct; fields storm_sampling ('XC', 'TC' or 'CC'),
+%                  use_peaks, use_timeseries, create_wlp, create_whp
+%                  (0/1)
+%   Outputs:
+%     slots  - one row per slot (XC Peaks, XC Timeseries, TC Peaks, TC
+%              Timeseries), 4 x 5 table; variables storm_type, data_type,
+%              water_level (file names), wave (file names), complete (one
+%              water level + one wave file)
+%     errors - identity and slot errors, else request errors ({} when the
+%              input passes), cell of char
+%     study  - study identity (region, simulation, post_type, sp_ID,
+%              sp_ID_wave) from chs_study_identity, struct
+%
+%   Tier: internal
+%
+%   See also chs_study_identity, chs_storm_file_names, chs_file_name_parts,
+%   build_storm_database.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if nargin < 2
     request = [];
 end

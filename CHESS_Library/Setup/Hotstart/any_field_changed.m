@@ -1,29 +1,31 @@
 function [changed, changed_field] = any_field_changed(a, b, field_names)
-%ANY_FIELD_CHANGED True if any named field's value differs between two structs.
-%{
-%% DESCRIPTION
-Generic struct-field comparator with no domain knowledge of what the
-fields mean. Field names present in only one of the two structs are
-treated as "not changed" for that field (not an error) -- this makes
-it safe to compare a freshly-parsed config against an older cached
-config that may predate a field being introduced. NaN values compare
-equal to each other (isequaln): a NaN field (e.g. sp_lat/sp_lon when the
-CHS file has no savepoint coordinates, blank input table cells) that is NaN
-in both structs counts as unchanged.
-
-%% INPUTS
-a, b: Two structs to compare.
-field_names: Cell array of field name strings to check.
-
-%% OUTPUTS
-changed: true if any named field is present in both structs and its
-         value differs (via isequaln); false otherwise.
-changed_field: Name of the first field found to differ, or '' if
-               changed is false.
-
-%R DEV SIGNATURE
-Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% any_field_changed  True if any named field differs between two structs.
+%   [changed, changed_field] = any_field_changed(a, b, field_names) compares
+%   the named fields of two structs with isequaln and returns the first
+%   one that differs.
+%
+%   Generic struct-field comparator with no domain knowledge of what the
+%   fields mean. A field present in only one of the two structs counts as
+%   not changed (not an error), so a freshly parsed config can be compared
+%   with an older cached config that predates the field. NaN values compare
+%   equal (isequaln): a NaN field (e.g. sp_lat/sp_lon when the CHS file has
+%   no savepoint coordinates, blank input table cells) that is NaN in both
+%   structs counts as unchanged.
+%
+%   Inputs:
+%     a, b        - structs to compare, 1x1 struct
+%     field_names - field names to check, in order, cellstr
+%   Outputs:
+%     changed       - true if a named field is present in both structs and
+%                     its value differs (isequaln), false otherwise, logical
+%     changed_field - name of the first field found to differ ('' when
+%                     changed is false), char
+%
+%   Tier: internal
+%
+%   See also hotstart_level, hotstart_dependency_fields.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 changed = false;
 changed_field = '';
 for kk = 1:numel(field_names)

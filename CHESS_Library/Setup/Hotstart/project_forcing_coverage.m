@@ -1,28 +1,35 @@
 function [covers, missing_desc] = project_forcing_coverage(config, project_forcing)
-%PROJECT_FORCING_COVERAGE True if a cached project_forcing satisfies the current request.
-%{
-%% DESCRIPTION
-Checks whether a loaded project_forcing.mat already contains everything
-the current run needs (Peaks/WLP/WHP/Timeseries, and TC/XC storm-type
-coverage per config.storm_sampling). A cache having MORE than requested
-(e.g. cached CC data satisfying an XC-only request) is valid and is not
-flagged as missing.
-
-Peaks are required exactly when use_peaks == 1, in every workflow (LCS
-builds Peaks life cycles only with use_peaks == 1: chess_lcs.m).
-
-%% INPUTS
-config: Current run's parsed config struct.
-project_forcing: Loaded contents of a cached project_forcing.mat.
-
-%% OUTPUTS
-covers: true if project_forcing satisfies everything config requests.
-missing_desc: comma-joined string of human-readable labels for whichever
-              requested items are missing (for logging); '' if covers is true.
-
-%R DEV SIGNATURE
-Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% project_forcing_coverage  True if a cached project forcing covers the request.
+%   [covers, missing_desc] = project_forcing_coverage(config,
+%       project_forcing) checks whether a loaded project_forcing.mat
+%       already contains everything the current run needs.
+%
+%   Checked: Peaks, WLP, WHP, Timeseries, and the TC/XC storm-type coverage
+%   of storm_sampling. A cache having MORE than requested (e.g. cached CC
+%   data satisfying an XC-only request) is valid and is not flagged as
+%   missing. Peaks are required exactly when use_peaks == 1, in every
+%   workflow (LCS builds Peaks life cycles only with use_peaks == 1:
+%   chess_lcs).
+%
+%   Inputs:
+%     config          - current run's parsed configuration, 1x1 struct;
+%                       reads storm_sampling, use_peaks, create_wlp,
+%                       create_whp and use_timeseries
+%     project_forcing - loaded contents of a cached project_forcing.mat,
+%                       struct
+%   Outputs:
+%     covers       - true if project_forcing covers everything config
+%                    requests, logical
+%     missing_desc - comma-joined labels of the requested items that are
+%                    missing (Peaks, WLP, WHP, Timeseries, TC, XC; for
+%                    logging); '' if covers is true, char
+%
+%   Tier: internal
+%
+%   See also project_forcing_cache_hit, hotstart_dependency_fields,
+%   storm_types_for_sampling.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 has_peaks = isfield(project_forcing, 'Peaks');
 has_wlp = has_peaks && isfield(project_forcing.Peaks, 'WLP');
 has_whp = has_peaks && isfield(project_forcing.Peaks, 'WHP');

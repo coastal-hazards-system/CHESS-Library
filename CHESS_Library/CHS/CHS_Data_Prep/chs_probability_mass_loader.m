@@ -1,33 +1,47 @@
 function  [Param, TC_SRR, TC_Freq, TotalFreq, smpl1, smpl2, smpl3] = chs_probability_mass_loader(chs_dependencies_path, region, Nsvpt, sp_coords)
-%{
-    %% DESCRIPTION
-        This function is responsible for leading CHS TC storm probability
-        masses. Files loaded are controlled by the CHS region being 
-        requested. These files are necessary if performing any kind of TC 
-        storm sampling method.
-        
-    %% INPUTS
-        chs_dependencies_path: CHS_Dependencies folder (files from          | char
-                               chs_dependency_files.m; empty outputs
-                               without tropical_statistics_available).
-        region: CHS region being requested. | char | 1 x size_varies
-        Nsvpt: CHS ADCIRC savepoint ID. | double | 1 x 1
-        sp_coords: Savepoint [latitude longitude] in degrees ([] or NaN:   | double | 1 x 2
-                   not available). The savepoint's study grid point
-                   (savepoint_grid_row.m: unique savepoint ID match, else
-                   the grid point nearest to sp_coords; CHS-NA nearest
-                   only) gives the nearest coastal reference location and
-                   the TC storms within 200 km.
+% chs_probability_mass_loader  Load the TC probability masses of a savepoint.
+%   [Param, TC_SRR, TC_Freq, TotalFreq, smpl1, smpl2, smpl3] =
+%       chs_probability_mass_loader(chs_dependencies_path, region, Nsvpt,
+%       sp_coords)
+%
+%   Loads the CHS TC storm probability masses of the region's
+%   CHS_Dependencies files (chs_dependency_files), needed by every TC
+%   storm sampling. The savepoint's study grid point (savepoint_grid_row:
+%   unique savepoint ID match, else the grid point nearest to sp_coords;
+%   CHS-NA nearest only) gives the nearest coastal reference location
+%   (CRL), whose storm recurrence rates (storms/yr/km) times 600 km give
+%   TC_SRR, and the TC storms whose track passes within 200 km, split
+%   into the intensity bins by central pressure deficit dP [hPa]: low
+%   dP < 28, mid 28 <= dP < 48, high dP >= 48. Every output is empty
+%   when the region has no TC statistics (tropical_statistics_available).
+%
+%   Inputs:
+%     chs_dependencies_path - CHS_Dependencies folder, char
+%     region                - CHS region, char
+%     Nsvpt                 - ADCIRC savepoint ID (config.sp_ID), double
+%     sp_coords             - savepoint [latitude longitude] [deg] ([] or
+%                             NaN: not available), 1x2 double
+%   Outputs:
+%     Param     - TC storm parameters (Param_ITCS of the storm parameters
+%                 file; column 1 storm ID; columns 1-4, 7, 5, 6 of the
+%                 file, so dP is column 5), number_of_TC_storms x 7 double
+%     TC_SRR    - TC storm recurrence rates at the CRL [storms/yr],
+%                 1x4 double [low, mid, high, all]
+%     TC_Freq   - TC discrete storm weights (DSW_ITCS of the discrete
+%                 storm weights file) [storms/yr], double
+%     TotalFreq - total TC storm suite frequency, sum(TC_Freq)
+%                 [storms/yr], scalar double
+%     smpl1     - storm IDs of the low intensity bin, column double
+%     smpl2     - storm IDs of the mid intensity bin, column double
+%     smpl3     - storm IDs of the high intensity bin, column double
+%
+%   Tier: internal
+%
+%   See also build_storm_database, chs_dependency_files,
+%   savepoint_grid_row, prob_mass_validation.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% OUTPUTS
-        Param:
-        TC_SRR:
-        TC_Freq:
-        TotalFreq:
-      
-    %% DEV SIGNATURE
-    Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 %% CHS_DEPENDENCIES FILES (chs_dependency_files.m)
 files = chs_dependency_files(chs_dependencies_path, region);
 

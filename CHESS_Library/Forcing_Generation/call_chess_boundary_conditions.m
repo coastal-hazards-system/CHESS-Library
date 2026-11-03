@@ -1,46 +1,73 @@
 function [project_forcing, config] = call_chess_boundary_conditions(config, storm, prob_mass, structure, progress_fcn)
-%{
-    %% DESCRIPTION
-        Builds the project forcing (boundary conditions) of a run: build,
-        uncertainty and adjustments, each a self-contained step with its
-        own workflow switch, and a single save of the complete forcing.
-            Step 0  Cache: a complete cached forcing (config.forcing_stamp,
-                    carried by a 'full' hotstart: apply_hotstart_level.m)
-                    that covers the request (project_forcing_cache_hit.m)
-                    is loaded and returned (no rebuild, no save). LCS: the
-                    sampling mode of the cached life cycles is read from
-                    the sampling seed file (config.lcs_effective_sampling_rate).
-                    Any other cached forcing file is deleted.
-            Step 1  Build (whole request): build_boundary_conditions.m.
-            Then one loop over data type x match type x storm type:
-            Step 2  Uncertainty: boundary_conditions_uncertainty.m.
-            Step 3  Adjustments: boundary_conditions_adjust.m. Tide start
-                    hours shared across datasets (load_reference_tide_indices.m,
-                    draw_tide_indices.m) are drawn before the loop
-                    (multi-line stage 2: none).
-            Step 4  config.forcing_stamp, the only save of project_forcing
-                    (-v7.3) and the config appended to its file.
-        Callers MUST capture both outputs: later stages read the config
-        fields added here (forcing_stamp, tide start hours,
-        lcs_effective_sampling_rate).
+% call_chess_boundary_conditions  Build, perturb and adjust the project forcing.
+%   [project_forcing, config] = call_chess_boundary_conditions(config, storm,
+%       prob_mass, structure)
+%   [project_forcing, config] = call_chess_boundary_conditions(...,
+%       progress_fcn)
+%
+%   Pipeline step after call_chs_data_formatter. Builds the project forcing
+%   (boundary conditions) of a run: build, uncertainty and adjustments, each
+%   a self-contained step with its own workflow switch, and a single save of
+%   the complete forcing.
+%     Step 0  Cache: a complete cached forcing (forcing_stamp, carried by a
+%             'full' hotstart: apply_hotstart_level) that covers the request
+%             (project_forcing_cache_hit) is loaded and returned (no
+%             rebuild, no save of the forcing). LCS: the sampling mode of the
+%             cached life cycles is read from the sampling seed file into
+%             lcs_effective_sampling_rate and the config file is updated.
+%             Any other cached forcing file is deleted.
+%     Step 1  Build (whole request): build_boundary_conditions.
+%             Tide start hours shared across datasets
+%             (load_reference_tide_indices, draw_tide_indices) are drawn
+%             next, before the dataset loop (multi-line stage 2: none).
+%     Then one loop over data type x match type x storm type:
+%     Step 2  Uncertainty: boundary_conditions_uncertainty.
+%     Step 3  Adjustments: boundary_conditions_adjust.
+%     Step 4  forcing_stamp, the only save of project_forcing (-v7.3) and
+%             the config appended to the config file.
+%   Callers must capture both outputs: later stages read the config fields
+%   added here (forcing_stamp, tide start hours,
+%   lcs_effective_sampling_rate).
+%
+%   Files written (chess_paths): out_files.project_forcing (project_forcing,
+%   -v7.3) and out_files.config (config appended); LCS also writes its
+%   sampling seed file (chess_lcs).
+%
+%   Inputs:
+%     config       - CHESS configuration after hotstart resolution
+%                    (resolve_hotstart_state or the GUI), 1x1 struct; reads
+%                    out_files, workflow, multiline, forcing_stamp,
+%                    print_progress and the fields of each step
+%     storm        - storm database request (call_chs_data_formatter),
+%                    struct
+%     prob_mass    - storm probability masses (call_chs_data_formatter),
+%                    struct
+%     structure    - CHESS structure geometry (call_input_parser), 1x1
+%                    struct
+%     progress_fcn - progress callback progress_fcn(step, message), step 0
+%                    to 4 as above (optional, default: message printed with
+%                    disp; [] = default), function_handle
+%   Outputs:
+%     project_forcing - complete project forcing,
+%                       project_forcing.<data type>.<match type>.<storm
+%                       type> (Peaks/Timeseries, Default/WLP/WHP,
+%                       XC/TC/CC): PROS/DET one struct per dataset
+%                       (chess_forcing_formatter fields plus Hm0_toe), LCS
+%                       one life-cycle matrix per cell (lcs_columns), struct
+%     config          - input config with forcing_stamp, the tide start
+%                       hours tide_indx_<type> (random tides),
+%                       compute_storm_duration (0 when missing) and, LCS,
+%                       lcs_effective_sampling_rate, struct
+%
+%   Tier: public
+%
+%   See also call_input_parser, call_chs_data_formatter,
+%   call_project_response, chess_setup_path, build_boundary_conditions,
+%   boundary_conditions_uncertainty, boundary_conditions_adjust,
+%   chess_paths.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        config: Run configuration after hotstart resolution
-            (resolve_hotstart_state.m or the GUI). | struct
-        storm: Storm database request (call_chs_data_formatter.m). | struct
-        prob_mass: Storm probability masses. | struct
-        structure: CHESS structure geometry. | struct
-        progress_fcn: Optional progress callback progress_fcn(step, message),
-            step 0-4 as above (default: message printed to the command
-            window). | function_handle
-
-    %% OUTPUTS
-        project_forcing: Complete project forcing. | struct
-        config: Run configuration. | struct
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 if nargin < 5 || isempty(progress_fcn)
     progress_fcn = @(~, message) disp(message);
 end

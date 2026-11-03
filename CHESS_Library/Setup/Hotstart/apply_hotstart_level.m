@@ -1,40 +1,47 @@
 function config = apply_hotstart_level(config, config_old, level, is_lcs)
-%APPLY_HOTSTART_LEVEL Cache actions of a hotstart level (from hotstart_plan.m).
-%{
-%% DESCRIPTION
-Acts on the hotstart level of a rerun of the same case. Shared by
-resolve_hotstart_state.m (library) and the GUI (Run dialog "Hotstart").
-Never removes folders (neither does resolve_hotstart_state.m: another
-sp_ID/region is another storm DB, so other run files; chess_paths.m).
-    'full'           forcing_stamp carried from the cached run, so the
-                     cached (complete) project forcing is reused as is
-                     (call_chess_boundary_conditions.m step 0). LCS: the
-                     cached run's tide start hours (tide_indx_tc/_xc/_cc)
-                     are carried too: the reused forcing holds these tides.
-    'reuse_sampling' LCS: the cached run's TC/XC tide start hours are
-                     carried when random tides are on in both runs with
-                     the same tide file (tide_indx_cc is re-derived by
-                     draw_tide_indices.m).
-    'resample'       LCS: this case's sampling seed file is deleted, so
-                     new life cycles are drawn.
-Any level but 'full': the cached project_forcing.mat is deleted (it
-holds adjusted/perturbed values).
-config.hotstart_level is set to the level (lcs_reference_reuse.m reads
-'reuse_sampling' to rebuild the life cycles from the sampling seed file).
-
-%% INPUTS
-config: Current run's config (out_files.project_forcing). | struct
-config_old: Cached run's config (same case). | struct
-level: 'full', 'reuse_sampling' or 'resample' (hotstart_plan.m). | char
-is_lcs: LCS workflow. | logical
-
-%% OUTPUTS
-config: config with hotstart_level (plus forcing_stamp at 'full' and
-        LCS tide start hours) resolved.
-
-%R DEV SIGNATURE
-Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% apply_hotstart_level  Act on a hotstart level (stamp, LCS tides, caches).
+%   config = apply_hotstart_level(config, config_old, level, is_lcs) acts on
+%   the hotstart level of a rerun of the same case. Shared by
+%   resolve_hotstart_state (library) and the GUI (Run dialog "Hotstart").
+%   Never removes folders (neither does resolve_hotstart_state: another
+%   sp_ID/region is another storm database, so other run files;
+%   chess_paths).
+%       'full'           forcing_stamp carried from the cached run, so the
+%                        cached (complete) project forcing is reused as is
+%                        (call_chess_boundary_conditions step 0). LCS: the
+%                        cached run's tide start hours (tide_indx_tc/_xc/_cc)
+%                        are carried too: the reused forcing holds these
+%                        tides.
+%       'reuse_sampling' LCS: the cached run's TC/XC tide start hours are
+%                        carried when random tides are on in both runs with
+%                        the same tide file (tide_indx_cc is re-derived by
+%                        draw_tide_indices).
+%       'resample'       LCS: this case's sampling seed file is deleted, so
+%                        new life cycles are drawn.
+%   Any level but 'full': the cached project_forcing.mat is deleted (it
+%   holds adjusted/perturbed values). config.hotstart_level is set to the
+%   level (lcs_reference_reuse reads 'reuse_sampling' to rebuild the life
+%   cycles from the sampling seed file).
+%
+%   Inputs:
+%     config     - current run's configuration, 1x1 struct; reads
+%                  out_files.project_forcing, and for LCS
+%                  apply_random_tides, tide_file and print_progress
+%     config_old - cached run's configuration (same case), 1x1 struct
+%     level      - 'full', 'reuse_sampling' or 'resample' (hotstart_plan),
+%                  char
+%     is_lcs     - LCS workflow, logical
+%   Outputs:
+%     config     - configuration with hotstart_level set (plus
+%                  forcing_stamp at 'full' and the LCS tide start hours),
+%                  1x1 struct
+%
+%   Tier: internal
+%
+%   See also hotstart_plan, resolve_hotstart_state, lcs_sampling_seed_file,
+%   draw_tide_indices.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 switch level
     case 'full'
         % The Reused Forcing Keeps Its Build Stamp: Marks It Complete (call_chess_boundary_conditions.m Step 0),

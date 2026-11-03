@@ -1,54 +1,55 @@
 function [config, structure] = multiline_stage2_config(config, structure)
-%{
-    %% DESCRIPTION
-        Couples a multi-line transect stage 2 run to its stage 1 run: same
-        project, PSE (struc_id), storm database and workflow, stage 1
-        alternative config.multiline.stage1_alt (always a rubble mound).
-        Stage 1's run files come from chess_paths.m (no paths are stored
-        in config.multiline, so a moved project is not a change).
-        Call after the config is built (GUI: create_resp_config, after
-        storm_db_info 'apply' and finalize_config) and before
-        check_offshore_elevation.m; the forcing itself is built by
-        apply_stage1_transmission.m (call_chess_boundary_conditions.m,
-        build_boundary_conditions.m).
-            - config.multiline gets stage1_stamp (stage 1 config
-              forcing_stamp, set when its forcing was built) and
-              stage1_structure (the stage 1 run's crest_elevation,
-              crest_width, seaside_slope, toe_elevation, offshore_slope).
-              config.multiline is a hotstart dependency
-              (hotstart_dependency_fields.m forcing_build_fields): a stage 1
-              re-run or geometry change rebuilds the stage 2 forcing.
-            - Fields of multiline_inherited_fields.m are copied from the
-              stage 1 config (tide_file moved into this project folder
-              when the project was moved since).
-            - Offshore end of the stage 2 transect = stage 1 toe:
-              offshore_elevation = stage 1 toe_elevation (source
-              'stage 1 toe'), offshore_slope = stage 1 offshore_slope
-              (config and structure). Never the storm DB grid; no check
-              that the stage 2 toe is deeper.
-        Documented limits: no ponding/setup between the stages and no
-        distance between them (display only); Tp and wave direction are
-        unchanged by the transmission.
-
-    %% INPUTS
-        config: Stage 2 run config. | struct
-            multiline.stage1_alt: Stage 1 alternative name. | char
-            outfolder, project_name, struc_id, workflow, storm_db (or
-            region/sp_ID), storm_sampling, use_peaks, create_wlp,
-            create_whp, use_timeseries.
-        structure: Stage 2 structure. | struct
-
-    %% OUTPUTS
-        config: Coupled config. | struct
-        structure: structure with the stage 1 offshore_slope. | struct
-        Errors multiline_stage2_config:noStage1Run (no completed stage 1
-        run for this storm database and workflow) and
-        multiline_stage2_config:stage1Mismatch (stage 1 run has another
-        storm type, lacks a requested data type, or is not a rubble mound).
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% multiline_stage2_config  Couple a multi-line stage 2 run to its stage 1 run.
+%   [config, structure] = multiline_stage2_config(config, structure) couples
+%   a multi-line transect stage 2 run to its stage 1 run: same project, PSE
+%   (struc_id), storm database and workflow, stage 1 alternative
+%   config.multiline.stage1_alt (always a rubble mound).
+%
+%   Stage 1's run files come from chess_paths (no paths are stored in
+%   config.multiline, so a moved project is not a change). Call after the
+%   config is built (GUI: create_resp_config, after storm_db_info 'apply'
+%   and finalize_config) and before check_offshore_elevation; the forcing
+%   itself is built by apply_stage1_transmission
+%   (call_chess_boundary_conditions, build_boundary_conditions).
+%     - config.multiline gets stage1_stamp (stage 1 config forcing_stamp,
+%       set when its forcing was built) and stage1_structure (the stage 1
+%       run's crest_elevation, crest_width, seaside_slope, toe_elevation,
+%       offshore_slope). multiline is a hotstart dependency
+%       (hotstart_dependency_fields forcing_build_fields): a stage 1 re-run
+%       or geometry change rebuilds the stage 2 forcing.
+%     - Fields of multiline_inherited_fields are copied from the stage 1
+%       config (tide_file moved into this project folder when the project
+%       was moved since).
+%     - Offshore end of the stage 2 transect = stage 1 toe:
+%       offshore_elevation = stage 1 toe_elevation
+%       (offshore_elevation_source 'stage 1 toe'), offshore_slope = stage 1
+%       offshore_slope (config and structure). Never the storm DB grid; no
+%       check that the stage 2 toe is deeper.
+%   Documented limits: no ponding/setup between the stages and no distance
+%   between them (display only); Tp and wave direction are unchanged by the
+%   transmission.
+%
+%   Inputs:
+%     config    - stage 2 run configuration, 1x1 struct; reads
+%                 multiline.stage1_alt (stage 1 alternative name, char),
+%                 outfolder, project_name, struc_id, workflow, storm_db (or
+%                 region/sp_ID), storm_sampling, use_peaks, create_wlp,
+%                 create_whp, use_timeseries, tide_file
+%     structure - stage 2 structure geometry, 1x1 struct
+%   Outputs:
+%     config    - coupled configuration, 1x1 struct
+%     structure - structure with the stage 1 offshore_slope, 1x1 struct
+%   Errors multiline_stage2_config:noStage1Run (no completed stage 1 run
+%   for this storm database and workflow) and
+%   multiline_stage2_config:stage1Mismatch (stage 1 run has another storm
+%   type, lacks a requested data type, or is not a rubble mound).
+%
+%   Tier: internal
+%
+%   See also apply_stage1_transmission, multiline_inherited_fields,
+%   chess_paths, check_offshore_elevation.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 s1 = config;
 s1.case_name = config.multiline.stage1_alt;
 p1 = chess_paths(s1);

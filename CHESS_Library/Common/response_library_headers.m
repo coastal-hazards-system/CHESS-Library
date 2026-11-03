@@ -1,10 +1,42 @@
 function [U_a, U_r, uncert_treatment_jpm,...
     unit_label,...
     var_name, y_label, y_scale_log] = response_library_headers(config, staID)
-% Plot labels and uncertainty of a forcing / response variable, all taken from
-% its response_registry row (the single source; names outside the registry get
-% the 'nan' defaults). U_a / U_r are read from the config fields the row names
-% (0 when none); y_label replaces '{datum}' with config.project_datum.
+% response_library_headers  Plot labels and uncertainty of a variable.
+%   [U_a, U_r, uncert_treatment_jpm, unit_label, var_name, y_label,
+%       y_scale_log] = response_library_headers(config, staID) returns the
+%   plot labels and uncertainty of a forcing / response variable, all taken
+%   from its response_registry row (the single source).
+%
+%   Names outside the registry get the 'nan' defaults (U_a = U_r = 0,
+%   y_scale_log = 0, uncert_treatment_jpm = 'none', labels 'nan'). U_a / U_r
+%   are read from the config fields the row names (0 when none); y_label
+%   replaces '{datum}' with the project datum. For 'Hm0_offshore' of a
+%   Multi-Line Stage 2 project the label names the stage 1 alternative the
+%   waves are transmitted behind (apply_stage1_transmission).
+%
+%   Inputs:
+%     config - CHESS configuration struct, 1x1 struct; the uncertainty
+%              fields named by the registry row, project_datum and
+%              multiline are read
+%     staID  - forcing / response name (a response_registry row name, e.g.
+%              'SWL', 'Hm0_toe', 'q'), char
+%   Outputs:
+%     U_a                  - absolute uncertainty [units of the variable],
+%                            scalar double (0 when none)
+%     U_r                  - relative uncertainty [-], scalar double (0 when
+%                            none; sqrt(1 + U) - 1 for Tp)
+%     uncert_treatment_jpm - JPM uncertainty treatment, 'combined',
+%                            'relative' or 'none', char
+%     unit_label           - unit in SI ('' if dimensionless), char
+%     var_name             - display name for plot legends (LaTeX), char
+%     y_label              - axis label with the datum filled in (LaTeX),
+%                            char
+%     y_scale_log          - 1 to plot on a log axis, 0 otherwise [-], scalar
+%                            double
+%
+%   Tier: internal
+%
+%   See also response_registry, apply_stage1_transmission.
 
 row = response_registry('name', staID);
 if isempty(row)

@@ -1,0 +1,11 @@
+{
+  "_schemaVersion": "1.0.0",
+  "read_tide_series": {
+    "inputs": [
+      {"name": "tide_file", "kind": "required", "type": ["file=*.csv"], "purpose": "Tide file (create_tide_file layout: Date, Prediction [m])"}
+    ],
+    "outputs": [
+      {"name": "tide", "type": ["double"]}
+    ]
+  }
+}

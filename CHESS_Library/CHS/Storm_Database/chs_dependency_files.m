@@ -1,94 +1,105 @@
 function files = chs_dependency_files(chs_dependencies_folder, region)
-%{
-    %% DESCRIPTION
-        CHS_Dependencies registry: the only place that knows the
-        CHS_Dependencies folder layout and file names. Every library and
-        GUI reader of CHS_Dependencies files gets its paths and the
-        availability flags from here. Files are found by name pattern
-        (dir, first match in name order); a file not found gives ''.
-        Never errors: an empty or unknown region, an empty or missing
-        folder just give empty paths and false flags.
-
-        Layout (<r> = region, e.g. CHS-NA):
-          Bias_and_Uncertainty\<r>\
-              <r>_Comb_*.mat, else <r>_WL_*.mat          water level (SWL)
-                                                         bias & uncertainty
-              <r>_STWAVE_Hm0_*.mat, else <r>_SWAN_Hm0_*.mat
-                                                         wave height (Hm0)
-                                                         bias & uncertainty
-          Grid_Files\<r>\
-              <r>_nodeID*.mat (variable nodeID), else    study grid
-              <r>_staID*.mat (variable staID)
-              <r>_ADCIRC_SPs.mat (CHS-LA only)           savepoint ->
-                                                         ADCIRC node map
-          Probability_Masses\<r>\
-              <r>_ITCS_DSW_*.mat                         TC discrete storm
-                                                         weights
-              <r>_ITCS_Param.mat                         TC storm parameters
-          Probability_Masses\ (shared by every region)
-              CHS_Atl_CRLs*.mat                          coastal reference
-                                                         locations
-              SRR_TC_LI_*.mat, SRR_TC_MI_*.mat,          TC storm recurrence
-              SRR_TC_HI_*.mat, SRR_TC_All_*.mat          rates (low, medium,
-                                                         high, all intensities)
-        Great Lakes studies (CHS-GLM, CHS-GLH) have no TC files; CHS-S2G has
-        no TC discrete storm weights. CHS-TX and CHS-PR study grids have no
-        value column (no offshore elevation).
-
-    %% INPUTS
-        chs_dependencies_folder: CHS_Dependencies folder (config.chs_dependencies; | char
-                                 '' or [] allowed).
-        region: CHS region (config.region; '' allowed: shared files and     | char
-                available_regions only).
-
-    %% OUTPUTS
-        files: | struct
-            folder, region: Inputs (char).
-            supported_regions: CHS regions CHESS reads (1 x 9 cell).
-            region_supported: region is one of supported_regions.
-            folder_exists: The folder exists.
-            folder_layout_ok: The folder holds Bias_and_Uncertainty,
-                              Grid_Files and Probability_Masses.
-            folders.bias_uncertainty | study_grid | probability_masses:
-                              Bias_and_Uncertainty\<r>, Grid_Files\<r>,
-                              Probability_Masses\<r> ('' without folder or
-                              region).
-            folders.shared_probability_masses: Probability_Masses ('' without
-                              folder).
-            water_level_bias_uncertainty_file, wave_height_bias_uncertainty_file,
-            study_grid_file, savepoint_node_map_file,
-            tc_discrete_storm_weights_file, tc_storm_parameters_file,
-            coastal_reference_locations_file: Full paths ('' when not found).
-            storm_recurrence_rate_files.low_intensity | medium_intensity |
-                              high_intensity | all_intensities: Full paths.
-            study_grid_variable: 'nodeID' | 'staID' | '' (variable to load
-                              from study_grid_file).
-            uses_savepoint_node_map: Study grid rows are ADCIRC nodes,
-                              savepoints are mapped through the savepoint
-                              node map file (CHS-LA).
-            study_grid_has_elevation: The region's study grid has a value
-                              column (false for CHS-TX, CHS-PR and
-                              unsupported regions).
-            exists: Same file fields as above (storm_recurrence_rate_files
-                              nested), true when the file was found.
-            bias_uncertainty_available: Water level and wave height bias &
-                              uncertainty files found.
-            study_grid_available: Study grid file found.
-            tropical_statistics_available: Every file the TC probability
-                              masses need (chs_probability_mass_loader.m):
-                              discrete storm weights, storm parameters,
-                              coastal reference locations, the four storm
-                              recurrence rates, the study grid and (CHS-LA)
-                              the savepoint node map.
-            region_files: Found files of the region (column cell, full paths).
-            shared_files: Found shared Probability_Masses files (column cell).
-            available_regions: Only for region '': supported_regions with a
-                              study grid and both bias & uncertainty files
-                              in the folder (1 x N cell); {} (1 x 0) otherwise.
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% chs_dependency_files  Paths and availability of the CHS_Dependencies files.
+%   files = chs_dependency_files(chs_dependencies_folder, region)
+%
+%   CHS_Dependencies registry: the only place that knows the
+%   CHS_Dependencies folder layout and file names. Every library and GUI
+%   reader of CHS_Dependencies files gets its paths and the availability
+%   flags from here. Files are found by name pattern (dir, first match in
+%   name order); a file not found gives ''. Never errors: an empty or
+%   unknown region, an empty or missing folder just give empty paths and
+%   false flags.
+%
+%   Layout (<r> = region, e.g. CHS-NA):
+%     Bias_and_Uncertainty\<r>\
+%         <r>_Comb_*.mat, else <r>_WL_*.mat          water level (SWL)
+%                                                    bias & uncertainty
+%         <r>_STWAVE_Hm0_*.mat, else <r>_SWAN_Hm0_*.mat
+%                                                    wave height (Hm0)
+%                                                    bias & uncertainty
+%     Grid_Files\<r>\
+%         <r>_nodeID*.mat (variable nodeID), else    study grid
+%         <r>_staID*.mat (variable staID)
+%         <r>_ADCIRC_SPs.mat (CHS-LA only)           savepoint ->
+%                                                    ADCIRC node map
+%     Probability_Masses\<r>\
+%         <r>_ITCS_DSW_*.mat                         TC discrete storm
+%                                                    weights
+%         <r>_ITCS_Param.mat                         TC storm parameters
+%     Probability_Masses\ (shared by every region)
+%         CHS_Atl_CRLs*.mat                          coastal reference
+%                                                    locations
+%         SRR_TC_LI_*.mat, SRR_TC_MI_*.mat,          TC storm recurrence
+%         SRR_TC_HI_*.mat, SRR_TC_All_*.mat          rates (low, medium,
+%                                                    high, all intensities)
+%   Great Lakes studies (CHS-GLM, CHS-GLH) have no TC files; CHS-S2G has
+%   no TC discrete storm weights. CHS-TX and CHS-PR study grids have no
+%   value column (no offshore elevation).
+%
+%   Inputs:
+%     chs_dependencies_folder - CHS_Dependencies folder
+%                               (config.chs_dependencies; '' or []
+%                               allowed), char
+%     region                  - CHS region (config.region; '' allowed:
+%                               shared files and available_regions only),
+%                               char
+%   Outputs:
+%     files - file paths and flags, struct; fields:
+%               folder, region - the inputs, char
+%               supported_regions - CHS regions CHESS reads, 1 x 9 cell
+%               region_supported - region is one of supported_regions,
+%                   logical
+%               folder_exists - the folder exists, logical
+%               folder_layout_ok - the folder holds Bias_and_Uncertainty,
+%                   Grid_Files and Probability_Masses, logical
+%               folders - struct; bias_uncertainty, study_grid,
+%                   probability_masses: Bias_and_Uncertainty\<r>,
+%                   Grid_Files\<r>, Probability_Masses\<r> ('' without
+%                   folder or region); shared_probability_masses:
+%                   Probability_Masses ('' without folder), char
+%               water_level_bias_uncertainty_file,
+%               wave_height_bias_uncertainty_file, study_grid_file,
+%               savepoint_node_map_file, tc_discrete_storm_weights_file,
+%               tc_storm_parameters_file,
+%               coastal_reference_locations_file - full paths ('' when
+%                   not found), char
+%               storm_recurrence_rate_files - struct; low_intensity,
+%                   medium_intensity, high_intensity, all_intensities:
+%                   full paths ('' when not found), char
+%               study_grid_variable - 'nodeID', 'staID' or '' (variable
+%                   to load from study_grid_file), char
+%               uses_savepoint_node_map - study grid rows are ADCIRC
+%                   nodes, savepoints are mapped through the savepoint
+%                   node map file (CHS-LA), logical
+%               study_grid_has_elevation - the region's study grid has a
+%                   value column (false for CHS-TX, CHS-PR and
+%                   unsupported regions), logical
+%               exists - same file fields as above
+%                   (storm_recurrence_rate_files nested), true when the
+%                   file was found, struct of logical
+%               bias_uncertainty_available - water level and wave height
+%                   bias & uncertainty files found, logical
+%               study_grid_available - study grid file found, logical
+%               tropical_statistics_available - every file the TC
+%                   probability masses need (chs_probability_mass_loader):
+%                   discrete storm weights, storm parameters, coastal
+%                   reference locations, the four storm recurrence rates,
+%                   the study grid and (CHS-LA) the savepoint node map,
+%                   logical
+%               region_files - found files of the region (full paths),
+%                   column cell
+%               shared_files - found shared Probability_Masses files,
+%                   column cell
+%               available_regions - only for region '': supported_regions
+%                   with a study grid and both bias & uncertainty files
+%                   in the folder, 1 x N cell; {} (1 x 0) otherwise
+%
+%   Tier: internal
+%
+%   See also savepoint_grid_row, storm_db_bias_uncertainty,
+%   chs_dependencies_message, chs_probability_mass_loader.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 supported_regions = {'CHS-NA', 'CHS-SA', 'CHS-GoM', 'CHS-LA', 'CHS-TX', 'CHS-PR', 'CHS-GLM', 'CHS-GLH', 'CHS-S2G'};
 folder = char(chs_dependencies_folder);
 region = char(region);

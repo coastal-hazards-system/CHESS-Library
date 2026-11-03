@@ -1,31 +1,36 @@
 function check_offshore_elevation(config)
-%{
-    %% DESCRIPTION
-        Stops every run early when no usable offshore elevation is available
-        (always required: offshore end of the PSE transect conceptual model,
-        used by the damaging depth and the transect): the storm database has no study grid value (config is
-        only overwritten when it has one, storm_db_info.m 'apply') and the
-        PSE geometry gives none (input file row / GUI PSE table; field missing,
-        empty or NaN). Shared by the
-        library (call_chs_data_formatter.m, after the storm database's
-        db_info is applied) and the GUI (create_resp_config, Run).
-
-    %% INPUTS
-        config.
-            offshore_elevation: Optional. Offshore elevation [m, study    | double | 1 x 1
-                                datum, positive up].
-            region, sp_ID: CHS region and savepoint (error message).
-            storm_db, out_files.storm_and_prob_mass: Optional. Storm
-                                database name / file (error message).
-            chs_dependencies: Optional. CHS_Dependencies folder (error message).
-
-    %% OUTPUTS
-        None. Error check_offshore_elevation:missing when the value is
-        missing.
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
+% check_offshore_elevation  Stop a run that has no usable offshore elevation.
+%   check_offshore_elevation(config) returns when offshore_elevation is a
+%   finite numeric scalar and errors otherwise. offshore_elevation is always
+%   required (offshore end of the PSE transect conceptual model, used by
+%   the damaging depth and the transect): it comes from the storm database's
+%   study grid value (config is only overwritten when the grid has one,
+%   storm_db_info 'apply'), else from the PSE geometry (input file row / GUI
+%   PSE table). Shared by the library (call_chs_data_formatter, after the
+%   storm database's db_info is applied) and the GUI (create_resp_config,
+%   Run).
+%
+%   Inputs:
+%     config - CHESS configuration, 1x1 struct; reads:
+%                offshore_elevation - offshore elevation [m, study datum,
+%                                     positive up], scalar double (optional;
+%                                     missing, empty or NaN fails)
+%                region, sp_ID      - CHS region and savepoint (error
+%                                     message)
+%                storm_db, out_files.storm_and_prob_mass - storm database
+%                                     name / file (optional, error message)
+%                chs_dependencies   - CHS_Dependencies folder (optional,
+%                                     error message)
+%   Outputs:
+%     none; error check_offshore_elevation:missing when the value is
+%     missing, naming the reason the storm database has no grid value
+%
+%   Tier: internal
+%
+%   See also call_chs_data_formatter, damaging_depth, chs_dependency_files,
+%   storm_db_info.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 if isfield(config, 'offshore_elevation') && isnumeric(config.offshore_elevation) &&...
         isscalar(config.offshore_elevation) && isfinite(config.offshore_elevation)
     return

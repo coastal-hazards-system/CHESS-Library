@@ -1,49 +1,54 @@
 function config = draw_tide_indices(config, project_forcing)
-%{
-    %% DESCRIPTION
-        Random tide start hours drawn before any dataset is adjusted
-        (call_chess_boundary_conditions.m), so every dataset of a storm type
-        uses the same config.tide_indx_<type> and a storm gets the same
-        tide start hour in each of them.
-        - Storm types with Timeseries (CC excluded): each start hour is drawn
-          from [1, N - L + 1] (N = tide records, L = that storm's hydrograph
-          length), so every hydrograph fits and the Timeseries pass never
-          redraws. Peaks rows and Timeseries storms correspond one to one
-          (LCS: chess_lcs.m builds both from the same sampled life
-          cycles; PROS/DET: both storm DB datasets are sorted by storm ID
-          with the same storms removed).
-        - LCS combined sampling (CC): CC holds the TC and XC storms of each
-          life cycle, so its start hours are not drawn but derived from
-          tide_indx_tc / tide_indx_xc: the TC-then-XC stacked start hours
-          are reordered with the permutation chess_lcs.m used to build
-          CC (stable sortrows of [TC; XC] by year, order, bin: lcs_columns.m). That sort
-          keeps each Timeseries hydrograph contiguous (constant key within
-          a storm) and keeps TC before XC on ties, so the Timeseries CC
-          storms come in the same order as the Peaks CC rows. TC/XC
-          without Timeseries are drawn here from their Peaks rows first.
-          Without Peaks (use_peaks = 0) the permutation comes from the
-          Timeseries first-step rows (step == 0: one row per storm, same
-          keys and order), so it equals the Peaks-based one.
-          tide_indx_cc is always overwritten (never carried or reused), so
-          the same storm has the same start hour in XC/TC and CC.
-        Start hours already in config (hotstart carry: resolve_hotstart_state.m;
-        LCS reference case: load_reference_tide_indices.m) are kept; only a
-        storm whose hydrograph does not fit is redrawn (tide_start_hours.m).
-        Other storm types without Timeseries are left alone: their Peaks draw
-        over [1, N] in adjust_project_forcing.m, as before.
+% draw_tide_indices  Draw the random tide start hours shared across datasets.
+%   config = draw_tide_indices(config, project_forcing)
+%
+%   Random tide start hours drawn before any dataset is adjusted
+%   (call_chess_boundary_conditions), so every dataset of a storm type uses
+%   the same tide_indx_<type> and a storm gets the same tide start hour in
+%   each of them. Nothing is done unless apply_random_tides = 1 and
+%   tide_file exists.
+%   - Storm types with Timeseries (CC excluded): each start hour is drawn
+%     from [1, N - L + 1] (N = tide records, L = that storm's hydrograph
+%     length), so every hydrograph fits and the Timeseries pass never
+%     redraws. Peaks rows and Timeseries storms correspond one to one (LCS:
+%     chess_lcs builds both from the same sampled life cycles; PROS/DET:
+%     both storm DB datasets are sorted by storm ID with the same storms
+%     removed).
+%   - LCS combined sampling (CC): CC holds the TC and XC storms of each life
+%     cycle, so its start hours are not drawn but derived from tide_indx_tc
+%     / tide_indx_xc: the TC-then-XC stacked start hours are reordered with
+%     the permutation chess_lcs used to build CC (stable sortrows of
+%     [TC; XC] by year, order, bin: lcs_columns). That sort keeps each
+%     Timeseries hydrograph contiguous (constant key within a storm) and
+%     keeps TC before XC on ties, so the Timeseries CC storms come in the
+%     same order as the Peaks CC rows. TC/XC without Timeseries are drawn
+%     here from their Peaks rows first. Without Peaks (use_peaks = 0) the
+%     permutation comes from the Timeseries first-step rows (step == 0: one
+%     row per storm, same keys and order), so it equals the Peaks-based
+%     one. tide_indx_cc is always overwritten (never carried or reused), so
+%     the same storm has the same start hour in XC/TC and CC.
+%   Start hours already in config (hotstart carry: resolve_hotstart_state;
+%   LCS reference case: load_reference_tide_indices) are kept; only a storm
+%   whose hydrograph does not fit is redrawn (tide_start_hours). Other
+%   storm types without Timeseries are left alone: their Peaks start hours
+%   are drawn over [1, N] by adjust_project_forcing (apply_random_tide).
+%
+%   Inputs:
+%     config          - CHESS configuration, 1x1 struct; reads workflow,
+%                       apply_random_tides, tide_file and tide_indx_<type>
+%                       when carried
+%     project_forcing - project forcing before adjustment, struct
+%   Outputs:
+%     config - input config with tide_indx_<type> for each storm type with
+%              Timeseries, plus tide_indx_tc / _xc / _cc for LCS CC, struct
+%
+%   Tier: internal
+%
+%   See also call_chess_boundary_conditions, tide_start_hours,
+%   load_reference_tide_indices, apply_random_tide, forcing_storm_lengths.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        config: Run configuration (workflow, apply_random_tides, tide_file,
-            tide_indx_<type> when carried). | struct
-        project_forcing: Project forcing before adjustment. | struct
-
-    %% OUTPUTS
-        config: With tide_indx_<type> for each storm type with Timeseries,
-            plus tide_indx_tc / _xc / _cc for LCS CC. | struct
-
-    %% DEV SIGNATURE
-        Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 if config.apply_random_tides ~= 1 || exist(config.tide_file, 'file') ~= 2
     return
 end

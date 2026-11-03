@@ -1,21 +1,44 @@
 function T = estimate_storm_durations(x, t, frac, shift_threshold, min_duration_hr)
-% Storm Durations For A Set Of Storms From Any Signal (SWL, Hm0, R2p, q, ...): Threshold Crossings Around The Peak
-%   Calls storm_duration_event Per Storm (See It For The Method: Z_th = min + frac*(max - min), Nearest Up/Down-Crossings
-%   Around The Peak, Optional Threshold Shift, Minimum Duration Floor).
-%
+% estimate_storm_durations  Storm durations of a set of storms from any signal.
+%   T = estimate_storm_durations(x, t)
 %   T = estimate_storm_durations(x, t, frac, shift_threshold, min_duration_hr)
-%       x: M x 1 Cell, One Signal Vector Per Storm
-%       t: M x 1 Cell Of The Matching Times (datenum Days Or datetime), Or A Scalar Time Step [hr] Shared By All Storms
-%          (Times Then Start At 0, And peak_time/t1/t2 Are Returned As Hours From The Record Start)
-%       frac: Fraction Of The Amplitude (Default 0.95)
-%       shift_threshold: true = Shift The Threshold Per Storm When The Record Starts/Ends Above It (Default false)
-%       min_duration_hr: Minimum Duration [hr], A Floor Only (Default 1)
-%       T: M x N Table, One Row Per Storm (storm = Row Index In x), Columns As In storm_duration_event
 %
-%   Example (Processed SP, SWL):
-%       s = load('SP02984.mat', 'storm'); D = s.storm.XC.Timeseries.Default; % {id, [SWL Hm0 Tp wDir date dt]}
-%       T = estimate_storm_durations(cellfun(@(m) m(:, 1), D(:, 2), 'un', 0), cellfun(@(m) m(:, 5), D(:, 2), 'un', 0), 0.95);
-%       T.storm_id = cell2mat(D(:, 1));
+%   Storm duration of each storm from any signal (SWL, Hm0, R2p, q, ...):
+%   threshold crossings around the peak. Calls storm_duration_event per
+%   storm (see it for the method: Z_th = min + frac*(max - min), nearest
+%   up/down-crossings around the peak, optional threshold shift, minimum
+%   duration floor).
+%
+%   Example (processed storm database, SWL):
+%     s = load('SP02984.mat', 'storm'); D = s.storm.XC.Timeseries.Default;
+%     T = estimate_storm_durations(cellfun(@(m) m(:, 1), D(:, 2), 'un', 0),
+%         cellfun(@(m) m(:, 5), D(:, 2), 'un', 0), 0.95);
+%     T.storm_id = cell2mat(D(:, 1));
+%   (D rows: {id, [SWL Hm0 Tp wDir datenum dt]}.)
+%
+%   Inputs:
+%     x               - one signal vector per storm, M x 1 cell
+%     t               - matching times per storm (datenum [days] or
+%                       datetime), M x 1 cell; or a time step shared by all
+%                       storms [hours], scalar double (times then start at
+%                       0 and peak_time, t1, t2 are returned as hours from
+%                       the record start)
+%     frac            - fraction of the amplitude [-] (optional, default
+%                       0.95; [] = default), scalar double
+%     shift_threshold - shift the threshold per storm when the record
+%                       starts/ends above it (optional, default false;
+%                       [] = default), logical
+%     min_duration_hr - minimum duration, a floor only [hours] (optional,
+%                       default 1; [] = default), scalar double
+%   Outputs:
+%     T - one row per storm, table: storm (row index in x) and the
+%         storm_duration_event fields (duration_hr [hours], ...); error
+%         when x and t have different numbers of cells
+%
+%   Tier: internal
+%
+%   See also storm_duration_event, timeseries_storm_durations.
+
 if nargin < 5 || isempty(min_duration_hr)
     min_duration_hr = 1;
 end

@@ -1,127 +1,145 @@
 function [storm, CHS_Data, prob_mass, config] = call_chs_data_formatter(config)
-%{
-    %% DESCRIPTION
-        This function is responsible for reading, formatting and screening
-        Coastal Hazards System (CHS) .h5 storm "Peaks" & "Timeseries"
-        files. Additionally, it loads and formats TC's probability masses
-        if supported by library.
-        The storm database is project wide (Event_Database, shared by every
-        PSE/alternative), so it is always built from every CHS Peaks and
-        Timeseries .h5 file in the input (every storm type and data type
-        present), like the GUI storm database wizard. Each run then selects
-        its request (storm_sampling, use_peaks, use_timeseries, create_wlp,
-        create_whp) from it. WLP/WHP datasets are built when requested (or
-        already present in the database being rebuilt); a run requesting a
-        WLP/WHP dataset the database lacks rebuilds the database from
-        <db>_raw_files.mat (no .h5 conversion).
-        The input's storm files must pass chs_storm_file_slots.m (one study
-        identity: no repeated file name, one ADCIRC and one wave save point,
-        one simulation and post type; one ADCIRC + one wave file per storm
-        type/data type slot, request covered).
-        Without CHS_Dependencies TC statistics for the region
-        (chs_dependency_files.m tropical_statistics_available)
-        an XC request builds the database with XC only (the raw file still
-        holds every file) and a TC/CC request stops with an error
-        (chs_dependencies_message.m); a later run with CHS_Dependencies
-        requesting TC/CC rebuilds it from the raw file.
-        Building the database also sets its db_info (storm_db_info.m: TC
-        bias correction, bias & uncertainty from
-        storm_db_bias_uncertainty.m, Nyrs_XC/Nstm_XC), applied to config.
-        A database without db_info (older version) is rebuilt from the raw
-        file.
-        Storm .mat input (storm + prob_mass, copied as the database by
-        call_input_parser.m) is never rebuilt: a request it does not hold
-        is an error.
+% call_chs_data_formatter  Build or load the storm database of a CHESS run.
+%   [storm, CHS_Data, prob_mass, config] = call_chs_data_formatter(config)
+%
+%   Pipeline step after call_input_parser. Reads, formats and screens the
+%   Coastal Hazards System (CHS) .h5 storm "Peaks" and "Timeseries" files
+%   of the input and loads the TC probability masses, or loads the storm
+%   database built by an earlier run.
+%   The storm database is project wide (Event_Database, shared by every
+%   PSE/alternative), so it is always built from every CHS Peaks and
+%   Timeseries .h5 file in the input (every storm type and data type
+%   present), like the GUI storm database wizard (both build it with
+%   build_storm_database). Each run then selects its request
+%   (storm_sampling, use_peaks, use_timeseries, create_wlp, create_whp)
+%   from it.
+%   An existing database is used when it holds this run's request
+%   (storm_db_check) and a valid db_info (storm_db_info 'valid');
+%   otherwise it is rebuilt from <db>_raw_files.mat (no .h5 conversion)
+%   or, without a raw file, from the .zip input. WLP/WHP datasets are
+%   built when requested or already present in the database being
+%   rebuilt, so a run requesting a WLP/WHP dataset the database lacks
+%   rebuilds it.
+%   The input's storm files must pass chs_storm_file_slots (one study
+%   identity: no repeated file name, one ADCIRC and one wave save point,
+%   one simulation and post type; one ADCIRC + one wave file per storm
+%   type/data type slot, request covered).
+%   Without CHS_Dependencies TC statistics for the region
+%   (chs_dependency_files tropical_statistics_available) an XC request
+%   builds the database with XC only (the raw file still holds every
+%   file) and a TC/CC request stops with an error
+%   (chs_dependencies_message); a later run with CHS_Dependencies
+%   requesting TC/CC rebuilds it from the raw file.
+%   Building the database also sets its db_info (storm_db_info: TC bias
+%   correction, bias & uncertainty from storm_db_bias_uncertainty,
+%   Nyrs_XC/Nstm_XC), applied to config. A storm .mat input (storm +
+%   prob_mass, copied as the database by call_input_parser) is never
+%   rebuilt: a request it does not hold is an error.
+%   A .zip input that needs conversion (no raw file) is unzipped right
+%   before conversion (convert_chs_zip) into a system temp folder that is
+%   removed on every exit, errors included.
+%   A database build (fresh or rebuild) sets config.hotstart_level to
+%   'resample': once every build step succeeded, before the database is
+%   saved, this case's cached project forcing and LCS sampling seed file
+%   are deleted and the carried tide_indx_tc/_xc/_cc and forcing_stamp
+%   fields removed (the hotstart level, decided before the build, cannot
+%   see a missing or rebuilt database). A build that stops leaves the
+%   cache, the database and the config file untouched.
+%   The offshore elevation is always required (check_offshore_elevation).
+%
+%   Storm datasets (storm.<TC or XC>):
+%     Peaks.Default      - ADCIRC (SWL) and wave model (STWAVE, SWAN or
+%                          WAM: Hm0, Tp, wave dir) Peaks files matched per
+%                          storm ID.
+%     Peaks.WLP          - Water Level Priority: the ADCIRC Peaks SWL with
+%                          the wave Timeseries values at the time step
+%                          nearest the SWL peak time (within +/- 3 hours).
+%                          When no wave time step is that close, the peak
+%                          time moves to the ADCIRC Timeseries maximum
+%                          within the wave Timeseries time range (the SWL
+%                          stays the Peaks value).
+%     Peaks.WHP          - Wave Height Priority: the wave model Peaks Hm0,
+%                          Tp and wave dir with the ADCIRC Timeseries SWL
+%                          at the time step nearest the wave peak time
+%                          (within +/- 3 hours).
+%     Timeseries.Default - ADCIRC and wave model Timeseries interpolated
+%                          to an hourly time step over their common time
+%                          range (raw peaks kept); with Peaks files, each
+%                          hydrograph maximum is replaced by the Peaks
+%                          value (chs_timeseries_peak_replacer).
+%     removed_storms     - IDs of the storms removed by the screening (NaN
+%                          or flagged values, no common time range),
+%                          field Default.
+%   Peaks rows: {storm ID, 1x5 [SWL Hm0 Tp wave_dir peak_datenum]};
+%   Timeseries rows: {storm ID, M x 6 [SWL Hm0 Tp wave_dir datenum dt]}.
+%   The database holds no storm duration (the forcing builders attach
+%   it). A wave file with the mean period only gives Tp = 1.2 * Tm. TC
+%   SWL is bias corrected when the region's bias & uncertainty files
+%   exist.
+%
+%   Files written when the database is built (<event_db_dir> =
+%   <outfolder>\<project>\Event_Database, chess_paths):
+%     <event_db_dir>\<db>_raw_files.mat - CHS_Data: every converted CHS
+%         file of the input, no screening (written on conversion only)
+%     <event_db_dir>\<db>.mat - storm and prob_mass (every storm type and
+%         data type of the input) and db_info
+%     config file (out_files.config) - config appended with the db_info
+%         fields and hotstart_level
+%
+%   Inputs:
+%     config - CHESS configuration (call_input_parser), 1x1 struct; reads:
+%                chs_zip             - CHS input file (.zip, CHS_Data .mat
+%                                      or storm .mat), char
+%                chs_files_2_convert - CHS storm files of the input
+%                                      [path, name] (path '' for a .zip
+%                                      input; empty for a storm .mat
+%                                      input), number_of_files x 2 cell
+%                storm_sampling      - 'TC', 'XC' or 'CC', char
+%                use_peaks           - run uses the CHS Peaks data (0/1),
+%                                      double
+%                use_timeseries      - run uses the CHS Timeseries data
+%                                      (0/1), double
+%                create_wlp          - run uses the Water Level Priority
+%                                      (WLP) dataset; needs Peaks and
+%                                      Timeseries files (0/1), double
+%                create_whp          - run uses the Wave Height Priority
+%                                      (WHP) dataset; needs Peaks and
+%                                      Timeseries files (0/1), double
+%                chs_dependencies    - CHS_Dependencies folder, char
+%                region              - CHS region, char
+%                sp_ID               - ADCIRC savepoint ID, double
+%                sp_lat, sp_lon      - savepoint coordinates [deg] (NaN
+%                                      when not found; study grid lookup
+%                                      in storm_db_bias_uncertainty),
+%                                      double
+%                print_progress      - print progress (0/1), double
+%                out_files           - run files (chess_paths):
+%                                      storm_and_prob_mass, chs_data,
+%                                      config, project_forcing, char
+%                offshore_elevation  - checked by check_offshore_elevation
+%   Outputs:
+%     storm     - storm datasets reduced to this run's request (storm
+%                 types, data types, WLP/WHP; see above), struct
+%     CHS_Data  - converted CHS files of the input (Filename, Conv_Data),
+%                 1 x number_of_files struct; [] when neither converted
+%                 nor found in <db>_raw_files.mat
+%     prob_mass - TC probability masses of the database (Param, TC_SRR,
+%                 TC_Freq, TotalFreq, smpl1, smpl2, smpl3; not reduced to
+%                 the request), struct; [] for a database without TC
+%     config    - input config; after a build also the db_info fields
+%                 (tc_bias_corrected, chs_swl_*, chs_hm0_*, Nyrs_XC,
+%                 Nstm_XC, storm_db_build_date, offshore_elevation when
+%                 the study grid has one) and hotstart_level 'resample',
+%                 struct
+%
+%   Tier: public
+%
+%   See also call_input_parser, call_chess_boundary_conditions,
+%   chs_h5_converter, build_storm_database, convert_chs_zip,
+%   storm_db_info, chs_storm_file_slots, chess_paths.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
-    %% INPUTS
-        config.
-            chs_files_2_convert: CHS files in the input [path, name]; | cell | number_of_files x 2
-                        path '' for a .zip input (unzipped at conversion, convert_chs_zip.m).
-            use_peaks: Run uses CHS peaks data. (0/1) | double | 1 x 1
-            use_timeseries: Run uses CHS timeseries data. (0/1) | double | 1 x 1
-            storm_sampling: Storm sampling type.('TC','XC' or 'CC') | char | 1 x 2
-            create_wlp: Run uses the Water Level Priority (WLP) | double | 1 x 1
-                        dataset. Requires peaks and timeseries files. (0/1)
-            create_whp: Run uses the Wave Height Priority (WHP) | double | 1 x 1
-                        dataset. Requires peaks and timeseries files. (0/1)
-            chs_dependencies, region, sp_ID: CHS_Dependencies folder, region, savepoint.
-            sp_lat, sp_lon: Savepoint coordinates (call_input_parser.m; NaN when
-                        not found): study grid lookup (storm_db_bias_uncertainty.m).
-            out_files.chs_data, out_files.storm_and_prob_mass: Storm
-                        database files (chess_paths.m). | char
-
-    %% OUTPUTS
-        Additional to data outputs 2 files are exported from this function
-        (<event_db_dir> = <outfolder>\<project>\Event_Database, chess_paths.m).
-        <event_db_dir>\<db>_raw_files.mat: MAT-file containing every converted
-                             CHS file of the input with no screening applied to them.
-        <event_db_dir>\<db>.mat: MAT-file containing formated and screened
-                             CHS data (storm, prob_mass) for every storm
-                             type and data type of the input, and db_info.
-
-        config.
-            tc_bias_corrected, chs_swl_*, chs_hm0_*, Nyrs_XC, Nstm_XC,
-                        offshore_elevation (study grid value, when it has one): From
-                        db_info (storm_db_info.m 'apply') when the database is built.
-            hotstart_level: 'resample' when the
-                        database is built (fresh or rebuild): once every build
-                        step succeeded (before the database is saved), this
-                        case's cached project forcing and LCS sampling seed
-                        file are deleted and carried tide_indx_tc/_xc/_cc and
-                        forcing_stamp removed (the hotstart level, decided before the build,
-                        cannot see a missing or rebuilt database). Appended to
-                        the config file with the db_info fields. A build that
-                        stops leaves the cache, the database and the config
-                        file untouched.
-        A .zip input that needs conversion (no raw file) is unzipped right
-        before conversion (convert_chs_zip.m) into a system temp folder
-        (tempname) that is removed on every exit (onCleanup), errors
-        included. The database itself is built by build_storm_database.m,
-        shared with the GUI storm database wizard.
-
-        storm: Data structure containing formated and screened CHS storm  | struc | size_varies
-               peaks data, reduced to this run's request. First level of
-               data structure can have 'XC' and/or 'TC'. This depends on
-               storm_sampling.
-               Storm peaks datasets provided (Maxima, WLP, WHP) have the
-               same format: one 1x5 row per storm with cols: SWL, Hm0, Tp,
-               wave dir, peak datenum (no storm duration; the forcing
-               builders attach config.storm_duration).
-               Additional field labeled "removed_storms" is a structure
-               containing removed storm IDs fore ach dataset. WHP and WLP
-               datasets are optional and require the use_timeseries switch
-               to be enabled in conjunction with WLP_switch/WHP_switch.
-
-        "storm" Fields:
-            storm.(storm_type).
-                Maxima: Dataset is built using only CHS "Peaks"files.    | double | 1 x 5
-                         ADCIRC (SWL) peak and STWAVE (Hm0,TP,wave dir)
-                         are matched together for each storm ID.
-
-                WLP: Dataset is built using ADCIRC "Peaks" file and
-                      STWAVE timeseries file to match peak water level
-                      with its corresponding wave. A time window of +/- 3
-                      hours is used to find nearest STWAVE data point. In
-                      the case that ADCIRC peak resides outside the
-                      temporal range of STWAVE timeseries output then a
-                      "new" peak water level is computed from ADCIRC's
-                      timeseries output by matching timesteps with STWAVE
-                      and finding the maximum of the resulting water level
-                      timeseries.
-
-                WHP: Dataset is built using STWAVE "Peaks" file and
-                      ADCIRC timeseries file to match peak wave height
-                      with its corresponding water level. A time window of +/- 3
-                      hours is used to find nearest ADCIRC data point. In
-                      the case that STWAVE model output offers water level
-                      output, then that will be used instead.
-
-                removed_storms - Structure containing removed storm IDs for | struc | size_varies
-                                 each dataset in "storm".
-
-    %% DEV SIGNATURE
-    Developed by: Fabian A. Garcia Moreno ERDC-CHL
-%}
 %% GRAB INPUT FROM "config"
 %{
         This section meant to provide an easy way to make changes to config

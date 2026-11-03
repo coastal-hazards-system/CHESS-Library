@@ -1,7 +1,47 @@
 classdef CHESSPlotsBase
-    % CHESSPLOTSBASE Base class for CHESS plotting.
-    % Holds shared data and input-screening methods available to all workflows.
-    % Do not instantiate directly — use CHESSPlots(...) instead.
+    % CHESSPlotsBase  Base class of the CHESS plotting objects (shared plots).
+    %   sp = CHESSPlots(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+    %       returns the workflow subclass (pros_methods, det_methods or
+    %       lcs_methods), which inherits every method below.
+    %   sp = CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+    %       creates the base object directly, for the workflow-independent
+    %       plots (the GUI does so for pse_transect_plot and
+    %       storm_data_space_plot, with [] for the unused inputs).
+    %
+    %   Inputs (stored as properties of the same names; unit_system is
+    %   stored as unitLib):
+    %     config          - run configuration struct
+    %     Resp            - saved structure responses of the run, or []
+    %     storm           - storm database variable "storm", or []
+    %     project_forcing - project forcing of the run, or []
+    %     dsw             - storm probability masses of the storm database
+    %                       ("prob_mass": TC_Freq, TC_SRR, smpl1-smpl3), or []
+    %     structure       - PSE structure struct, or []
+    %     base_fnt        - base font size [pt] (titles +2, ticks -2)
+    %     unit_system     - 'SI' or 'Imperial': unit symbols of the axis
+    %                       labels (aux_methods.build_unit_library); the
+    %                       data are not converted
+    %   See CHESSPlots for the details of each input.
+    %   ds_query (dataset query, most methods): struct with storm_type
+    %   ('XC', 'TC' or 'CC'), data_type ('Peaks' or 'Timeseries') and
+    %   match_type ('Default', 'WLP' or 'WHP'), see aux_methods.pull_data.
+    %
+    %   Methods:
+    %     CHESSPlotsBase        - constructor
+    %     pse_transect_plot     - PSE cross-section with sand and toe berm
+    %     storm_data_space_plot - storm peaks of one variable against another
+    %     event_hydrograph_plot - one storm hydrograph, optional raw CHS signal
+    %     storm_event_viewer    - forcing and one response of the saved results
+    %     event_selection       - viewer / table selection with defaults
+    %     refine_selection      - workflow-specific selection defaults
+    %     event_controls        - in-figure control row of the viewer and table
+    %     event_series_defaults - optional storm event viewer series fields
+    %     response_table        - response table pop-out (table and plot)
+    %     subplot_manager       - grid or tiled layout for multi-panel plots
+    %
+    %   Tier: public
+    %
+    %   See also CHESSPlots, pros_methods, det_methods, lcs_methods.
 
     properties
         base_fnt
@@ -16,6 +56,12 @@ classdef CHESSPlotsBase
 
     methods (Access=public)
         function self = CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+            % CHESSPlotsBase  Create the base plotting object (workflow plots: use CHESSPlots).
+            %   self = CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
+            %       stores the inputs as properties and unit_system as
+            %       unitLib (aux_methods.build_unit_library). The inputs
+            %       are documented in CHESSPlots.
+
             self.base_fnt        = base_fnt;
             self.Resp            = Resp;
             self.storm           = storm;
@@ -30,6 +76,20 @@ classdef CHESSPlotsBase
     %% INPUT SCREENING METHODS
     methods (Access=public)
         function [ax, Geo] = pse_transect_plot(self, ax)
+            % pse_transect_plot  Draw the PSE cross-section (structure, sand, toe berm).
+            %   [ax, Geo] = pse_transect_plot(self, ax) draws the structure
+            %       of config.struc_type (levee or rubble mound trapezoid,
+            %       floodwall rectangle) on the offshore sand profile, with
+            %       the toe berm when config.add_toe_berm == 1. Elevations
+            %       are signed (study datum, negative below zero); axis
+            %       labels use the unit symbols of unit_system.
+            %
+            %   Inputs:
+            %     ax - axes, figure or grid layout (aux_methods.initiate_axes)
+            %   Outputs:
+            %     ax  - the plot axes
+            %     Geo - polyshape of the structure body
+
             % polyshape Repairs The Transect Polygons On Creation And Warns Each Time
             w_state = warning;
             warning('off', 'MATLAB:polyshape:repairedBySimplify');
@@ -175,6 +235,20 @@ classdef CHESSPlotsBase
         end
 
         function [ax] = storm_data_space_plot(self, ax, ds_query, var_left, var_right)
+            % storm_data_space_plot  Storm peaks of one variable against another.
+            %   ax = storm_data_space_plot(self, ax, ds_query, var_left, var_right)
+            %       plots the per-storm maximum of var_left (Y) against that
+            %       of var_right (X) for the storm database dataset of
+            %       ds_query (self.storm; Hm0 is the offshore wave height).
+            %
+            %   Inputs:
+            %     ax        - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query  - dataset query (storm_type, data_type, match_type)
+            %     var_left  - Y variable: "SWL", "Hm0" or "Tp"
+            %     var_right - X variable: "SWL", "Hm0" or "Tp"
+            %   Outputs:
+            %     ax - the plot axes
+
             arguments
                 self
                 ax
@@ -209,13 +283,26 @@ classdef CHESSPlotsBase
         end
 
         function [ax] = event_hydrograph_plot(self, ax, ds_query, event_id, field_to_plot, chs_data)
-            % Plots One Event Hydrograph: storm (Interpolated, Red) And Optionally
-            % The Raw CHS Signal It Was Built From (CHS_Data, Black).
-            %   ds_query: storm_type / match_type (data_type Forced To Timeseries)
-            %   event_id: Storm ID
-            %   field_to_plot: "SWL", "Hm0" or "Tp"
-            %   chs_data: CHS_Data From The Storm Database "_raw_files.mat" (Optional)
-            %   config (Optional Fields): tc_bias_corrected, chs_swl_b_a, chs_swl_b_r -> TC Raw SWL Bias Correction
+            % event_hydrograph_plot  Draw one storm hydrograph, optionally with its raw CHS signal.
+            %   ax = event_hydrograph_plot(self, ax, ds_query, event_id, field_to_plot)
+            %   ax = event_hydrograph_plot(self, ax, ds_query, event_id, field_to_plot, chs_data)
+            %       draws the interpolated storm database hydrograph (red)
+            %       over elapsed hours and, with chs_data, the raw CHS
+            %       signal it was built from (black, clipped to the event
+            %       window). TC raw SWL is bias corrected when
+            %       config.tc_bias_corrected == 1 (chs_swl_b_a, chs_swl_b_r).
+            %
+            %   Inputs:
+            %     ax            - axes, figure or grid layout (aux_methods.initiate_axes)
+            %     ds_query      - dataset query (storm_type, match_type;
+            %                     data_type is set to Timeseries)
+            %     event_id      - storm ID (an unknown ID errors)
+            %     field_to_plot - "SWL", "Hm0" or "Tp"
+            %     chs_data      - (optional) CHS_Data from the storm database
+            %                     "_raw_files.mat" (default [] = no raw signal)
+            %   Outputs:
+            %     ax - the plot axes
+
             arguments
                 self
                 ax
@@ -306,17 +393,47 @@ classdef CHESSPlotsBase
         end
 
         function fig = storm_event_viewer(self, parent, ds_query, response_to_view, sel, datum_offset, on_change)
-            % Storm Event Viewer: Forcing (Top) And One Response (Bottom) Of A Workflow's SAVED Results (Nothing Recomputed),
-            % With Its Selectors In A Control Row Above The Axes.
-            %   parent: [] -> Own uifigure | uifigure, uipanel Or uigridlayout -> Built Inside It (Classic Figures Not Supported)
-            %   sel: Selection Struct ([] Or Missing Fields -> Defaults From The Data, event_selection):
-            %     storm_id      Storm Shown (Timeseries View)
-            %     peaks_view    true -> Per-Storm Maxima Of All Storms, Markers Only (Timeseries Data Only)
-            %     lake_removed  true -> Mean Lake Level Removed From SWL & Crest (Great Lakes Only, Right-Click)
-            %     z_col         Workflow 1: Replicate Column | lc, year ('All' Or A Year): Workflow 3 | aef, cl ('All' Or A CL): Workflow 4
-            %   on_change: Function Handle Called With The New sel When A Control Changes (The Caller Redraws With It);
-            %     Empty -> The Viewer Redraws Itself In Place
-            %   fig: The Figure Holding The Viewer
+            % storm_event_viewer  Show the forcing and one response of the saved results.
+            %   fig = storm_event_viewer(self, parent, ds_query, response_to_view)
+            %   fig = storm_event_viewer(self, parent, ds_query, response_to_view, sel, datum_offset, on_change)
+            %       draws the forcing (top) and one response (bottom) of the
+            %       workflow's saved results, with the selectors in a
+            %       control row above the axes. Nothing is recomputed except
+            %       the workflow 1 (PROS-RB) responses of the selected
+            %       replicate (pros_methods.event_series). The response
+            %       must be a per-event response supported by
+            %       structure.struc_type (response_registry).
+            %
+            %   Inputs:
+            %     parent           - [] (own uifigure), or a uifigure, uipanel
+            %                        or uigridlayout to build in (classic
+            %                        figures are not supported)
+            %     ds_query         - dataset query (storm_type, data_type, match_type)
+            %     response_to_view - response name (string)
+            %     sel              - (optional) selection struct; [] or missing
+            %                        fields take defaults from the data
+            %                        (event_selection):
+            %                          storm_id     storm shown (Timeseries view)
+            %                          peaks_view   true: per-storm maxima of all
+            %                                       storms, markers only
+            %                                       (Timeseries data only)
+            %                          lake_removed true: mean lake level removed
+            %                                       from SWL and crest (Great
+            %                                       Lakes only, right-click)
+            %                          z_col        workflow 1: replicate column
+            %                          lc, year     workflow 3: life cycle, year
+            %                                       ('All' or a year)
+            %                          aef, cl      workflow 4: AEF/AEP, CL ('All'
+            %                                       or a CL)
+            %     datum_offset     - (optional) elevation subtracted from SWL and
+            %                        crest (default 0)
+            %     on_change        - (optional) function handle called with the
+            %                        new sel when a control changes (the caller
+            %                        redraws); [] (default): the viewer redraws
+            %                        itself in place
+            %   Outputs:
+            %     fig - the figure holding the viewer
+
             arguments
                 self
                 parent
@@ -377,9 +494,20 @@ classdef CHESSPlotsBase
         end
 
         function sel = event_selection(self, sel, choices)
-            % Storm Event Viewer / Response Table Selection With Defaults From The Data (choices.storm_ids, choices.peaks_toggle):
-            % First Storm, Timeseries View, Lake Level Kept; Workflow-Specific Fields (z_col, lc, year, aef, cl) Completed By The
-            % Workflow (refine_selection)
+            % event_selection  Complete a viewer / response table selection with defaults.
+            %   sel = event_selection(self, sel, choices) fills missing
+            %       fields with the defaults from the data: first storm,
+            %       Timeseries view, lake level kept; the workflow fields
+            %       (z_col, lc, year, aef, cl) are completed by
+            %       refine_selection.
+            %
+            %   Inputs:
+            %     sel     - selection struct or [] (fields: storm_id,
+            %               peaks_view, lake_removed, z_col, lc, year, aef, cl)
+            %     choices - event_choices output (storm_ids, peaks_toggle, ...)
+            %   Outputs:
+            %     sel - the complete, validated selection struct
+
             defaults = struct('storm_id', NaN, 'peaks_view', false, 'lake_removed', false, ...
                 'z_col', [], 'lc', [], 'year', 'All', 'aef', [], 'cl', []);
             if ~isstruct(sel)
@@ -399,12 +527,35 @@ classdef CHESSPlotsBase
         end
 
         function sel = refine_selection(~, sel, ~)
-            % Workflow-Specific Defaults/Validation Of The Selection (Overridden: PROS z_col, aef, cl | LCS lc, year)
+            % refine_selection  Workflow-specific defaults and validation of a selection.
+            %   sel = refine_selection(self, sel, choices) returns sel
+            %       unchanged here; pros_methods (z_col, aef, cl) and
+            %       lcs_methods (lc, year) override it.
+            %
+            %   Inputs:
+            %     sel     - selection struct (event_selection)
+            %     choices - event_choices output
+            %   Outputs:
+            %     sel - the selection struct
         end
 
         function ctrl = event_controls(~, parent, row, sel, choices, emit)
-            % In-Figure Control Row (Default: Storm ID Dropdown + Peaks-View Checkbox; Overridden By PROS And LCS).
-            %   parent: uigridlayout holding the row | row: its grid row | emit(field, value): selection changed
+            % event_controls  Build the in-figure control row of the viewer and response table.
+            %   ctrl = event_controls(self, parent, row, sel, choices, emit)
+            %       builds a storm ID dropdown and a peaks-view checkbox
+            %       (Timeseries data), else an "All events (Peaks)" label;
+            %       pros_methods and lcs_methods override it.
+            %
+            %   Inputs:
+            %     parent  - uigridlayout holding the row
+            %     row     - grid row of the control row
+            %     sel     - selection struct (event_selection)
+            %     choices - event_choices output
+            %     emit    - function handle emit(field_name, value), called
+            %               when a control changes the selection
+            %   Outputs:
+            %     ctrl - uigridlayout of the control row
+
             ctrl = uigridlayout(parent, [1 4], 'ColumnWidth', {'fit', 120, 'fit', '1x'}, 'RowHeight', {'1x'}, 'Padding', [5 2 5 2]);
             ctrl.Layout.Row = row;
             if choices.is_ts
@@ -421,13 +572,27 @@ classdef CHESSPlotsBase
         end
 
         function ser = event_series_defaults(~, ser)
-            % Optional Series Fields Of The Storm Event Viewer (Shared Drawing Core):
-            %   x_label        X label ('' -> By x_kind: 'datetime' Date | 'event' Event # | 'hours' Storm Duration [hrs])
-            %   segments       Cell Of Row-Index Vectors, One Per Storm: Lines Break Between Storms ([] -> One Storm)
-            %   color_segments true -> The Response Line Has One Color Per Segment
-            %   bounds         X Positions Of Thin Vertical Lines (Storm Start/End) ([] -> None)
-            %   xticks         struct(pos, labels) Replacing The X Ticks ([] -> Automatic)
-            %   overlay        Struct Array (y, label, color): Horizontal Lines On The Response Axes ([] -> None)
+            % event_series_defaults  Fill the optional storm event viewer series fields.
+            %   ser = event_series_defaults(self, ser) adds the missing
+            %       optional fields of the shared drawing core:
+            %         x_label        X label ('' -> by x_kind: 'datetime' date,
+            %                        'event' event #, 'hours' storm duration [hrs])
+            %         segments       cell of row-index vectors, one per storm:
+            %                        lines break between storms ([] -> one storm)
+            %         color_segments true -> the response line has one color
+            %                        per segment (default false)
+            %         bounds         X positions of thin vertical lines (storm
+            %                        start/end) ([] -> none)
+            %         xticks         struct(pos, labels) replacing the X ticks
+            %                        ([] -> automatic)
+            %         overlay        struct array (y, label, color): horizontal
+            %                        lines on the response axes ([] -> none)
+            %
+            %   Inputs:
+            %     ser - event_series output of the workflow
+            %   Outputs:
+            %     ser - ser with every optional field present
+
             defaults = struct('x_label', '', 'segments', [], 'color_segments', false, 'bounds', [], 'xticks', [], 'overlay', []);
             for fn = fieldnames(defaults)'
                 if ~isfield(ser, fn{1})
@@ -439,17 +604,34 @@ classdef CHESSPlotsBase
             end
         end
 
-        % Method: Response Table Pop-Out (Axes On Top, Table Below), Tabular Twin Of The Storm Event Viewer
         function fig = response_table(self, ds_query, sel, on_change)
-            % Timeseries view: Rows Of The Selected Storm (Or Life Cycle / Year), Selected Columns Plot As Hydrographs
-            %   (Elevations On The Left yyaxis, Everything Else On The Right; Max 2 Unit Groups).
-            % Peaks (Data Type Peaks, Or The Peaks View Of Timeseries): One Row Per Storm; Select 2 Columns (1st Click = X,
-            %   2nd = Y) For A Scatter.
-            % Same selection struct and in-figure controls as the viewer (event_choices, event_selection, event_controls); the
-            %   workflow provides the rows (event_table).
-            % sel: Selection Struct (CHESSPlotsBase.event_selection; [] = Defaults).
-            % on_change: Function Handle Called With The New sel When A Control Changes (The Caller Redraws);
-            %   Empty -> The Figure Updates In Place.
+            % response_table  Open the response table pop-out (plot on top, table below).
+            %   fig = response_table(self, ds_query)
+            %   fig = response_table(self, ds_query, sel, on_change) is the
+            %       tabular twin of storm_event_viewer, with the same
+            %       selection struct and in-figure controls (event_choices,
+            %       event_selection, event_controls); the workflow provides
+            %       the rows (event_table).
+            %       Timeseries view: rows of the selected storm (or life
+            %       cycle / year); the selected columns plot as hydrographs
+            %       (elevations on the left yyaxis, everything else on the
+            %       right; at most 2 unit groups).
+            %       Peaks (data type Peaks, or the peaks view of
+            %       Timeseries): one row per storm; select 2 columns (1st
+            %       click = X, 2nd = Y) for a scatter.
+            %
+            %   Inputs:
+            %     ds_query  - dataset query (storm_type, data_type, match_type)
+            %     sel       - (optional) selection struct (event_selection;
+            %                 [] = defaults)
+            %     on_change - (optional) function handle called with the new
+            %                 sel when a control changes (the caller redraws);
+            %                 [] (default): the figure updates in place
+            %   Outputs:
+            %     fig - the uifigure; fig.UserData holds select, set_storm,
+            %           set_peaks_view, set_selection, axes and table for
+            %           scripts and tests
+
             if nargin < 3, sel = []; end
             if nargin < 4, on_change = []; end
             choices = self.event_choices(ds_query);
@@ -853,6 +1035,23 @@ classdef CHESSPlotsBase
 
     methods (Access=public)
         function [gl, subplot_flag] = subplot_manager(self, parent, nRows, nCols)
+            % subplot_manager  Grid or tiled layout for a multi-panel plot.
+            %   [gl, subplot_flag] = subplot_manager(self, parent, nRows, nCols)
+            %
+            %   Inputs:
+            %     parent - uiaxes (replaced by a grid in its parent, the
+            %              axes moved to cell 1, 1), uifigure (new grid),
+            %              uigridlayout (resized and reused), classic figure
+            %              or axes (tiled layout), or [] (new uifigure with
+            %              a grid)
+            %     nRows  - number of rows
+            %     nCols  - number of columns
+            %   Outputs:
+            %     gl           - uigridlayout, or for classic figures / axes
+            %                    an nRows*nCols x 1 array of the tile axes
+            %                    (Tag 'row_col')
+            %     subplot_flag - true when gl holds tile axes
+
             % Initialize Figure
             subplot_flag = false;
 

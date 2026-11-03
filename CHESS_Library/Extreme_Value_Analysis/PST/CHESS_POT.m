@@ -1,76 +1,79 @@
-%% CHESS_POT.m
-%{
-LICENSING:
-    This code is part of CHESS software suite developed by the U.S. Army
-    Engineer Research and Development Center Coastal and Hydraulics
-    Laboratory (hereinafter “ERDC-CHL”). This material is distributed in
-    accordance with DoD Instruction 5230.24. Recipient agrees to abide by
-    all notices, and distribution and license markings. The controlling DOD
-    office is the U.S. Army Engineer Research and Development Center
-    (hereinafter, "ERDC"). This material shall be handled and maintained in
-    accordance with For Official Use Only, Export Control, and AR 380-19
-    requirements. ERDC-CHL retains all right, title and interest in
-    CHESS and any portion thereof and in all copies, modifications and
-    derivative works of CHESS and any portions thereof including,
-    without limitation, all rights to patent, copyright, trade secret,
-    trademark and other proprietary or intellectual property rights.
-    Recipient has no rights, by license or otherwise, to use, disclose or
-    disseminate CHESS, in whole or in part.
-
-DISCLAIMER:
-    CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT
-    HOLDERS. ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS
-    OR IMPLIED WITH RESPECT TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL,
-    AND EXPRESSLY DISCLAIMS ALL WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
-    IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF MERCHANTABILITY,
-    NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
-    CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE
-    AND RESULTS OF THE USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE
-    UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL WARRANTIES AND LIABILITIES
-    REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND DISTRIBUTES
-    IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST
-    ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND
-    SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD HARMLESS ERDC-CHL, THE
-    UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
-    LIABILITIES, DEMANDS, DAMAGES.
-
-SOFTWARE NAME:
-    CHESS-POT (Statistics)
-
-DESCRIPTION:
-   This script generates the Peaks-Over-Threshold (POT) sample from a raw
-   time series data set.
-
-INPUT ARGUMENTS:
-    dt = timestamps of response data; as a datenum vector
-    Resp = response data; specified as a vector. Cannot be a PDS/POT sample.
-    tLag = inter-event time in hours; specified as a scalar
-    lambda = mean annual rate of events; specified as a scalar
-    Nyrs = record length in years; specified as a scalar
-
-OUTPUT ARGUMENTS:
-   POTout = response POT sample; as a matrix with format:
-     col(01): timestamps of POT values
-     col(02): POT values
-     col(03): data time range used for selection of POT value: lower bound
-     col(04): data time range used for selection of POT value: upper bound
-   Threshold = selected threshold for identification of excesses.
-
-AUTHORS:
-    Norberto C. Nadal-Caraballo, PhD (NCNC)
-    Efrain Ramos-Santiago (ERS)
-
-CONTRIBUTORS:
-    ERDC-CHL Coastal Hazards Group
-
-HISTORY OF REVISIONS:
-20200903-ERS: revised.
-20200914-ERS: revised.
-20231207-LAA: Revised to add noice to duplicate values in POT sample.
-
-***************  ALPHA  VERSION  ***************  FOR TESTING  ************
-%}
 function [POTout,Threshold] = CHESS_POT(dt,Resp,tLag,lambda,Nyrs)
+% CHESS_POT  Peaks-over-threshold (POT) sample from a response time series.
+%   [POTout, Threshold] = CHESS_POT(dt, Resp, tLag, lambda, Nyrs)
+%
+%   The threshold mean(Resp) + m*std(Resp) is raised (m from 1 in steps
+%   of 0.01) until the number of events, groups of values above the
+%   threshold separated by more than tLag, is at most Nyrs*lambda. The
+%   peak of each event is kept with its time range. Rows with a NaN, Inf
+%   or <= 0 peak are removed and duplicated values get 1e-6 added. Errors
+%   unless exactly 5 inputs are given.
+%
+%   Inputs:
+%     dt     - time stamps of Resp (MATLAB datenum) [days], vector
+%     Resp   - response time series (not a POT sample), vector
+%     tLag   - inter-event time [hours], scalar
+%     lambda - mean annual rate of events [1/yr], scalar
+%     Nyrs   - record length [years], scalar
+%   Outputs:
+%     POTout    - POT sample, number_of_events x 4 double: [peak time,
+%                 peak value, event start time, event end time]
+%     Threshold - threshold used to identify the events [Resp units],
+%                 scalar
+%
+%   Tier: internal
+%
+%   See also CHESS_PST, CHESS_PST_Fit.
+%
+%   Developed by: Norberto C. Nadal-Caraballo, PhD (NCNC); Efrain
+%   Ramos-Santiago (ERS)
+
+% LICENSING:
+%     This code is part of CHESS software suite developed by the U.S. Army
+%     Engineer Research and Development Center Coastal and Hydraulics
+%     Laboratory (hereinafter “ERDC-CHL”). This material is distributed in
+%     accordance with DoD Instruction 5230.24. Recipient agrees to abide by
+%     all notices, and distribution and license markings. The controlling DOD
+%     office is the U.S. Army Engineer Research and Development Center
+%     (hereinafter, "ERDC"). This material shall be handled and maintained in
+%     accordance with For Official Use Only, Export Control, and AR 380-19
+%     requirements. ERDC-CHL retains all right, title and interest in
+%     CHESS and any portion thereof and in all copies, modifications and
+%     derivative works of CHESS and any portions thereof including,
+%     without limitation, all rights to patent, copyright, trade secret,
+%     trademark and other proprietary or intellectual property rights.
+%     Recipient has no rights, by license or otherwise, to use, disclose or
+%     disseminate CHESS, in whole or in part.
+%
+% DISCLAIMER:
+%     CHESS IS PROVIDED “AS IS” BY ERDC-CHL AND THE RESPECTIVE COPYRIGHT
+%     HOLDERS. ERDC-CHL MAKES NO OTHER WARRANTIES WHATSOEVER EITHER EXPRESS
+%     OR IMPLIED WITH RESPECT TO CHESS OR ANYTHING PROVIDED BY ERDC-CHL,
+%     AND EXPRESSLY DISCLAIMS ALL WARRANTIES OF ANY KIND, EITHER EXPRESSED OR
+%     IMPLIED, INCLUDING WITHOUT LIMITATION, WARRANTIES OF MERCHANTABILITY,
+%     NON-INFRINGEMENT, FITNESS FOR A PARTICULAR PURPOSE, FREEDOM FROM BUGS,
+%     CORRECTNESS, ACCURACY, RELIABILITY, AND RESULTS, AND REGARDING THE USE
+%     AND RESULTS OF THE USE, AND THAT THE ASSOCIATED SOFTWARE’S USE WILL BE
+%     UNINTERRUPTED. ERDC-CHL DISCLAIMS ALL WARRANTIES AND LIABILITIES
+%     REGARDING THIRD PARTY SOFTWARE, IF PRESENT IN CHESS, AND DISTRIBUTES
+%     IT “AS IS.” RECIPIENT AGREES TO WAIVE ANY AND ALL CLAIMS AGAINST
+%     ERDC-CHL, THE UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND
+%     SUBCONTRACTORS, AND SHALL INDEMNIFY AND HOLD HARMLESS ERDC-CHL, THE
+%     UNITED STATES GOVERNMENT AND ITS CONTRACTORS AND SUBCONTRACTORS FOR ANY
+%     LIABILITIES, DEMANDS, DAMAGES.
+%
+% SOFTWARE NAME:
+%     CHESS-POT (Statistics)
+%
+% CONTRIBUTORS:
+%     ERDC-CHL Coastal Hazards Group
+%
+% HISTORY OF REVISIONS:
+% 20200903-ERS: revised.
+% 20200914-ERS: revised.
+% 20231207-LAA: Revised to add noice to duplicate values in POT sample.
+%
+% ***************  ALPHA  VERSION  ***************  FOR TESTING  ************
 %% A few check points
 
 % Required input
