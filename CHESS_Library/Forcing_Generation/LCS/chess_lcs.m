@@ -513,7 +513,7 @@ function dur = sampled_storm_durations(sampled, storm_ts, storm_duration, comput
 dur = NaN(size(storm_ts, 1), 1);
 ids = unique(cell2mat(cellfun(@(x) x(:, 1), sampled(:), 'un', false)));
 rows = find(ismember(cell2mat(storm_ts(:, 1)), ids));
-dur(rows) = timeseries_storm_durations(storm_ts(rows, 2), storm_duration, compute_storm_duration);
+dur(rows) = timeseries_storm_durations(storm_ts(rows, 2), storm_duration, compute_storm_duration, cell2mat(storm_ts(rows, 1)));
 end
 
 %% AUX FUNCTION: TIMESERIES LC CREATOR

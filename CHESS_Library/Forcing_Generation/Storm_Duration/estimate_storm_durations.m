@@ -32,8 +32,10 @@ function T = estimate_storm_durations(x, t, frac, shift_threshold, min_duration_
 %                       default 1; [] = default), scalar double
 %   Outputs:
 %     T - one row per storm, table: storm (row index in x) and the
-%         storm_duration_event fields (duration_hr [hours], ...); error
-%         when x and t have different numbers of cells
+%         storm_duration_event fields (duration_hr [hours], the flags
+%         edge_start, edge_end, threshold_shifted, min_applied,
+%         flat_signal, ...); error when x and t have different numbers of
+%         cells
 %
 %   Tier: internal
 %

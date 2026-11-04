@@ -86,7 +86,7 @@ for st = 1:length(storm_types)
             if strcmp(data_type{kk}, 'Timeseries')
                 data_out.dt = cellfun(@(x) x(:, end), storm_data, 'un', false);
                 data_out.storm_duration = cellfun(@(x, d) repmat(d, size(x, 1), 1), storm_data,...
-                    num2cell(timeseries_storm_durations(storm_data, storm_duration, compute_storm_duration)), 'un', false);
+                    num2cell(timeseries_storm_durations(storm_data, storm_duration, compute_storm_duration, data_out.storm_id)), 'un', false);
             else % Peaks: config.storm_duration [days], no dt
                 data_out.storm_duration = num2cell(repmat(storm_duration/24, size(storm_rows, 1), 1));
             end

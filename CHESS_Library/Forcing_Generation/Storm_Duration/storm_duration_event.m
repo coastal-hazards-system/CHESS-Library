@@ -14,7 +14,9 @@ function r = storm_duration_event(x, t, frac, shift_threshold, min_duration_hr)
 %   has no point on that side, so that side keeps the record edge. The
 %   duration is floored at min_duration_hr (t1/t2 stay the computed
 %   crossings, no further search; duration_raw_hr keeps the crossing
-%   duration, min_applied flags the floor).
+%   duration, min_applied flags the floor). A flat signal (max(x) ==
+%   min(x)) has no crossing: both record edges are used and flat_signal
+%   flags it.
 %
 %   Inputs:
 %     x               - signal of one storm, double vector
@@ -40,6 +42,7 @@ function r = storm_duration_event(x, t, frac, shift_threshold, min_duration_hr)
 %           n_crossings             - number of Z_th crossings, double
 %           edge_start, edge_end    - no crossing on that side (record
 %                                     edge used), logical
+%           flat_signal             - max(x) == min(x), logical
 %
 %   Tier: internal
 %
@@ -93,5 +96,5 @@ r = struct('sig_min', z_min, 'sig_max', z_max, 'threshold_base', z_base, 'thresh
     't1', datetime(t1, 'ConvertFrom', 'datenum'), 't2', datetime(t2, 'ConvertFrom', 'datenum'),...
     'duration_hr', max((t2 - t1)*24, min_duration_hr), 'duration_raw_hr', (t2 - t1)*24,...
     'min_applied', (t2 - t1)*24 < min_duration_hr, 'record_hr', (t(end) - t(1))*24, 'n_crossings', numel(t_x),...
-    'edge_start', edge_start, 'edge_end', edge_end);
+    'edge_start', edge_start, 'edge_end', edge_end, 'flat_signal', z_max == z_min);
 end
