@@ -161,7 +161,7 @@ function [Resp] = call_project_response(config, project_forcing, structure)
                     fprintf('   Processing %s dataset....\n', fName);
                     
                     Resp.Peaks.(fName) = chess_csr(config, ...
-                        project_forcing.Peaks.(fName), structure, emp_coeff, 'peaks', subDir);
+                        project_forcing.Peaks.(fName), structure, emp_coeff, 'peaks');
                 end
             end
 
@@ -170,7 +170,7 @@ function [Resp] = call_project_response(config, project_forcing, structure)
                 disp('Running CHESS: Coastal Structure Reliability - Timeseries....');
                 
                 Resp.Timeseries.Default = chess_csr(config, ...
-                    project_forcing.Timeseries.Default, structure, emp_coeff, 'timeseries', subDir);
+                    project_forcing.Timeseries.Default, structure, emp_coeff, 'timeseries');
             end
     end
 

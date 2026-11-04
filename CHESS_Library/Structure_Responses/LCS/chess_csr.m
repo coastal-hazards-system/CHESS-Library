@@ -1,7 +1,7 @@
-function Resp = chess_csr(config, project_forcing, structure, emp_coeff, data_type, outfolder)
+function Resp = chess_csr(config, project_forcing, structure, emp_coeff, data_type)
 % chess_csr  LCS structure responses of one dataset.
 %   Resp = chess_csr(config, project_forcing, structure, emp_coeff,
-%       data_type, outfolder)
+%       data_type)
 %
 %   CHESS: LCS (workflow 3). For every storm type of the dataset, computes
 %   the structure responses of every life cycle (compute_structure_response,
@@ -9,8 +9,7 @@ function Resp = chess_csr(config, project_forcing, structure, emp_coeff, data_ty
 %     Peaks      - PF_Summary and Reliab_Summary (chess_csr_peaks);
 %     Timeseries - S, the damage progression analysis (chess_csr_dpa),
 %                  when csr_call_dpa = 1 and only for the storm type named
-%                  by storm_sampling; the folder <outfolder>\LCS_DPA is
-%                  created.
+%                  by storm_sampling.
 %   Peaks datasets run with compute_q_vol = 0 (the overtopping volume is
 %   Timeseries only).
 %
@@ -26,8 +25,6 @@ function Resp = chess_csr(config, project_forcing, structure, emp_coeff, data_ty
 %     emp_coeff       - armor damage coefficients
 %                       (load_empirical_coefficients), struct
 %     data_type       - 'peaks' or 'timeseries', char
-%     outfolder       - workflow folder of the alternative (chess_paths
-%                       wf_dir), char
 %   Outputs:
 %     Resp - Resp.<storm type>: the compute_structure_response fields
 %            (nLC x 1 cell, one value per life-cycle row) plus, for rubble
@@ -63,10 +60,6 @@ for ii = 1:length(storm_type)
                     [Resp.(storm_type{ii}).S] = ...
                         chess_csr_dpa(config, structure, emp_coeff,...
                         project_forcing.(storm_type{ii}));
-                    % Create Subdirectory
-                    if ~exist(fullfile(outfolder, 'LCS_DPA'),'dir')
-                        mkdir(fullfile(outfolder, 'LCS_DPA'));
-                    end
                 end
         end
     end
