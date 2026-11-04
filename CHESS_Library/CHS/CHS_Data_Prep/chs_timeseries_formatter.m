@@ -15,10 +15,11 @@ function [storm_data, ts_storm2rm] = chs_timeseries_formatter(swl_timeseries, hm
 %   is written at the hourly time step nearest its time, so each
 %   hydrograph keeps its raw peak. The raw wave records are expected with
 %   their flagged steps already filled (call_chs_storm_quality_check:
-%   fill_flagged_wave_steps). Rows with flagged values (SWL < -90; Hm0,
-%   Tp or wave dir < -400, a safety net) or NaN are dropped: at the start
-%   or end of the record they are trimmed, any other dropped row (an
-%   interior gap) makes the storm bad. Tp_special = 1 gives Tp = 1.2 *
+%   fill_flagged_wave_steps). Rows with flagged values (SWL < -90; Hm0
+%   or Tp < -400, a safety net) or NaN SWL, Hm0 or Tp are dropped: at the
+%   start or end of the record they are trimmed, any other dropped row
+%   (an interior gap) makes the storm bad. The wave direction never drops
+%   a row. Tp_special = 1 gives Tp = 1.2 *
 %   Tm. A storm in storms2rm or with a single water level value gets NaN
 %   data, a storm with an interior gap or no rows left gets empty data;
 %   all are added to ts_storm2rm.
@@ -144,10 +145,10 @@ for stm = 1:num_storms
     %% REMOVE BAD ENTRIES
     % ADCIRC Flag Check
     storm_mat(storm_mat(:, 1) < -90, :) = NaN;
-    % STWAVE Flag Check (Safety Net: Raw Wave Flags Are Filled Upstream, fill_flagged_wave_steps)
-    storm_mat(any(storm_mat(:, 2:4) < -400, 2), 2:4) = NaN;
-    % Rows With NaNs Are Dropped: Trimmed At The Start/End; An Interior Gap Or No Row Left Makes A Bad Storm
-    kept = find(~any(isnan(storm_mat), 2));
+    % STWAVE Flag Check On Hm0/Tp (Safety Net: Raw Wave Flags Are Filled Upstream, fill_flagged_wave_steps); Wave Direction Not Checked
+    storm_mat(any(storm_mat(:, 2:3) < -400, 2), 2:3) = NaN;
+    % Rows With NaN SWL/Hm0/Tp Are Dropped: Trimmed At The Start/End; An Interior Gap Or No Row Left Makes A Bad Storm
+    kept = find(~any(isnan(storm_mat(:, 1:3)), 2));
     if isempty(kept) || numel(kept) ~= kept(end) - kept(1) + 1
         bad_count = bad_count + 1;
         bad_storms_buffer(bad_count) = current_stmID;
