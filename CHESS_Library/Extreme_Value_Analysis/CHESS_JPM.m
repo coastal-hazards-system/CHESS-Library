@@ -153,7 +153,7 @@ if plot_options.create_plots == 1
     if jpm_options.stat_print == 1
         disp(['*** Step 4: Saving results here: ',plot_options.path_out]);
     end
-    save(fullfile(plot_options.('path_out'), ['CHESS_JPM_' plot_options.staID 'output.mat']),'JPM_output','-v7.3');
+    save(fullfile(plot_options.('path_out'), ['CHESS_JPM_' plot_options.staID '_output.mat']),'JPM_output','-v7.3');
 end
 
 

@@ -1,7 +1,7 @@
-function dur = timeseries_storm_durations(storm_data, storm_duration, compute_storm_duration, storm_ids)
+function dur = timeseries_storm_durations(storm_data, storm_duration, compute_storm_duration, storm_ids, storm_type)
 % timeseries_storm_durations  Event length of each Timeseries storm.
 %   dur = timeseries_storm_durations(storm_data, storm_duration,
-%       compute_storm_duration, storm_ids)
+%       compute_storm_duration, storm_ids, storm_type)
 %
 %   Event length (storm_duration) of each Timeseries storm of the storm
 %   database, set when the project forcing is built (chess_forcing_formatter,
@@ -26,6 +26,8 @@ function dur = timeseries_storm_durations(storm_data, storm_duration, compute_st
 %                              compute_storm_duration), double
 %     storm_ids              - storm ID of each storm_data record (for the
 %                              flag report), numel(storm_data) x 1 double
+%     storm_type             - storm type named in the flag report, e.g. 'XC'
+%                              or 'TC', char
 %   Outputs:
 %     dur - storm duration per storm [days], numel(storm_data) x 1 double
 %
@@ -41,11 +43,11 @@ if compute_storm_duration == 1 && ~isempty(storm_data)
     T = estimate_storm_durations(cellfun(@(x) x(:, 1), storm_data(:), 'un', false),...
         cellfun(@(x) x(:, 5), storm_data(:), 'un', false), 0.98, true, 1);
     dur = T.duration_hr/24;
-    report_flagged_storms(T, storm_ids(:));
+    report_flagged_storms(T, storm_ids(:), storm_type);
 end
 end
 
-function report_flagged_storms(T, storm_ids)
+function report_flagged_storms(T, storm_ids, storm_type)
 flags = {
     'edge_start',        'no up-crossing before the peak, record start used'
     'edge_end',          'no down-crossing after the peak, record end used'
@@ -56,7 +58,7 @@ flagged = false(height(T), 1);
 for k = 1:size(flags, 1)
     flagged = flagged | T.(flags{k, 1});
 end
-fprintf('               Storm durations (compute_storm_duration = 1): %d of %d storms flagged\n', nnz(flagged), height(T));
+fprintf('               %s storm durations (compute_storm_duration = 1): %d of %d storms flagged\n', storm_type, nnz(flagged), height(T));
 for k = 1:size(flags, 1)
     ids = storm_ids(T.(flags{k, 1}));
     if ~isempty(ids)

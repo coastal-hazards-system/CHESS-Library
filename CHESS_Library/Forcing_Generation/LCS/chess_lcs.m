@@ -334,7 +334,7 @@ if ~hot_start
 end
 % Replicate Storm Sampling With Storm Timeseries
 if config.use_timeseries == 1
-    ts_dur = sampled_storm_durations(sampled_xc, storm.('XC').('Timeseries').('Default'), config.storm_duration, settings.compute_storm_duration);
+    ts_dur = sampled_storm_durations(sampled_xc, storm.('XC').('Timeseries').('Default'), config.storm_duration, settings.compute_storm_duration, 'XC');
     for lc=1:number_of_life_cycles
         % Build LCS Timeseries Dataset
         project_forcing.Timeseries.Default.('XC'){lc, 1} = timeseries_lc_creation(sampled_xc{lc, 1},...
@@ -392,7 +392,7 @@ if ~hot_start
 end
 % Replicate Storm Sampling With Storm Timeseries
 if config.use_timeseries == 1
-    ts_dur = sampled_storm_durations(sampled_tc, storm.('TC').('Timeseries').('Default'), config.storm_duration, settings.compute_storm_duration);
+    ts_dur = sampled_storm_durations(sampled_tc, storm.('TC').('Timeseries').('Default'), config.storm_duration, settings.compute_storm_duration, 'TC');
 end
 for lc=1:number_of_life_cycles
     if config.use_timeseries == 1
@@ -507,13 +507,13 @@ end
 end
 
 %% AUX FUNCTION: STORM DURATION PER STORM DATABASE ROW (TIMESERIES)
-function dur = sampled_storm_durations(sampled, storm_ts, storm_duration, compute_storm_duration)
+function dur = sampled_storm_durations(sampled, storm_ts, storm_duration, compute_storm_duration, storm_type)
 % Storm Duration [days] Of Every Sampled Storm (timeseries_storm_durations.m), Computed Once Per Storm ID And
 % Reused In Every Life Cycle The Storm Appears In. NaN For Database Storms Not Sampled
 dur = NaN(size(storm_ts, 1), 1);
 ids = unique(cell2mat(cellfun(@(x) x(:, 1), sampled(:), 'un', false)));
 rows = find(ismember(cell2mat(storm_ts(:, 1)), ids));
-dur(rows) = timeseries_storm_durations(storm_ts(rows, 2), storm_duration, compute_storm_duration, cell2mat(storm_ts(rows, 1)));
+dur(rows) = timeseries_storm_durations(storm_ts(rows, 2), storm_duration, compute_storm_duration, cell2mat(storm_ts(rows, 1)), storm_type);
 end
 
 %% AUX FUNCTION: TIMESERIES LC CREATOR

@@ -38,7 +38,7 @@ function [STWAVE_headers_location,Tp_special] = chs_wave_model_header_locator(ST
         STWAVE.Conv_Data.headers,'un',false));
     if isempty(headerIndx)
         % Throw Error
-        error('Hm0 not found.');
+        error('chs_wave_model_header_locator:hm0NotFound', 'Hm0 not found.');
     end
     % Define Posible Header Values
     headerName = {'Zero Moment Wave Height','Significant Wave Height','Significant Wave Height Total Sea'};
@@ -61,7 +61,7 @@ function [STWAVE_headers_location,Tp_special] = chs_wave_model_header_locator(ST
         % Unrecognized Header
         if isempty(headerIndx)
             % Throw Error
-            error('Tp not found.');
+            error('chs_wave_model_header_locator:tpNotFound', 'Tp not found.');
         end
         % Define Posible Header Values
         headerName = {'Mean Wave Period'};
@@ -82,7 +82,7 @@ function [STWAVE_headers_location,Tp_special] = chs_wave_model_header_locator(ST
     % Unrecognized Header
     if isempty(headerIndx)
         % Throw Error
-        error('Mean Wave Direction not found.');
+        error('chs_wave_model_header_locator:wdirNotFound', 'Mean Wave Direction not found.');
     end
     % Define Posible Header Values
     headerName = {'Mean Wave Direction Total Sea','Mean Wave Direction'};

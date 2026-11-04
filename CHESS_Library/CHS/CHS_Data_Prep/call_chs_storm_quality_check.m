@@ -161,7 +161,7 @@ switch storm_type
     case 'TC'% Tropical Cyclones
         if isempty(prob_mass.TC_Freq)
             % Something Went Wrong In PM Load
-            warning('Something went wrong loading probability masses..');
+            warning('call_chs_storm_quality_check:emptyProbMass', 'Something went wrong loading probability masses (empty result).');
         else
             % Probability Mass Rows By Storm ID (Param Column 1)
             pm_rm = ismember(prob_mass.Param(:, 1), removed_storms.Default);
