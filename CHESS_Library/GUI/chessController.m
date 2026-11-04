@@ -720,8 +720,7 @@ classdef chessController < handle
                 geo = obj.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
                 density = {erase(tbl{strcmp(tbl(:, 1), 'water_density'), 3}, {'[', ']'}), geo.water_density};
                 dbObj = obj.run_db();
-                unitLib = auxUIFunctions.update_unit_system(obj.project.unitsys);
-                offshore = {unitLib.unitSymbols.length, obj.offshore_elevation()};
+                offshore = {chess_units('length'), obj.offshore_elevation()};
                 if obj.project.alt_stage(pse_name, alt_name) == 2 && isnan(offshore{2})
                     offshore{2} = s1_note;
                 end

@@ -1197,14 +1197,14 @@ classdef chessProject < handle
                 case 'SI'
                     % Define Symmbols For Fundamental Units
                     unitSymbols.length = 'm';% m to ft
-                    unitSymbols.mass = 'Kg';% kg to lbm
-                    unitSymbols.density = 'Kg/m^3';% kg/m^3 to lbm/ft^3
+                    unitSymbols.mass = 'kg';% kg to lbm
+                    unitSymbols.density = 'kg/m^3';% kg/m^3 to lbm/ft^3
                     unitSymbols.force = 'N';% N to lbf
                     unitSymbols.pressure = 'Pa';% Pa to Psi
                 case 'Imperial'
                     unitSymbols.length = 'ft';% m to ft
                     unitSymbols.mass = 'lb';% kg to lbm
-                    unitSymbols.density = 'lb/m^3';% kg/m^3 to lbm/ft^3
+                    unitSymbols.density = 'lb/ft^3';% kg/m^3 to lbm/ft^3
                     unitSymbols.force = 'lb_f';% N to lbf
                     unitSymbols.pressure = 'Psi';% Pa to Psi
             end
@@ -1221,7 +1221,7 @@ classdef chessProject < handle
                 % Define Conversion Symbols
                 convUnitSymbols.length = 'ft';% m to ft
                 convUnitSymbols.mass = 'lb';% kg to lbm
-                convUnitSymbols.density = 'lb/m^3';% kg/m^3 to lbm/ft^3
+                convUnitSymbols.density = 'lb/ft^3';% kg/m^3 to lbm/ft^3
                 convUnitSymbols.force = 'lb_f';% N to lbf
                 convUnitSymbols.pressure = 'Psi';% Pa to Psi
             elseif strcmp(src_unitsys, 'Imperial') && strcmp(trg_unitsys, 'SI')
@@ -1234,8 +1234,8 @@ classdef chessProject < handle
 
                 % Define Conversion Symbols
                 convUnitSymbols.length = 'm';% m to ft
-                convUnitSymbols.mass = 'Kg';% kg to lbm
-                convUnitSymbols.density = 'Kg/m^3';% kg/m^3 to lbm/ft^3
+                convUnitSymbols.mass = 'kg';% kg to lbm
+                convUnitSymbols.density = 'kg/m^3';% kg/m^3 to lbm/ft^3
                 convUnitSymbols.force = 'N';% N to lbf
                 convUnitSymbols.pressure = 'Pa';% Pa to Psi
             elseif strcmp(src_unitsys, trg_unitsys)

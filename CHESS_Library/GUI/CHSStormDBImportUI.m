@@ -90,7 +90,6 @@ classdef CHSStormDBImportUI < handle
         dlgObj
         project_datum
         project_unitsys
-        unitLib
         db_for_ui
         chs_data_cache % CHS_Data Loaded From A .mat (src, CHS_Data)
         storm_data_input % storm & prob_mass .mat Import (src, storm, prob_mass, create_wlp, create_whp, BnU)
@@ -138,7 +137,6 @@ classdef CHSStormDBImportUI < handle
             obj.project_unitsys = project_unitsys;
             obj.create_wlp = false;
             obj.create_whp = false;
-            obj.unitLib = obj.auxLib.update_unit_system(project_unitsys);
         end
     end
 

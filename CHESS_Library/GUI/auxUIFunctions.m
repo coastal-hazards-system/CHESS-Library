@@ -1,5 +1,5 @@
 classdef auxUIFunctions < handle
-    % CHESS GUI Helpers: Path & Unit Utilities And Modal Dialogs Centered On A Parent Window (Answer In dialog_answer)
+    % CHESS GUI Helpers: Path Utilities And Modal Dialogs Centered On A Parent Window (Answer In dialog_answer)
 
     properties (Access=public)
         parentFig % Window The Dialogs Center On (set_parent); Empty: Primary Screen
@@ -70,37 +70,6 @@ classdef auxUIFunctions < handle
                     end
                     parts = [{[name, ext]}, parts];
                 end
-            end
-        end
-
-        function unitLib = update_unit_system(unit_system)
-            switch unit_system
-                case 'SI'
-                    % Define Conversion Factors For Fundamental Units
-                    unitLib.conversionCoeffs.length = 3.2808399;% m to ft
-                    unitLib.conversionCoeffs.mass = 2.20462262;% kg to lbm
-                    unitLib.conversionCoeffs.density = unitLib.conversionCoeffs.mass/(unitLib.conversionCoeffs.length^3);% kg/m^3 to lbm/ft^3
-                    unitLib.conversionCoeffs.force = 0.22480894;% N to lbf
-                    unitLib.conversionCoeffs.pressure = 0.00014504;% Pa to Psi
-                    % Define Symmbols For Fundamental Units
-                    unitLib.unitSymbols.length = 'm';% m to ft
-                    unitLib.unitSymbols.mass = 'Kg';% kg to lbm
-                    unitLib.unitSymbols.density = 'Kg/m^3';% kg/m^3 to lbm/ft^3
-                    unitLib.unitSymbols.force = 'N';% N to lbf
-                    unitLib.unitSymbols.pressure = 'Pa';% Pa to Psi
-                case 'Imperial'
-                    % Initialize Unit Conversion Factors
-                    unitLib.conversionCoeffs.length = 1/3.2808399;% ft to m
-                    unitLib.conversionCoeffs.mass = 1/2.20462262;% lbm to Kg
-                    unitLib.conversionCoeffs.density = unitLib.conversionCoeffs.mass/(unitLib.conversionCoeffs.length^3);% lbm/ft^3 to kg/m^3
-                    unitLib.conversionCoeffs.force = 1/0.22480894;% lbf to N
-                    unitLib.conversionCoeffs.pressure = 1/0.00014504;% Psi to Pa
-                    % Define Symmbols For Fundamental Units
-                    unitLib.unitSymbols.length = 'ft';% m to ft
-                    unitLib.unitSymbols.mass = 'lb';% kg to lbm
-                    unitLib.unitSymbols.density = 'lb/m^3';% kg/m^3 to lbm/ft^3
-                    unitLib.unitSymbols.force = 'lb_f';% N to lbf
-                    unitLib.unitSymbols.pressure = 'Psi';% Pa to Psi
             end
         end
     end

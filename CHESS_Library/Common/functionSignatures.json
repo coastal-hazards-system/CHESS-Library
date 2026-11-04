@@ -1,5 +1,13 @@
 {
   "_schemaVersion": "1.0.0",
+  "chess_units": {
+    "inputs": [
+      {"name": "unit_kind", "kind": "ordered", "type": ["char", "choices={'length','mass','density','force','pressure','time','angle','velocity','discharge_per_length','volume_per_length','force_per_length','dimensionless'}"]}
+    ],
+    "outputs": [
+      {"name": "out", "type": ["char"]}
+    ]
+  },
   "discrete_standard_normal_scores": {
     "inputs": [
       {"name": "storm_type", "kind": "required", "type": ["char", "choices={'XC','TC'}"]}

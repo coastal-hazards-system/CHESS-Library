@@ -14,7 +14,6 @@ classdef aux_methods
     %     display_no_data    - red "No data available" note centred on axes
     %     pad_limits         - axis limits = data range plus a buffer
     %     tern               - ternary helper (a if cond, else b)
-    %     build_unit_library - unit factors and symbols for 'SI' or 'Imperial'
     %
     %   Tier: internal
     %
@@ -293,51 +292,5 @@ classdef aux_methods
                 out = b;
             end
         end
-
-        function unitLib = build_unit_library(unit_system)
-            % build_unit_library  Unit conversion factors and symbols of a unit system.
-            %   unitLib = aux_methods.build_unit_library(unit_system)
-            %
-            %   Inputs:
-            %     unit_system - 'SI' or 'Imperial' (anything else errors)
-            %   Outputs:
-            %     unitLib - struct with conversionCoeffs (length, mass,
-            %               density, force, pressure: factors to the other
-            %               system) and unitSymbols (the same fields: symbols
-            %               of unit_system); CHESSPlotsBase uses
-            %               unitSymbols.length in axis labels
-
-            switch unit_system
-                case 'SI'
-                    % Define Conversion Factors For Fundamental Units
-                    unitLib.conversionCoeffs.length = 3.2808399;% m to ft
-                    unitLib.conversionCoeffs.mass = 2.20462262;% kg to lbm
-                    unitLib.conversionCoeffs.density = unitLib.conversionCoeffs.mass/(unitLib.conversionCoeffs.length^3);% kg/m^3 to lbm/ft^3
-                    unitLib.conversionCoeffs.force = 0.22480894;% N to lbf
-                    unitLib.conversionCoeffs.pressure = 0.00014504;% Pa to Psi
-                    % Define Symmbols For Fundamental Units
-                    unitLib.unitSymbols.length = 'm';% m to ft
-                    unitLib.unitSymbols.mass = 'Kg';% kg to lbm
-                    unitLib.unitSymbols.density = 'Kg/m^3';% kg/m^3 to lbm/ft^3
-                    unitLib.unitSymbols.force = 'N';% N to lbf
-                    unitLib.unitSymbols.pressure = 'Pa';% Pa to Psi
-                case 'Imperial'
-                    % Initialize Unit Conversion Factors
-                    unitLib.conversionCoeffs.length = 1/3.2808399;% ft to m
-                    unitLib.conversionCoeffs.mass = 1/2.20462262;% lbm to Kg
-                    unitLib.conversionCoeffs.density = unitLib.conversionCoeffs.mass/(unitLib.conversionCoeffs.length^3);% lbm/ft^3 to kg/m^3
-                    unitLib.conversionCoeffs.force = 1/0.22480894;% lbf to N
-                    unitLib.conversionCoeffs.pressure = 1/0.00014504;% Psi to Pa
-                    % Define Symmbols For Fundamental Units
-                    unitLib.unitSymbols.length = 'ft';% m to ft
-                    unitLib.unitSymbols.mass = 'lb';% kg to lbm
-                    unitLib.unitSymbols.density = 'lb/m^3';% kg/m^3 to lbm/ft^3
-                    unitLib.unitSymbols.force = 'lb_f';% N to lbf
-                    unitLib.unitSymbols.pressure = 'Psi';% Pa to Psi
-                otherwise 
-                    error('Unsupported unit system. Please use ''SI'' or ''Imperial''');
-            end
-        end
-    
     end
 end

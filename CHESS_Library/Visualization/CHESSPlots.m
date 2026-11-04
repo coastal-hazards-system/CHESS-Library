@@ -39,9 +39,8 @@ function sp = CHESSPlots(config, Resp, storm, project_forcing, dsw, structure, b
 %                       (struc_type, elevations, slopes, berm geometry)
 %     base_fnt        - base font size [pt] (titles +2, ticks -2); the
 %                       GUI passes app.plotFontSize (12)
-%     unit_system     - 'SI' or 'Imperial': unit symbols written in axis
-%                       labels (aux_methods.build_unit_library); the data
-%                       are not converted
+%     unit_system     - 'SI' or 'Imperial', accepted but unused: axis
+%                       labels are always SI (units from chess_units)
 %   Outputs:
 %     sp - pros_methods, det_methods or lcs_methods object
 %

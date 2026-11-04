@@ -8,8 +8,8 @@ classdef CHESSPlotsBase
     %       plots (the GUI does so for pse_transect_plot and
     %       storm_data_space_plot, with [] for the unused inputs).
     %
-    %   Inputs (stored as properties of the same names; unit_system is
-    %   stored as unitLib):
+    %   Inputs (stored as properties of the same names, except
+    %   unit_system, which is only checked):
     %     config          - run configuration struct
     %     Resp            - saved structure responses of the run, or []
     %     storm           - storm database variable "storm", or []
@@ -18,9 +18,8 @@ classdef CHESSPlotsBase
     %                       ("prob_mass": TC_Freq, TC_SRR, smpl1-smpl3), or []
     %     structure       - PSE structure struct, or []
     %     base_fnt        - base font size [pt] (titles +2, ticks -2)
-    %     unit_system     - 'SI' or 'Imperial': unit symbols of the axis
-    %                       labels (aux_methods.build_unit_library); the
-    %                       data are not converted
+    %     unit_system     - 'SI' or 'Imperial', accepted but unused: axis
+    %                       labels are always SI (units from chess_units)
     %   See CHESSPlots for the details of each input.
     %   ds_query (dataset query, most methods): struct with storm_type
     %   ('XC', 'TC' or 'CC'), data_type ('Peaks' or 'Timeseries') and
@@ -51,16 +50,15 @@ classdef CHESSPlotsBase
         project_forcing
         dsw
         structure
-        unitLib
     end
 
     methods (Access=public)
         function self = CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
             % CHESSPlotsBase  Create the base plotting object (workflow plots: use CHESSPlots).
             %   self = CHESSPlotsBase(config, Resp, storm, project_forcing, dsw, structure, base_fnt, unit_system)
-            %       stores the inputs as properties and unit_system as
-            %       unitLib (aux_methods.build_unit_library). The inputs
-            %       are documented in CHESSPlots.
+            %       stores the inputs as properties; unit_system is
+            %       accepted but unused (labels are always SI).
+            %       The inputs are documented in CHESSPlots.
 
             self.base_fnt        = base_fnt;
             self.Resp            = Resp;
@@ -69,7 +67,6 @@ classdef CHESSPlotsBase
             self.dsw             = dsw;
             self.config          = config;
             self.structure       = structure;
-            self.unitLib         = aux_methods.build_unit_library(unit_system);
         end
     end
 
@@ -82,7 +79,7 @@ classdef CHESSPlotsBase
             %       floodwall rectangle) on the offshore sand profile, with
             %       the toe berm when config.add_toe_berm == 1. Elevations
             %       are signed (study datum, negative below zero); axis
-            %       labels use the unit symbols of unit_system.
+            %       labels use the SI length symbol (chess_units).
             %
             %   Inputs:
             %     ax - axes, figure or grid layout (aux_methods.initiate_axes)
@@ -100,8 +97,8 @@ classdef CHESSPlotsBase
             % Sand Thickness & Space Above Crest As Fractions Of Structure Height
             sand_ratio  = 0.2;
             top_ratio   = 0.1;
-            y_label     = ['Elevation [' self.unitLib.unitSymbols.length ', ' self.config.project_datum ']'];
-            x_label     = ['X Distance [' self.unitLib.unitSymbols.length ']'];
+            y_label     = ['Elevation [' chess_units('length') ', ' self.config.project_datum ']'];
+            x_label     = ['X Distance [' chess_units('length') ']'];
             title_label = ['PSE ID: ' self.config.struc_id ' | Alternative ID: ' self.config.case_name];
             title_label = strrep(title_label, '_', ' ');
             add_berm = self.config.add_toe_berm;

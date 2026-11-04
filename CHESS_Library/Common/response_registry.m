@@ -66,11 +66,12 @@ function out = response_registry(options)
 %           display_name   - plot legend / dropdown label (LaTeX), char
 %           axis_label     - axis label; '{datum}' is replaced by
 %                            config.project_datum, char
-%           unit_label     - unit in SI ('' if dimensionless), char
+%           unit_label     - SI symbol of unit_kind, chess_units(unit_kind)
+%                            ('' if dimensionless), char
 %           unit_kind      - dimension (length, time, pressure,
 %                            discharge_per_length, volume_per_length, angle,
 %                            velocity, force_per_length, dimensionless);
-%                            pairs with the unit conversion libraries, char
+%                            a chess_units kind, char
 %           log_scale      - 1 to plot on a log axis [-], double
 %           structure_types - structure types it applies to [-], double
 %           data_types     - {'Peaks','Timeseries'} or {'Timeseries'}, cell
@@ -97,7 +98,7 @@ function out = response_registry(options)
 %
 %   Tier: internal
 %
-%   See also response_library_headers, pros_forcing_curves,
+%   See also chess_units, response_library_headers, pros_forcing_curves,
 %   compute_structure_response, finalize_config.
 %
 %   Developed by: Fabian A. Garcia Moreno ERDC-CHL
@@ -163,8 +164,6 @@ end
 end
 
 function registry = build_registry()
-discharge = '$m^3$/s per m';
-volume = '$m^3$ per m';
 mean_damage = 'Mean Cumulative Damage $\bar{S}$';
 yearly_max_damage = 'Yearly Mean Maximum Cumulative Damage ($\bar{\bar{S}}_{max}$)';
 fitted = {'per_event', true, 'fitted_by_pros_rb', true};
@@ -183,7 +182,7 @@ rows = {
         'jpm_uncertainty_treatment', 'combined', 'pros_forcing_curve', true)
     registry_row('Hm0_toe', 'forcing', 'display_name', '$H_{m_{0}}$ (at toe)', ...
         'relative_uncertainty', 'chs_hm0_u_r', 'jpm_uncertainty_treatment', 'relative', 'pros_forcing_curve', true)
-    registry_row('Tp', 'forcing', 'display_name', '$T_p$', 'unit_label', 's', 'unit_kind', 'time', ...
+    registry_row('Tp', 'forcing', 'display_name', '$T_p$', 'unit_kind', 'time', ...
         'relative_uncertainty', 'chs_hm0_u_r', 'relative_uncertainty_rule', 'tp_from_hm0', ...
         'jpm_uncertainty_treatment', 'relative', 'pros_forcing_curve', true)
     registry_row('h', 'forcing', 'display_name', '$h$')
@@ -202,50 +201,50 @@ rows = {
     registry_row('Dn50_Lee', 'response', fitted{:}, 'compute_switch', 'compute_dn50_leeside', 'structure_types', 3, ...
         'display_name', '$D_{n_{50}}$ Lee', 'relative_uncertainty', 'dn50_u', 'jpm_uncertainty_treatment', 'relative')
     registry_row('p1', 'response', fitted{:}, 'compute_switch', 'compute_p1', 'structure_types', 2, ...
-        'display_name', '$P_1$', 'unit_label', 'Pa', 'unit_kind', 'pressure', ...
+        'display_name', '$P_1$', 'unit_kind', 'pressure', ...
         'relative_uncertainty', 'p1_u', 'jpm_uncertainty_treatment', 'relative')
     registry_row('q', 'response', overtopping{:}, 'compute_switch', 'compute_q', ...
-        'display_name', 'q', 'unit_label', discharge, 'unit_kind', 'discharge_per_length')
+        'display_name', 'q', 'unit_kind', 'discharge_per_length')
     registry_row('q_wave_ot', 'response', overtopping{:}, 'compute_switch', 'compute_q', ...
-        'display_name', '$q_{overtop}$', 'unit_label', discharge, 'unit_kind', 'discharge_per_length')
+        'display_name', '$q_{overtop}$', 'unit_kind', 'discharge_per_length')
     registry_row('Q_vol', 'response', overtopping{:}, 'compute_switch', 'compute_q_vol', 'data_types', {'Timeseries'}, ...
-        'display_name', 'Q', 'unit_label', volume, 'unit_kind', 'volume_per_length')
+        'display_name', 'Q', 'unit_kind', 'volume_per_length')
     registry_row('Q_vol_wave_ot', 'response', overtopping{:}, 'compute_switch', 'compute_q_vol', 'data_types', {'Timeseries'}, ...
-        'display_name', '$Q_{overtop}$', 'unit_label', volume, 'unit_kind', 'volume_per_length')
+        'display_name', '$Q_{overtop}$', 'unit_kind', 'volume_per_length')
     registry_row('DamDepthElev', 'response', fitted{:}, 'compute_switch', 'compute_damaging_depth', ...
         'display_name', 'Damaging Depth Elevation', 'relative_uncertainty', 'chs_swl_u_a', ...
         'jpm_uncertainty_treatment', 'relative', 'datum_elevation', true)
     registry_row('DamDepth', 'response', fitted{:}, 'compute_switch', 'compute_damaging_depth', ...
         'display_name', 'Damaging Depth', 'relative_uncertainty', 'chs_swl_u_a', 'jpm_uncertainty_treatment', 'relative')
     registry_row('p2dyn', 'response', secondary{:}, 'compute_switch', 'compute_p2_p3', ...
-        'display_name', '$P_2$ (Dynamic)', 'unit_label', 'Pa', 'unit_kind', 'pressure')
+        'display_name', '$P_2$ (Dynamic)', 'unit_kind', 'pressure')
     registry_row('p2sta', 'response', secondary{:}, 'compute_switch', 'compute_p2_p3', ...
-        'display_name', '$P_2$ (Static)', 'unit_label', 'Pa', 'unit_kind', 'pressure')
+        'display_name', '$P_2$ (Static)', 'unit_kind', 'pressure')
     registry_row('p2total', 'response', secondary{:}, 'compute_switch', 'compute_p2_p3', ...
-        'display_name', '$P_2$ (Total)', 'unit_label', 'Pa', 'unit_kind', 'pressure')
+        'display_name', '$P_2$ (Total)', 'unit_kind', 'pressure')
     registry_row('p3dyn', 'response', secondary{:}, 'compute_switch', 'compute_p2_p3', ...
-        'display_name', '$P_3$ (Dynamic)', 'unit_label', 'Pa', 'unit_kind', 'pressure')
+        'display_name', '$P_3$ (Dynamic)', 'unit_kind', 'pressure')
     registry_row('p3sta', 'response', secondary{:}, 'compute_switch', 'compute_p2_p3', ...
-        'display_name', '$P_3$ (Static)', 'unit_label', 'Pa', 'unit_kind', 'pressure')
+        'display_name', '$P_3$ (Static)', 'unit_kind', 'pressure')
     registry_row('p3total', 'response', secondary{:}, 'compute_switch', 'compute_p2_p3', ...
-        'display_name', '$P_3$ (Total)', 'unit_label', 'Pa', 'unit_kind', 'pressure')
+        'display_name', '$P_3$ (Total)', 'unit_kind', 'pressure')
     registry_row('pu', 'response', secondary{:}, 'compute_switch', 'compute_p2_p3', ...
-        'display_name', '$P_u$', 'unit_label', 'Pa', 'unit_kind', 'pressure')
+        'display_name', '$P_u$', 'unit_kind', 'pressure')
     registry_row('X_low', 'response', secondary{:}, 'compute_switch', 'compute_nappe', 'display_name', '$X_{low}$')
     registry_row('X_up', 'response', secondary{:}, 'compute_switch', 'compute_nappe', 'display_name', '$X_{up}$')
     registry_row('X_c_surge', 'response', secondary{:}, 'compute_switch', 'compute_nappe', 'display_name', '$X_c$ (surge)')
     registry_row('Bx', 'response', secondary{:}, 'compute_switch', 'compute_nappe', 'display_name', '$B_x$')
     registry_row('theta_low', 'response', secondary{:}, 'compute_switch', 'compute_nappe', ...
-        'display_name', '$\theta_{low}$', 'unit_label', 'deg', 'unit_kind', 'angle')
+        'display_name', '$\theta_{low}$', 'unit_kind', 'angle')
     registry_row('theta_up', 'response', secondary{:}, 'compute_switch', 'compute_nappe', ...
-        'display_name', '$\theta_{up}$', 'unit_label', 'deg', 'unit_kind', 'angle')
+        'display_name', '$\theta_{up}$', 'unit_kind', 'angle')
     registry_row('theta_center', 'response', secondary{:}, 'compute_switch', 'compute_nappe', ...
-        'display_name', '$\theta_c$', 'unit_label', 'deg', 'unit_kind', 'angle')
+        'display_name', '$\theta_c$', 'unit_kind', 'angle')
     registry_row('Bjet', 'response', secondary{:}, 'compute_switch', 'compute_nappe', 'display_name', '$B_{jet}$')
     registry_row('Vjet', 'response', secondary{:}, 'compute_switch', 'compute_nappe', ...
-        'display_name', '$V_{jet}$', 'unit_label', 'm/s', 'unit_kind', 'velocity')
+        'display_name', '$V_{jet}$', 'unit_kind', 'velocity')
     registry_row('Fjet', 'response', secondary{:}, 'compute_switch', 'compute_nappe', ...
-        'display_name', '$F_{jet}$', 'unit_label', 'N/m', 'unit_kind', 'force_per_length')
+        'display_name', '$F_{jet}$', 'unit_kind', 'force_per_length')
     % Armor damage (seaside before leeside, no repairs before with repairs)
     registry_row('S_seaside_no_repairs', 'armor_damage', armor{:}, 'display_name', '$\bar{S}_{no\ repairs}$ (seaside)', ...
         'axis_label', mean_damage, 'per_event', true, 'armor_side', 'seaside', 'with_repairs', false, 'damage_summary', 'series')
@@ -263,9 +262,10 @@ registry = vertcat(rows{:});
 end
 
 function row = registry_row(name, kind, varargin)
-% Row defaults overridden by the field-value pairs; axis_label defaults to 'display_name [unit_label]'.
+% Row defaults overridden by the field-value pairs; unit_label is chess_units(unit_kind); axis_label defaults to
+% 'display_name [unit_label]'.
 row = struct('name', name, 'kind', kind, 'compute_switch', '', 'display_name', '', 'axis_label', '', ...
-    'unit_label', 'm', 'unit_kind', 'length', 'log_scale', 0, 'structure_types', [1 2 3], ...
+    'unit_label', '', 'unit_kind', 'length', 'log_scale', 0, 'structure_types', [1 2 3], ...
     'data_types', {{'Peaks', 'Timeseries'}}, 'datum_elevation', false, 'pros_forcing_curve', false, ...
     'fitted_by_pros_rb', false, 'pros_secondary_eb1', false, 'cc_rule', 'combine', ...
     'cc_confidence_limit_method', 'tropical_only', 'absolute_uncertainty', '', 'relative_uncertainty', '', ...
@@ -274,9 +274,7 @@ row = struct('name', name, 'kind', kind, 'compute_switch', '', 'display_name', '
 for k = 1:2:numel(varargin)
     row.(varargin{k}) = varargin{k + 1};
 end
-if strcmp(row.unit_kind, 'dimensionless')
-    row.unit_label = '';
-end
+row.unit_label = chess_units(row.unit_kind);
 if isempty(row.axis_label)
     row.axis_label = [row.display_name ' [' row.unit_label ']'];
 end
