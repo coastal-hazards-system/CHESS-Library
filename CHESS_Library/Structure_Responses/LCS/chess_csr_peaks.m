@@ -107,12 +107,17 @@ dw = config.water_density;
 prc = [cellfun(@str2double,strsplit(config.project_CLs(2:end-1),{' '}))];
 
 %% GRAB STRUCTURAL PARAMETERS FROM "structure"
-% Grab Fieldnames
-sFields = fieldnames(structure);
-% Extract Strcutural Paramaters From Structure
-for ii = 1:length(sFields)
-    eval([sFields{ii} ' = structure.(sFields{ii});']);
-end
+armor_delta = structure.armor_delta;
+seaside_mass = structure.seaside_mass;
+leeside_mass = structure.leeside_mass;
+seaside_slope = structure.seaside_slope;
+leeside_slope = structure.leeside_slope;
+cem_P = structure.cem_P;
+toe_elevation = structure.toe_elevation;
+crest_elevation = structure.crest_elevation;
+crest_width = structure.crest_width;
+seaside_design_S = structure.seaside_design_S;
+leeside_design_S = structure.leeside_design_S;
 % Deterministic value of zero damage level seaside
 S_ss = seaside_design_S;
 % Deterministic value of zero damage level leeside
@@ -258,9 +263,9 @@ for lcS=1:length(LC_MCSimOUT)
     % Negative Freeboard Failsafe
     Rc_ls(Rc_ls<0.6) = 0;
     % Compute 1% Overtopping Velocity
-    u1p(~Rc_ls<0.6) = sqrt(g*Hm0(~Rc_ls<0.6)).*(1.7*Yfc(~Rc_ls<0.6).^0.5).*...
-        ((z1p(~Rc_ls<0.6)-Rc_ls(~Rc_ls<0.6))./(Yfc(~Rc_ls<0.6).*Hm0(~Rc_ls<0.6))).^0.5...
-        ./(1+0.1*crest_width./Hm0(~Rc_ls<0.6));
+    u1p(~(Rc_ls<0.6)) = sqrt(g*Hm0(~(Rc_ls<0.6))).*(1.7*Yfc(~(Rc_ls<0.6)).^0.5).*...
+        ((z1p(~(Rc_ls<0.6))-Rc_ls(~(Rc_ls<0.6)))./(Yfc(~(Rc_ls<0.6)).*Hm0(~(Rc_ls<0.6)))).^0.5...
+        ./(1+0.1*crest_width./Hm0(~(Rc_ls<0.6)));
     % Compute Forcing Component
     F_ls = k_ls2.^(1/6).*Nz.^(1/12).*(u1p.*Tm10./k_ls1);
     % Leeside Stability Performance

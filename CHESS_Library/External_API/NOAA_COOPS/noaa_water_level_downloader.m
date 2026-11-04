@@ -7,8 +7,7 @@ function [Sdata, notFound] = noaa_water_level_downloader(idList, StationList, re
 %
 %   Downloads NOAA CO-OPS measured water levels (and, next to 6-minute,
 %   hourly and high/low data, harmonic tide predictions) for a list of
-%   stations. Replaces WL_downloader_V2.m
-%   (Retired\NOAA_Water_Level_Downloader\).
+%   stations. Replaces WL_downloader_V2.m.
 %   One Sdata element per (station, product), stations in idList order.
 %   Prints one status line per element.
 %     Product segments: the StationList segments whose WL_products equals

@@ -46,7 +46,7 @@ function [project_forcing, config] = adjust_project_forcing(config, structure, p
 tide_file = config.tide_file;
 % Define Use Tide Switch
 use_tides = config.apply_random_tides;
-% Define Project SWL ADjustment
+% Define Project SWL Adjustment
 swl_slr = config.swl_slr;
 % Depth Limitation Switch
 apply_DL = config.apply_depth_limitation;
@@ -99,11 +99,11 @@ Hm0_toe = adjust_wave_height(Hm0, Tp, SWL, toe_elev, apply_DL, g);
 % Store Modifications
 switch config.workflow
     case  {1, 2, 4}
-        project_forcing.SWL = SWL; % Get SWL From LC
+        project_forcing.SWL = SWL; % Adjusted SWL
         project_forcing.Hm0_toe = Hm0_toe;
     case {3}
         for jj = 1:length(SWL)
-            project_forcing{jj}(:, C.SWL) = SWL{jj}; % Get SWL From LC
+            project_forcing{jj}(:, C.SWL) = SWL{jj}; % Adjusted SWL
             project_forcing{jj}(:, C.Hm0_toe) = Hm0_toe{jj};
         end
 end

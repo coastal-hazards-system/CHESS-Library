@@ -1,4 +1,4 @@
-function [cData] = chs_h5_converter(Filein) %#ok<INUSL>
+function [cData] = chs_h5_converter(Filein)
 % chs_h5_converter  Read a Coastal Hazards System (CHS) .h5 file into MATLAB.
 %   cData = chs_h5_converter(Filein)
 %

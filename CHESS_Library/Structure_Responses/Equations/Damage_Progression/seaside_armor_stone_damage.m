@@ -69,7 +69,7 @@ if (Hsig>0.1) && (depth>0)
     % Define Water Column
     h = depth;
     % Estimate Wave Number
-    [km,kmest,error] = wavnum1_VG(Tm,h,grav);
+    [km,~,~] = wavnum1_VG(Tm,h,grav);
     % Compute Wave Length
     Lm = 2*pi/km;
     % Compute Wave Steepness

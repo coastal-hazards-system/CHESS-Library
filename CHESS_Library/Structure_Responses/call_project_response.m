@@ -67,7 +67,6 @@ function [Resp] = call_project_response(config, project_forcing, structure)
     %% ================= CONFIGURATION & VARIABLE MAPPING =================
     % Modify these variables to change how fields are read from 'config'
     workflow       = config.workflow;
-    storm_sampling = config.storm_sampling;
     use_peaks      = config.use_peaks;
     use_timeseries = config.use_timeseries;
     use_whp        = config.create_whp;

@@ -105,6 +105,9 @@ RELEVANT PUBLICATIONS:
 %% DEFINE INPUTS
 % Simulation flag, internal. Stops two 'while' loops below to ensure sampled
 % storms match sampling rate.
+% Rate-matched tolerance, used only with the hidden option lcs_restrict_sampling_rate:
+% the sampled storm rate must match the storm rate within 1/simulation_years
+% (+/- 1 storm per life cycle); the 1e5-year case uses 1e-4 (+/- 10 storms).
 if simulation_years == 1e5
     SIM_Flag = 1e-4;
 else

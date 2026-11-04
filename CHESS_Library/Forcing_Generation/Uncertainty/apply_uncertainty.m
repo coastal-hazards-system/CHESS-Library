@@ -49,13 +49,13 @@ SWL = project_forcing.('SWL');
 Hm0 = project_forcing.('Hm0_offshore');
 % Wave Peak Period
 Tp = project_forcing.('Tp');
-% Copy Normal Distirbution Accross All Events 
+% Copy Normal Distribution Accross All Events 
 z_scores_per_storm = repmat({z_scores}, size(SWL));
 % Lake Specific Level (Uncertainty Needs To Be Computed For Surge Not TWL)
 lake_level = mean_lake_level(config);
 
 %% APPLY SWL UNCERTAINTY FOR STRUCTURE RESPONSE COMPUTATIONS
-% Apply uncertainty using a random normal distribution
+% Apply uncertainty using the discrete standard normal scores (z_scores)
 % ------------------ SWL ------------------
 SWL = cellfun(@(x, y) x - lake_level, SWL ,'un',false);
 SWL = cellfun(@(x, y) pcha_forcing_uncertainty(x, swl_u_a, swl_u_r, y),SWL, z_scores_per_storm,'un',false);
@@ -67,7 +67,7 @@ no_waves = cellfun(@(x) x == 0, Hm0, 'un', false);
 Hm0_w_Uncert = cellfun(@(x) Hm0_replace(1,x), Hm0, 'un', false);
 % Apply Uncertainty
 Hm0_w_Uncert = cellfun(@(x, y) pcha_forcing_uncertainty(x, hm0_u_a, hm0_u_r, y), Hm0_w_Uncert, z_scores_per_storm, 'un', false);
-% Check For Hm0 < 0.01
+% Replace Hm0 < 0 With 0.01
 Hm0  = cellfun(@(x) Hm0_replace(2,x), Hm0_w_Uncert, 'un', false);
 % Storms Without Waves Stay At Hm0 = 0: Wave Responses NaN, Surge Responses (e.g. Damaging Depth) Still Computed
 Hm0  = cellfun(@zero_where, Hm0, no_waves, 'un', false);
@@ -88,7 +88,7 @@ project_forcing.Tp = Tp;
         switch cond
             case 1 % Hm0 == 0
                 Hm0(Hm0 == 0) =  NaN;
-            case 2 % Hm0 < 0.1
+            case 2 % Hm0 < 0 -> 0.01
                 Hm0(Hm0 < 0) =  0.01;
         end
     end
