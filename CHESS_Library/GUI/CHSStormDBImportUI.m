@@ -1336,9 +1336,9 @@ classdef CHSStormDBImportUI < handle
                 st_types = intersect({'TC','XC'}, fieldnames(data.storm), 'stable');
                 has_dtype = @(dtype) ~isempty(st_types) && all(cellfun(@(x) isfield(data.storm.(x), dtype), st_types));
                 use = struct('use_peaks', +has_dtype('Peaks'), 'use_timeseries', +has_dtype('Timeseries'));
-                storm_validation(use, data.storm);
+                data.storm = storm_validation(use, data.storm);
                 if isfield(data.storm, 'TC')
-                    prob_mass_validation(use, data.prob_mass, data.storm);
+                    data.prob_mass = prob_mass_validation(use, data.prob_mass, data.storm);
                 end
             catch me
                 obj.auxLib.error_dlgbox(me.message);

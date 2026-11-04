@@ -215,10 +215,10 @@ if ~chess_storm && strcmp(data_case, 'storm_data')
     % Load storm & prob_mass From Provided .mat
     load(config.chs_zip, 'storm', 'prob_mass');
     % Validate "storm" dataset
-    storm_validation(config, storm);
+    storm = storm_validation(config, storm);
     % Validate prob_mass Based On Storm Content
     if isfield(storm, 'TC')
-        prob_mass_validation(config, prob_mass, storm);
+        prob_mass = prob_mass_validation(config, prob_mass, storm);
     end
     % This Run's Request Must Be In The Provided Storm Data (No CHS Files To Rebuild From)
     req = run_request(config);

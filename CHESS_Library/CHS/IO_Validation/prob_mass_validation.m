@@ -1,15 +1,33 @@
-function prob_mass_validation(config, prob_mass, storm)
+function prob_mass = prob_mass_validation(config, prob_mass, storm)
 % prob_mass_validation  Check the TC probability masses of a user storm .mat.
-%   prob_mass_validation(config, prob_mass, storm)
+%   prob_mass = prob_mass_validation(config, prob_mass, storm)
 %
 %   Checks the prob_mass variable of a user storm .mat (storm_data
-%   input); called by call_input_parser and the GUI storm database wizard
-%   when the storm data has TC storms. Errors (message only, no error ID)
-%   when prob_mass does not hold the six fields below, when TC_SRR has
-%   neither 1 row nor 4 columns, or when smpl1, smpl2 and smpl3 are all
-%   empty. Prints a warning when TotalFreq differs from sum(TC_Freq) or
-%   the TC_SRR total from the sum of the three bin rates. The TC_Freq
-%   length is not checked against the TC storm count of storm.
+%   input) against the TC storms of storm and returns it with the missing
+%   intensity bins added; called by call_input_parser and the GUI storm
+%   database wizard when the storm data has TC storms, after
+%   storm_validation. Errors when:
+%     - TC_SRR, TC_Freq or TotalFreq is missing
+%       (prob_mass_validation:missingField);
+%     - TC_SRR is not 1 x 4 (prob_mass_validation:tcSrrSize);
+%     - TC_Freq is not N x 1, N = rows of every TC Default dataset of
+%       storm (prob_mass_validation:tcFreqSize);
+%     - TotalFreq is not a scalar (prob_mass_validation:totalFreqSize);
+%     - Param is present and its row count differs from numel(TC_Freq)
+%       (prob_mass_validation:paramRows);
+%     - smpl1, smpl2 or smpl3 is not a column vector
+%       (prob_mass_validation:smplShape) or holds IDs that are not TC
+%       storm IDs of storm (prob_mass_validation:smplIds);
+%     - smpl1, smpl2 and smpl3 are all empty
+%       (prob_mass_validation:noBinStorms).
+%   A missing smpl1, smpl2 or smpl3 is added as zeros(0,1) and an empty
+%   bin is returned as zeros(0,1). Warnings: an empty bin with a TC_SRR
+%   rate > 0 (prob_mass_validation:emptyBin; sample_tc_storm redraws an
+%   empty bin, so its share of the rate goes to the other bins),
+%   TotalFreq differing from sum(TC_Freq)
+%   (prob_mass_validation:totalFreqMismatch) and the TC_SRR total
+%   differing from the sum of the three bin rates
+%   (prob_mass_validation:srrTotalMismatch).
 %
 %   Inputs:
 %     config    - CHESS configuration, 1x1 struct; not read
@@ -23,54 +41,69 @@ function prob_mass_validation(config, prob_mass, storm)
 %                               masses) [storms/yr], N x 1 double
 %                   TotalFreq - total TC storm suite frequency,
 %                               sum(TC_Freq) [storms/yr], scalar double
-%                   smpl1, smpl2, smpl3 - storm IDs of the low, mid and
-%                               high intensity bins (IDs of the storm
-%                               variable), N x 1 double
-%     storm     - user storm database, struct; not read
+%                   Param     - optional; TC storm parameters, one row per
+%                               storm, N x number_of_parameters double
+%                   smpl1, smpl2, smpl3 - optional; storm IDs of the low,
+%                               mid and high intensity bins (TC storm IDs
+%                               of storm), column double
+%     storm     - user storm database (storm_validation output), struct;
+%                 storm.TC.Peaks.Default and storm.TC.Timeseries.Default
+%                 are read (row counts, storm IDs)
 %   Outputs:
-%     none (errors or prints a warning)
+%     prob_mass - prob_mass with smpl1, smpl2 and smpl3 as column vectors
+%                 (missing or empty bins as zeros(0,1)), struct
 %
 %   Tier: internal
 %
-%   See also storm_validation, storm_db_check, call_input_parser.
+%   See also storm_validation, storm_db_check, call_input_parser,
+%   sample_tc_storm.
 
-    % Define Intensity Bins
-    intensity_bins = {'smpl1','smpl2','smpl3'}; % low, mid, high
-% Scan Provided PM File Fields
-pm_fields = fieldnames(prob_mass);
-% Verify How Many Fields Are Found
-if sum(contains(pm_fields, {'TC_SRR', 'TC_Freq', 'TotalFreq', 'smpl1', 'smpl2', 'smpl3'})) ~= 6
-    error('Error: Provided "prob_mass" variable does not comply with the expected fields. Aborting...');
+intensity_bins = {'smpl1', 'smpl2', 'smpl3'};
+required = {'TC_SRR', 'TC_Freq', 'TotalFreq'};
+missing = required(~isfield(prob_mass, required));
+if ~isempty(missing)
+    error('prob_mass_validation:missingField', 'Provided "prob_mass" variable lacks the field(s) %s.', strjoin(missing, ', '));
 end
-% Determine Number Of TC Storms In Storm Suite
-% if config.use_peaks == 1
-%     number_of_storms = length(storm.TC.Peaks.Default(:,1));
-% else
-%     number_of_storms = length(storm.TC.Timeseries.Default(:,1));
-% end
-% Ensure Each TC Storm Has An Associated Likelihood of Occurrence
-% if number_of_storms~=length(prob_mass.('TC_Freq'))
-%     error('Error: Provided "prob_mass.TC_Freq" field must match the number of TC storms on storm suite. Aborting...');
-% else
-if prob_mass.TotalFreq~=sum(prob_mass.TC_Freq) % Make Sure Total Frequency Matches
-    % Throw Warning
-    disp('Warning: Field "prob_mass.TotalFreq" field does not match sum(prob_mass.TC_Freq)...');
+if ~isequal(size(prob_mass.TC_SRR), [1 4])
+    error('prob_mass_validation:tcSrrSize', ['Field "prob_mass.TC_SRR" must be 1 x 4 double (yearly recurrence rate ',...
+        'per intensity bin [low, mid, high, total]); found %s.'], mat2str(size(prob_mass.TC_SRR)));
 end
-% Verify Storm Recurrence Rates
-if size(prob_mass.TC_SRR, 1) ~= 1 && size(prob_mass.TC_SRR, 2) ~= 4
-    error('Error: Field "prob_mass.TC_SRR" does not match expected dimensions 1 x 4 double. Each column represents yearly recurrance rate for each intensity bin [ low, mid, high, total ]...');
-elseif sum(prob_mass.TC_SRR(1,1:end-1)) ~= prob_mass.TC_SRR(1, end)
-    disp('Warning: Provided total SRR does not match sum(SRR_low, SRR_mid, SRR_high)....');
-end
-% Make Sure At Least 1 smpl Field Is Populated
-if isempty(prob_mass.smpl1) && isempty(prob_mass.smpl2) && isempty(prob_mass.smpl3)
-    error('Error: No storm IDs found assigned to intensity bins (smpl1, smpl2, smpl3)....');
-elseif any(cell2mat(cellfun(@(x) strcmp(x, fieldnames(prob_mass)), intensity_bins, 'un', false)), 'all')
-    % Check What Intensity Bins Exist
-    found_bins = any(cell2mat(cellfun(@(x) strcmp(x, fieldnames(prob_mass)), intensity_bins, 'un', false)),1);
-    % Populate Missing Intensity Bins With Empty Fields
-    for ll = intensity_bins(~found_bins)
-        prob_mass.({ll}) = [];
+tc_ids = [];
+for dtype = intersect({'Peaks', 'Timeseries'}, fieldnames(storm.TC), 'stable')
+    tc_ids = cell2mat(storm.TC.(dtype{1}).Default(:, 1));
+    if ~iscolumn(prob_mass.TC_Freq) || numel(prob_mass.TC_Freq) ~= numel(tc_ids)
+        error('prob_mass_validation:tcFreqSize', ['Field "prob_mass.TC_Freq" must be N x 1 with N = %d TC storms ',...
+            '(storm.TC.%s.Default); found %s.'], numel(tc_ids), dtype{1}, mat2str(size(prob_mass.TC_Freq)));
     end
+end
+if ~isscalar(prob_mass.TotalFreq)
+    error('prob_mass_validation:totalFreqSize', 'Field "prob_mass.TotalFreq" must be a scalar; found %s.', mat2str(size(prob_mass.TotalFreq)));
+end
+if isfield(prob_mass, 'Param') && size(prob_mass.Param, 1) ~= numel(prob_mass.TC_Freq)
+    error('prob_mass_validation:paramRows', 'Field "prob_mass.Param" has %d rows; expected one per TC storm (%d).',...
+        size(prob_mass.Param, 1), numel(prob_mass.TC_Freq));
+end
+for bb = 1:numel(intensity_bins)
+    bin = intensity_bins{bb};
+    if ~isfield(prob_mass, bin) || isempty(prob_mass.(bin))
+        prob_mass.(bin) = zeros(0, 1);
+        if prob_mass.TC_SRR(bb) > 0
+            warning('prob_mass_validation:emptyBin', ['Intensity bin "%s" has no storms but a TC_SRR rate of %g storms/yr; ',...
+                'the sampler moves that share to the other bins.'], bin, prob_mass.TC_SRR(bb));
+        end
+    elseif ~iscolumn(prob_mass.(bin))
+        error('prob_mass_validation:smplShape', 'Field "prob_mass.%s" must be a column vector of TC storm IDs.', bin);
+    elseif ~all(ismember(prob_mass.(bin), tc_ids))
+        error('prob_mass_validation:smplIds', 'Field "prob_mass.%s" holds IDs that are not TC storm IDs of the storm data.', bin);
+    end
+end
+if all(cellfun(@(bin) isempty(prob_mass.(bin)), intensity_bins))
+    error('prob_mass_validation:noBinStorms', 'No storm IDs assigned to the intensity bins (smpl1, smpl2, smpl3).');
+end
+if prob_mass.TotalFreq ~= sum(prob_mass.TC_Freq)
+    warning('prob_mass_validation:totalFreqMismatch', 'Field "prob_mass.TotalFreq" does not match sum(prob_mass.TC_Freq).');
+end
+if sum(prob_mass.TC_SRR(1:3)) ~= prob_mass.TC_SRR(4)
+    warning('prob_mass_validation:srrTotalMismatch', 'Provided total SRR does not match sum(SRR_low, SRR_mid, SRR_high).');
 end
 end

@@ -1,14 +1,24 @@
-function storm_validation(config, storm)
+function storm = storm_validation(config, storm)
 % storm_validation  Check the layout of the storm variable of a user storm .mat.
-%   storm_validation(config, storm)
+%   storm = storm_validation(config, storm)
 %
-%   Checks the storm variable of a user storm .mat (storm_data input);
-%   called by call_input_parser and the GUI storm database wizard. Fields
-%   other than XC and TC are ignored. Errors (message only, no error ID)
-%   when storm has no XC or TC field, a storm type has no Peaks or
-%   Timeseries field, storm.XC lacks Nyrs_XC or Nstm_XC, a dataset is not
-%   an N x 2 cell, or the data of its first storm is not 1 x 5 (Peaks) or
-%   M x 6 (Timeseries).
+%   Checks the storm variable of a user storm .mat (storm_data input)
+%   and returns it with only the supported fields; called by
+%   call_input_parser and the GUI storm database wizard. Fields are kept
+%   by exact name (others are dropped, then the shapes are checked):
+%     storm      - XC, TC
+%     storm.XC   - Peaks, Timeseries, Nyrs_XC, Nstm_XC, removed_storms
+%     storm.TC   - Peaks, Timeseries, removed_storms
+%     Peaks      - Default, WLP, WHP
+%     Timeseries - Default
+%   Errors when storm has no XC or TC field
+%   (storm_validation:noStormType), a storm type has no Peaks or
+%   Timeseries field (storm_validation:noDataType), storm.XC lacks
+%   Nyrs_XC or Nstm_XC (storm_validation:missingXcRecord), a data type has
+%   no Default dataset (storm_validation:missingDefault), a dataset is not
+%   an N x 2 cell (storm_validation:datasetShape), or the data of its
+%   first storm is not 1 x 5 for Peaks (storm_validation:peaksShape) or
+%   M x 6 for Timeseries (storm_validation:timeseriesShape).
 %
 %   Expected layout: storm.(st_type).(data_type).(match_type)
 %     st_type    - 'XC' and/or 'TC'
@@ -37,73 +47,64 @@ function storm_validation(config, storm)
 %   suite); call_input_parser moves them to db_info.
 %
 %   Inputs:
-%     config - CHESS configuration, 1x1 struct; use_peaks and
-%              use_timeseries are read (no check depends on them)
+%     config - CHESS configuration, 1x1 struct; not read (kept for the
+%              call shape shared with prob_mass_validation)
 %     storm  - user storm database (layout above), struct
 %   Outputs:
-%     none (errors when the layout does not comply)
+%     storm  - storm with only the supported fields above, struct
 %
 %   Tier: internal
 %
 %   See also prob_mass_validation, storm_db_check, call_input_parser.
 
-% Define Data Type Pass Flag
-pass_cnt = config.use_peaks + config.use_timeseries;
-% Get Storm Types On Storm Suite
-st_types = fieldnames(storm); % XC, TC
-% Check For storm variable contents compliance
-if ~any(contains(st_types, {'XC','TC'}))
-    error('Error: CHESS only supports "XC" and/or "TC" storm types. Rename fields as such....');
-else % Fields Exist
-    % Remove Unsupported Fields
-    storm = rmfield(storm, st_types(~contains(st_types, {'XC','TC'})));
-    % Define Storm Types Again
-    st_types = st_types(contains(st_types, {'XC','TC'}));
+st_types = intersect({'XC', 'TC'}, fieldnames(storm), 'stable');
+if isempty(st_types)
+    error('storm_validation:noStormType', 'CHESS only supports "XC" and/or "TC" storm types. Rename fields as such.');
 end
-% Loop Across Each Storm Type
-for kk = 1:length(st_types)
-    % Scan Data Type Fieldnames
-    data_types = fieldnames(storm.(st_types{kk})); % Peaks and/or Timeseries
-    % Check For Data Type Compliance
-    chk = any(contains(data_types, {'Peaks','Timeseries'}));
-    % throw Error If Not Met
-    if ~chk
-        error('Error: Could not find expected data types "Peaks" and/or "Timeseries per user request on config...')
+storm = keep_fields(storm, st_types);
+match_whitelist = struct('Peaks', {{'Default', 'WLP', 'WHP'}}, 'Timeseries', {{'Default'}});
+for kk = 1:numel(st_types)
+    st = st_types{kk};
+    type_fields = {'Peaks', 'Timeseries', 'removed_storms'};
+    if strcmp(st, 'XC')
+        type_fields = [type_fields, {'Nyrs_XC', 'Nstm_XC'}]; %#ok<AGROW>
     end
-    % Evaluate Storm Type Special Cases
-    switch st_types{kk}
-        case 'XC'
-            % Check For XC Specific Fields
-            if ~all(contains({'Nyrs_XC','Nstm_XC'}, data_types))
-                error('Error: Could not find expected XC storm additional fields. Make sure to include the record length (Nyrs_XC) and number of XC storms (Nstm_XC) on provided storm suite...');
-            end
+    storm.(st) = keep_fields(storm.(st), type_fields);
+    data_types = intersect({'Peaks', 'Timeseries'}, fieldnames(storm.(st)), 'stable');
+    if isempty(data_types)
+        error('storm_validation:noDataType', 'Could not find the data types "Peaks" and/or "Timeseries" in storm.%s.', st);
     end
-    % Get Row Indexes
-    sindx = find(contains(data_types, {'Peaks','Timeseries'}) == 1);
-    % Check For Data Type Content Shapes Compliance
-    for ii = min(sindx):max(sindx)
-        % Scan Matching Type
-        match_types = fieldnames(storm.(st_types{kk}).(data_types{ii}));
-        % Loop Across Match Types
-        for jj = 1:length(match_types)
-            % Make Sure Cell Array Has 2 Colums
-            data_shape = size(storm.(st_types{kk}).(data_types{ii}).(match_types{jj}), 2); % N x 2 | col 1: storm ID, col 2: storm data cell
-            % Check For Compliance
-            if data_shape ~= 2
-                error(['Error: Detected wrong data shape for storm.', st_types{kk},...
-                    '.', data_types{ii}, '.', match_types{jj},...
-                    '. Please ensure data shape is a N x 2 cell array where col 1: storm ID, col 2: storm data cell...']);
+    if strcmp(st, 'XC') && ~all(isfield(storm.XC, {'Nyrs_XC', 'Nstm_XC'}))
+        error('storm_validation:missingXcRecord', ['Could not find the XC storm record fields. Include the record length ',...
+            '(Nyrs_XC) and number of XC storms (Nstm_XC) in storm.XC.']);
+    end
+    for ii = 1:numel(data_types)
+        dtype = data_types{ii};
+        storm.(st).(dtype) = keep_fields(storm.(st).(dtype), match_whitelist.(dtype));
+        if ~isfield(storm.(st).(dtype), 'Default')
+            error('storm_validation:missingDefault', 'storm.%s.%s has no Default dataset.', st, dtype);
+        end
+        match_types = fieldnames(storm.(st).(dtype));
+        for jj = 1:numel(match_types)
+            data = storm.(st).(dtype).(match_types{jj});
+            if ~iscell(data) || size(data, 2) ~= 2
+                error('storm_validation:datasetShape', ['Wrong data shape for storm.%s.%s.%s. Use an N x 2 cell array ',...
+                    '(col 1: storm ID, col 2: storm data).'], st, dtype, match_types{jj});
             end
-            % Verify Shape Of Storm Suite Data (Peaks: 1 x 5 [SWL Hm0 Tp wDir datenum]; Timeseries: M x 6 [SWL Hm0 Tp wDir datenum dt])
-            [stm_row, stm_col] = size(storm.(st_types{kk}).(data_types{ii}).(match_types{jj}){1, 2});
-            if strcmp(data_types{ii}, 'Peaks')
+            [stm_row, stm_col] = size(data{1, 2});
+            if strcmp(dtype, 'Peaks')
                 if stm_row ~= 1 || stm_col ~= 5
-                    error('Error: Storm suite modeling data must comply with expected data shape ( 1 x 5 ) [SWL Hm0 Tp wDir datenum] for "Peaks". ');
+                    error('storm_validation:peaksShape', 'Storm data must be 1 x 5 [SWL Hm0 Tp wDir datenum] for "Peaks" (storm.%s.Peaks.%s).', st, match_types{jj});
                 end
             elseif stm_col ~= 6
-                error('Error: Storm suite modeling data must comply with expected data shape ( M x 6 ) [SWL Hm0 Tp wDir datenum dt] for "Timeseries". ');
+                error('storm_validation:timeseriesShape', 'Storm data must be M x 6 [SWL Hm0 Tp wDir datenum dt] for "Timeseries" (storm.%s.Timeseries.%s).', st, match_types{jj});
             end
         end
     end
 end
+end
+
+%% LOCAL FUNCTIONS
+function s = keep_fields(s, names)
+s = rmfield(s, setdiff(fieldnames(s), names));
 end
