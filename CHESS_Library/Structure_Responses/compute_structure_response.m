@@ -10,8 +10,12 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %     Levee and rubble mound: R2p, R2p_SWL, q, q_wave_ot
 %       (Eurotop_r2p_q_Final; with compute_r2p, compute_q or
 %       compute_q_vol); rubble mound Dn50 and Dn50_Lee
-%       (ann_rubblemound_stability; number of waves from storm_duration,
-%       never dt).
+%       (ann_rubblemound_stability; with dn50_use_legacy_model = 1
+%       melby_Dn50_seaside_stability and van_gent_Dn50_leeside_stability,
+%       empirical coefficients from load_empirical_coefficients, and with
+%       dn50_legacy_submerged_correction = 1 also
+%       submerged_stone_armor_stability; number of waves from
+%       storm_duration, never dt).
 %     Floodwall: q, q_wave_ot (Eurotop_r2p_q_Final); p1
 %       (goda_forces_on_vertical_p1); p2dyn, p2sta, p2total, p3dyn,
 %       p3sta, p3total, pu (goda_forces_on_vertical_p2p3; NaN where p1 is
@@ -40,8 +44,11 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %                       (1 PROS-RB, 2 DET, 3 LCS, 4 PROS-FB),
 %                       gravity_constant [m/s^2], water_density [kg/m^3],
 %                       add_toe_berm, every response_registry compute
-%                       switch, compute_damaging_depth_Ks and, when the
-%                       structure has none, offshore_elevation
+%                       switch, compute_damaging_depth_Ks, when the
+%                       structure has none, offshore_elevation and
+%                       (rubble mound, 0 when missing)
+%                       dn50_use_legacy_model,
+%                       dn50_legacy_submerged_correction
 %     structure       - structure geometry, 1x1 struct; reads
 %                       crest_elevation, crest_width, toe_elevation,
 %                       offshore_slope, roughness_ifactor, berm_* (toe
@@ -75,7 +82,8 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %
 %   See also call_project_response, response_registry,
 %   call_eurotop_ifactors, Eurotop_r2p_q_Final, ann_rubblemound_stability,
-%   damaging_depth, lcs_columns.
+%   melby_Dn50_seaside_stability, van_gent_Dn50_leeside_stability,
+%   submerged_stone_armor_stability, damaging_depth, lcs_columns.
 
 %% GRAB DETAILS FROM "config"
 % Strucutre Type
@@ -107,7 +115,7 @@ if any_primary_response
         case 2 % Floodwall
             type_responses = floodwall_responses(response_switch, forcing, gammas, geometry, rho_w, g, struc_type);
         case {1,3} % Levees & Rubblemound
-            type_responses = embankment_responses(response_switch, forcing, gammas, geometry, g, struc_type);
+            type_responses = embankment_responses(response_switch, forcing, gammas, geometry, g, struc_type, legacy_dn50_settings(config));
         otherwise
             error('compute_structure_response:unsupportedStructureType', 'Unsupported structure type %d (1 = Levee, 2 = Floodwall, 3 = Rubblemound).', struc_type);
     end
@@ -340,8 +348,8 @@ if response_switch.compute_nappe == 1
 end
 end
 
-%% AUX FUNCTION: LEVEE & RUBBLEMOUND RESPONSES (EUROTOP RUNUP/OVERTOPPING, RUBBLEMOUND STONE SIZE ANN)
-function Resp = embankment_responses(response_switch, forcing, gammas, geometry, g, struc_type)
+%% AUX FUNCTION: LEVEE & RUBBLEMOUND RESPONSES (EUROTOP RUNUP/OVERTOPPING, RUBBLEMOUND STONE SIZE ANN OR LEGACY EQUATIONS)
+function Resp = embankment_responses(response_switch, forcing, gammas, geometry, g, struc_type, legacy_dn50)
 SWL = forcing.SWL; Hm0 = forcing.Hm0; Tm = forcing.Tm; Tm10 = forcing.Tm10;
 h = forcing.h; Rc = forcing.Rc; storm_dur = forcing.storm_dur;
 crest_elev = geometry.crest_elev; crest_width = geometry.crest_width; toe_elev = geometry.toe_elev; cem_P = geometry.cem_P;
@@ -358,19 +366,68 @@ if response_switch.compute_r2p == 1 || response_switch.compute_q == 1 || respons
         toe_elev, cem_P, g, struc_type),...
         Hm0, Tm10, SWL, Rc, gammas, slope_aux,'un',false);
 end
-% Rubblemound Stone Size (Seaside & Leeside Component Stability ANN, ann_rubblemound_stability.m)
+% Rubblemound Stone Size (Seaside & Leeside Component Stability ANN, ann_rubblemound_stability.m, Or The Legacy Equations)
 if struc_type == 3 && (response_switch.compute_dn50_seaside == 1 || response_switch.compute_dn50_leeside == 1)
-    seaside_design_S = geometry.seaside_design_S; leeside_design_S = geometry.leeside_design_S; armor_delta = geometry.armor_delta;
-    % Number Of Waves Duration [s]: The Storm Duration (Event Length, Set With The Forcing), Never dt
-    [Dn50_ss, Dn50_ls] = cellfun(@(a, b, c, d, e, f, k) ann_rubblemound_stability(a, b, c, d, e, f,...
-        crest_elev - toe_elev, crest_width, mound_seaside_slope_cota, mound_leeside_slope_cota,...
-        offshore_slope_tana, cem_P, k.gamma_f, seaside_design_S, leeside_design_S, armor_delta, g),...
-        Hm0, Tm, Tm10, h, Rc, storm_dur, gammas, 'un', false);
+    if legacy_dn50.use_legacy_model == 1
+        [Dn50_ss, Dn50_ls] = legacy_dn50_responses(response_switch, forcing, gammas, geometry, g, legacy_dn50.submerged_correction);
+    else
+        seaside_design_S = geometry.seaside_design_S; leeside_design_S = geometry.leeside_design_S; armor_delta = geometry.armor_delta;
+        % Number Of Waves Duration [s]: The Storm Duration (Event Length, Set With The Forcing), Never dt
+        [Dn50_ss, Dn50_ls] = cellfun(@(a, b, c, d, e, f, k) ann_rubblemound_stability(a, b, c, d, e, f,...
+            crest_elev - toe_elev, crest_width, mound_seaside_slope_cota, mound_leeside_slope_cota,...
+            offshore_slope_tana, cem_P, k.gamma_f, seaside_design_S, leeside_design_S, armor_delta, g),...
+            Hm0, Tm, Tm10, h, Rc, storm_dur, gammas, 'un', false);
+    end
     if response_switch.compute_dn50_seaside == 1
         Resp.Dn50 = Dn50_ss;
     end
     if response_switch.compute_dn50_leeside == 1
         Resp.Dn50_Lee = Dn50_ls;
+    end
+end
+end
+
+%% AUX FUNCTION: LEGACY DN50 SWITCHES FROM "config" (MISSING = 0: CONFIGS BUILT WITHOUT finalize_config)
+function legacy_dn50 = legacy_dn50_settings(config)
+legacy_dn50.use_legacy_model = config_flag(config, 'dn50_use_legacy_model');
+legacy_dn50.submerged_correction = config_flag(config, 'dn50_legacy_submerged_correction');
+end
+
+%% AUX FUNCTION: CONFIG 0/1 FIELD, 0 WHEN MISSING OR EMPTY
+function value = config_flag(config, field_name)
+value = 0;
+if isfield(config, field_name) && ~isempty(config.(field_name))
+    value = config.(field_name);
+end
+end
+
+%% AUX FUNCTION: LEGACY RUBBLEMOUND STONE SIZE (MELBY SEASIDE, VAN GENT LEESIDE, OPTIONAL SUBMERGED CORRECTION)
+function [Dn50_ss, Dn50_ls] = legacy_dn50_responses(response_switch, forcing, gammas, geometry, g, submerged_correction)
+emp_coeff = load_empirical_coefficients();
+Hm0 = forcing.Hm0; Tp = forcing.Tp; Tm = forcing.Tm; Tm10 = forcing.Tm10; h = forcing.h; Rc = forcing.Rc;
+crest_elev = geometry.crest_elev; crest_width = geometry.crest_width; cem_P = geometry.cem_P; armor_delta = geometry.armor_delta;
+seaside_design_S = geometry.seaside_design_S; leeside_design_S = geometry.leeside_design_S;
+mound_seaside_slope_cota = geometry.mound_seaside_slope_cota; mound_leeside_slope_cota = geometry.mound_leeside_slope_cota;
+% The Equations Flatten Hm0 But Not The Duration (Nz = duration./Tm(:)): One Duration [s] Per Hm0 Element, As A Column
+duration = cellfun(@(d, a) reshape(d + zeros(size(a)), [], 1), forcing.storm_dur, Hm0, 'un', false);
+Dn50_ss = [];
+Dn50_ls = [];
+if response_switch.compute_dn50_seaside == 1
+    Dn50_ss = cellfun(@(a, b, c, d, e) melby_Dn50_seaside_stability(a, b, c, e, mound_seaside_slope_cota,...
+        armor_delta, cem_P, seaside_design_S, g, emp_coeff.km1, emp_coeff.km2, d), Hm0, Tm, h, Rc, duration, 'un', false);
+    % Submerged Crest (Rc < 0): hc Is The Crest Elevation, As In The Pre-ANN Code
+    if submerged_correction == 1
+        Dn50_ss = cellfun(@(a, b, c, d, e) submerged_stone_armor_stability(a, b, c, d, e, crest_elev,...
+            seaside_design_S, armor_delta, g), Hm0, Tp, h, Rc, Dn50_ss, 'un', false);
+    end
+end
+if response_switch.compute_dn50_leeside == 1
+    Dn50_ls = cellfun(@(a, b, c, d, e, k) van_gent_Dn50_leeside_stability(leeside_design_S, a, b, c, d, crest_width,...
+        mound_seaside_slope_cota, mound_leeside_slope_cota, e, armor_delta, g, emp_coeff.k_ls1, emp_coeff.k_ls2, k.gamma_f),...
+        Hm0, Tm10, Tm, Rc, duration, gammas, 'un', false);
+    if submerged_correction == 1
+        Dn50_ls = cellfun(@(a, b, c, d, e) submerged_stone_armor_stability(a, b, c, d, e, crest_elev,...
+            leeside_design_S, armor_delta, g), Hm0, Tp, h, Rc, Dn50_ls, 'un', false);
     end
 end
 end

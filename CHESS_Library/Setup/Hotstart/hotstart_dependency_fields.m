@@ -15,6 +15,9 @@ function dependency_fields = hotstart_dependency_fields()
 %       'reuse_sampling' -> forcing_build_fields, forcing_adjustment_fields,
 %                           forcing_uncertainty_fields
 %       'full'           -> none of the above changed
+%   Response settings are NOT dependencies (the cached forcing is reused
+%   and the responses are recomputed at every level): the compute_*
+%   switches, dn50_use_legacy_model and dn50_legacy_submerged_correction.
 %
 %   Inputs:
 %     none

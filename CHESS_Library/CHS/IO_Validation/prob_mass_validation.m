@@ -4,15 +4,14 @@ function prob_mass = prob_mass_validation(config, prob_mass, storm)
 %
 %   Checks the prob_mass variable of a user storm .mat (storm_data
 %   input) against the TC storms of storm and returns it with the missing
-%   intensity bins added; called by call_input_parser and the GUI storm
+%   intensity bins added and TotalFreq set to sum(TC_Freq); called by call_input_parser and the GUI storm
 %   database wizard when the storm data has TC storms, after
 %   storm_validation. Errors when:
-%     - TC_SRR, TC_Freq or TotalFreq is missing
+%     - TC_SRR or TC_Freq is missing
 %       (prob_mass_validation:missingField);
 %     - TC_SRR is not 1 x 4 (prob_mass_validation:tcSrrSize);
 %     - TC_Freq is not N x 1, N = rows of every TC Default dataset of
 %       storm (prob_mass_validation:tcFreqSize);
-%     - TotalFreq is not a scalar (prob_mass_validation:totalFreqSize);
 %     - Param is present and its row count differs from numel(TC_Freq)
 %       (prob_mass_validation:paramRows);
 %     - smpl1, smpl2 or smpl3 is not a column vector
@@ -23,11 +22,9 @@ function prob_mass = prob_mass_validation(config, prob_mass, storm)
 %   A missing smpl1, smpl2 or smpl3 is added as zeros(0,1) and an empty
 %   bin is returned as zeros(0,1). Warnings: an empty bin with a TC_SRR
 %   rate > 0 (prob_mass_validation:emptyBin; sample_tc_storm redraws an
-%   empty bin, so its share of the rate goes to the other bins),
-%   TotalFreq differing from sum(TC_Freq)
-%   (prob_mass_validation:totalFreqMismatch) and the TC_SRR total
-%   differing from the sum of the three bin rates
-%   (prob_mass_validation:srrTotalMismatch).
+%   empty bin, so its share of the rate goes to the other bins) and the
+%   TC_SRR total differing from the sum of the three bin rates by more than
+%   a relative 1e-9 (prob_mass_validation:srrTotalMismatch).
 %
 %   Inputs:
 %     config    - CHESS configuration, 1x1 struct; not read
@@ -39,8 +36,8 @@ function prob_mass = prob_mass_validation(config, prob_mass, storm)
 %                               28 <= dP < 48, high dP >= 48
 %                   TC_Freq   - TC discrete storm weights (probability
 %                               masses) [storms/yr], N x 1 double
-%                   TotalFreq - total TC storm suite frequency,
-%                               sum(TC_Freq) [storms/yr], scalar double
+%                   TotalFreq - optional; ignored and set to sum(TC_Freq)
+%                               [storms/yr] (total TC storm suite frequency)
 %                   Param     - optional; TC storm parameters, one row per
 %                               storm, N x number_of_parameters double
 %                   smpl1, smpl2, smpl3 - optional; storm IDs of the low,
@@ -59,7 +56,7 @@ function prob_mass = prob_mass_validation(config, prob_mass, storm)
 %   sample_tc_storm.
 
 intensity_bins = {'smpl1', 'smpl2', 'smpl3'};
-required = {'TC_SRR', 'TC_Freq', 'TotalFreq'};
+required = {'TC_SRR', 'TC_Freq'};
 missing = required(~isfield(prob_mass, required));
 if ~isempty(missing)
     error('prob_mass_validation:missingField', 'Provided "prob_mass" variable lacks the field(s) %s.', strjoin(missing, ', '));
@@ -76,9 +73,7 @@ for dtype = intersect({'Peaks', 'Timeseries'}, fieldnames(storm.TC), 'stable')
             '(storm.TC.%s.Default); found %s.'], numel(tc_ids), dtype{1}, mat2str(size(prob_mass.TC_Freq)));
     end
 end
-if ~isscalar(prob_mass.TotalFreq)
-    error('prob_mass_validation:totalFreqSize', 'Field "prob_mass.TotalFreq" must be a scalar; found %s.', mat2str(size(prob_mass.TotalFreq)));
-end
+prob_mass.TotalFreq = sum(prob_mass.TC_Freq);
 if isfield(prob_mass, 'Param') && size(prob_mass.Param, 1) ~= numel(prob_mass.TC_Freq)
     error('prob_mass_validation:paramRows', 'Field "prob_mass.Param" has %d rows; expected one per TC storm (%d).',...
         size(prob_mass.Param, 1), numel(prob_mass.TC_Freq));
@@ -100,10 +95,12 @@ end
 if all(cellfun(@(bin) isempty(prob_mass.(bin)), intensity_bins))
     error('prob_mass_validation:noBinStorms', 'No storm IDs assigned to the intensity bins (smpl1, smpl2, smpl3).');
 end
-if prob_mass.TotalFreq ~= sum(prob_mass.TC_Freq)
-    warning('prob_mass_validation:totalFreqMismatch', 'Field "prob_mass.TotalFreq" does not match sum(prob_mass.TC_Freq).');
-end
-if sum(prob_mass.TC_SRR(1:3)) ~= prob_mass.TC_SRR(4)
+if ~totals_match(sum(prob_mass.TC_SRR(1:3)), prob_mass.TC_SRR(4))
     warning('prob_mass_validation:srrTotalMismatch', 'Provided total SRR does not match sum(SRR_low, SRR_mid, SRR_high).');
 end
+end
+
+function tf = totals_match(a, b)
+% Totals agree within a relative tolerance of 1e-9 (floating-point sums).
+tf = abs(a - b) <= 1e-9 * max(abs(a), abs(b));
 end

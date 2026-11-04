@@ -17,6 +17,11 @@ function config = finalize_config(config)
 %     - create_wlp and create_whp are 0 unless use_peaks and use_timeseries
 %       are both 1; compute_q_vol is 0 without Timeseries data, and
 %       compute_q_vol = 1 turns compute_q on
+%     - dn50_use_legacy_model and dn50_legacy_submerged_correction: 0
+%       when missing or empty, must be 0 or 1 (errors
+%       finalize_config:invalidDn50UseLegacyModel,
+%       finalize_config:invalidDn50LegacySubmergedCorrection), set to 0
+%       unless struc_type is 3 (rubble mound)
 %     - defaults when missing: compute_storm_duration 0, Nyrs_XC 0,
 %       csr_call_dpa 0, multiline [], lcs_restrict_sampling_rate 0,
 %       lcs_convergence_tol 0.05, lcs_convergence_confidence 0.95,
@@ -65,6 +70,23 @@ end
 % Per-Storm Timeseries Durations From SWL (Forcing Setting, Every Structure Type): Off Unless Requested
 if ~isfield(config, 'compute_storm_duration') || isempty(config.compute_storm_duration)
     config.compute_storm_duration = 0;
+end
+% Legacy Dn50 Equations (Melby Seaside / Van Gent Leeside) And Their Submerged Correction: Rubble Mound Only, Off Unless Requested
+legacy_dn50_fields = {'dn50_use_legacy_model', 'invalidDn50UseLegacyModel';...
+    'dn50_legacy_submerged_correction', 'invalidDn50LegacySubmergedCorrection'};
+for ff = 1:size(legacy_dn50_fields, 1)
+    field_name = legacy_dn50_fields{ff, 1};
+    if ~isfield(config, field_name) || isempty(config.(field_name))
+        config.(field_name) = 0;
+    end
+    value = config.(field_name);
+    if ~((isnumeric(value) || islogical(value)) && isscalar(value) && ismember(double(value), [0, 1]))
+        error(['finalize_config:' legacy_dn50_fields{ff, 2}], '%s must be 0 or 1.', field_name);
+    end
+    config.(field_name) = double(value);
+    if config.struc_type ~= 3
+        config.(field_name) = 0;
+    end
 end
 
 %% WORKFLOW & RESPONSE DEPENDENCIES
