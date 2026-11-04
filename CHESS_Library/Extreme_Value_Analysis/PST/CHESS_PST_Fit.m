@@ -41,7 +41,14 @@ function [SST_output] = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, g
 %   Outputs:
 %     SST_output - hazard curves (staID, RL, MRL_output, HC_plt, HC_tbl,
 %                  HC_tbl_rsp_x, HC_emp, HC_tbl_rsp_y, HC_plt_x, HC_tbl_x;
-%                  see CHESS_PST), struct
+%                  see CHESS_PST), struct; also:
+%                    .POT     - POT sample without tides, sorted in
+%                               descending order
+%                    .Warning - '' or the warning that the best estimate
+%                               at 0.1 AEF/AEP exceeds 1.75 times the
+%                               empirical curve, char
+%                  MRL_output.Status keeps the reason of a default
+%                  threshold or of a GPD not fitted ('' otherwise).
 %
 %   Tier: internal
 %
@@ -189,7 +196,6 @@ if gpd_pass %apply GPD
     k_min=-0.5; k_max=0.3;
     pd_k_mod(pd_k_mod<k_min) = k_min;
     pd_k_mod(pd_k_mod>k_max) = k_max;
-    eMsg = '';
 else
     eMsg = 'GPD not fit: POT sample size <20 and RL <20 years.';
 end
@@ -335,9 +341,9 @@ end
 [~, ia, ~] = unique(log(HC_emp(:, 4)), 'stable');
 % Compare if mean HC > 1.75* emp HC at 0.1 AEP/AEF,
 HCep = interp1(log(HC_emp(ia, 4)), HC_emp(ia, 1), log(0.1), 'linear', 'extrap');
-str1 = {''};
+str1 = '';
 if HCmn(1) > 1.75*HCep
-    str1 = {'Warning: At 0.1 AEP/AEF, best estimate HC value is greater than 1.75 times the empirical HC value. Manual verification is recommended.'};
+    str1 = 'Warning: At 0.1 AEP/AEF, best estimate HC value is greater than 1.75 times the empirical HC value. Manual verification is recommended.';
 end
 
 % Change negatives to NaN
@@ -354,6 +360,7 @@ HC_emp = array2table(HC_emp,'VariableNames',{'Response','Rank','CCDF','Hazard','
 % Gather the output
 SST_output.staID = plot_options.staID;
 SST_output.RL = Nyrs;
+SST_output.POT = POT_no_tides;
 SST_output.MRL_output = MRL_output;
 SST_output.HC_plt = HC_plt;
 SST_output.HC_tbl = HC_tbl_y;
@@ -362,4 +369,5 @@ SST_output.HC_emp = HC_emp;
 SST_output.HC_tbl_rsp_y = HC_tbl_rsp_y;
 SST_output.HC_plt_x = HC_plt_x;
 SST_output.HC_tbl_x = HC_tbl_x;
+SST_output.Warning = str1;
 end

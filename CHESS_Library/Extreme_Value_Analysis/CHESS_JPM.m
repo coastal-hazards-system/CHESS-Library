@@ -148,9 +148,9 @@ if plot_options.create_plots == 1
     CHESS_JPM_plot(JPM_output, jpm_options, plot_options);
     % Store output
     if jpm_options.stat_print == 1
-        disp(['*** Step 4: Saving results here: ',path_out]);
+        disp(['*** Step 4: Saving results here: ',plot_options.path_out]);
     end
-    save([plot_options.('path_out'), 'CHESS_JPM_' plot_options.staID 'output.mat'],'JPM_output','-v7.3');
+    save(fullfile(plot_options.('path_out'), ['CHESS_JPM_' plot_options.staID 'output.mat']),'JPM_output','-v7.3');
 end
 
 
@@ -234,7 +234,7 @@ end
                 % Set Relative Component To Zero
                 response_data.Ur = 0;
             otherwise
-                error('Error: response_data.uncertainty_treatment must be: ''combined'', ''relative'', ''absolute''');
+                error('Error: jpm_options.uncertainty_treatment must be: ''combined'', ''relative'', ''absolute''');
         end
         % Verify Uncertainty Values
         if ~isnumeric(response_data.Ur) || any(response_data.Ur<0) || ~isscalar(response_data.Ur)
@@ -262,7 +262,7 @@ end
         if isempty(plot_options.yaxis_Label)
             plot_options.yaxis_Label = '';
         elseif ~ischar(plot_options.yaxis_Label)
-            plot_options.yaxis_Limits = '';
+            plot_options.yaxis_Label = '';
         end
         % Y Axis Limit
         if ~isnumeric(plot_options.yaxis_Limits)

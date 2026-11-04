@@ -24,8 +24,11 @@ function  [Output]= call_hazard_curve_builder(config, TC_Prob, Resp, storm_type,
 %   back to the curves. SLC = 0 (the forcing SWL already holds swl_slr).
 %   Events PST/JPM discard (NaN, Inf, <= 0 after the lake level shift)
 %   are counted and reported in the figure title. Variables with no valid
-%   value (all NaN or all 0) and variables whose PST/JPM call errors are
-%   skipped. In PROS-FB (workflow 4) the forcing curves are titled PROS-RB.
+%   value (all NaN or all 0) and variables whose PST/JPM call errors,
+%   returns an error in its ME field or returns an empty or all-NaN curve
+%   are skipped (a '<variable>: <tool> returned no valid curve (<message>),
+%   skipping' line is printed). In PROS-FB (workflow 4) the forcing curves
+%   are titled PROS-RB.
 %
 %   Inputs:
 %     config     - CHESS configuration, 1x1 struct; reads case_name,
@@ -202,6 +205,23 @@ for ii = 1:length(vars_to_process)
                 ctr = ctr+1;
                 continue;
             end
+    end
+    % CHESS_PST Returns Fit Errors In ME Instead Of Raising Them
+    if (isfield(dummy, 'ME') && ~isempty(dummy.ME)) || ~isfield(dummy, 'HC_plt') || isempty(dummy.HC_plt) || all(isnan(dummy.HC_plt(:)))
+        if isfield(dummy, 'ME') && ~isempty(dummy.ME)
+            fail_msg = dummy.ME.message;
+        else
+            fail_msg = 'empty or all-NaN curve';
+        end
+        switch storm_type
+            case 'XC'
+                tool_name = 'CHESS_PST';
+            case 'TC'
+                tool_name = 'CHESS_JPM';
+        end
+        disp(['               ' resp_var ': ' tool_name ' returned no valid curve (' fail_msg '), skipping']);
+        ctr = ctr+1;
+        continue;
     end
 
     % Add Mean Lake Level Back To Response Valued Outputs (HC_tbl_rsp_x Holds AEF/AEP)

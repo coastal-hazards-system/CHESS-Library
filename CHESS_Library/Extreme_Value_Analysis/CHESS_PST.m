@@ -86,9 +86,14 @@ function [SST_output] = CHESS_PST(response_data, pst_options, plot_options)
 %                       < 1e-4 set to NaN
 %       .HC_emp       - empirical curve, table (Response, Rank, CCDF,
 %                       Hazard = AEF or AEP, ARI)
-%       .ME           - MException of a failed fit or plot (after a
-%                       failed fit only staID is set; HC_plt_x, HC_tbl_x
-%                       and HC_tbl_rsp_y are then missing)
+%       .POT          - POT sample without tides, sorted in descending
+%                       order
+%       .Warning      - '' or the warning that the best estimate at 0.1
+%                       AEF/AEP exceeds 1.75 times the empirical curve
+%       .ME           - [] on success, else the MException of a failed fit
+%                       or plot (after a failed fit only staID is set;
+%                       HC_plt_x, HC_tbl_x and HC_tbl_rsp_y are then
+%                       missing)
 %   With create_plots = 1 the figures (CHESS_PST_plot, bootstrap check)
 %   and CHESS_<staID>_SST_output.mat are written in <path_out>/PST_outputs.
 %
@@ -188,7 +193,7 @@ end
 
 %% Perform SST
 if pst_options.stat_print == 1
-    disp(['*** Step 3: Performing SST for station ', plot_options.staID{1,1}]);
+    disp(['*** Step 3: Performing SST for station ', plot_options.staID]);
 end
 
 try
@@ -207,6 +212,7 @@ try
     %%%
     % Execute CHESS-SST-Fit
     [SST_output] = CHESS_PST_Fit(POT_samp(:, 2), POT_samp(:, 3), response_data.SLC, response_data.Nyrs, response_data.gprMdl, pst_options, plot_options);
+    SST_output.ME = [];
     % Plot results
     if plot_options.create_plots == 1
         CHESS_PST_plot(SST_output, pst_options, plot_options);
@@ -218,7 +224,7 @@ end
 
 %% Save the output
 if pst_options.stat_print == 1
-    disp(['*** Step 4: Saving results here: ',path_out]);
+    disp(['*** Step 4: Saving results here: ',plot_options.path_out]);
 end
 % Save Output
 if plot_options.create_plots == 1
@@ -261,10 +267,10 @@ end
                     error('When DataType is set to ''POT'': Input "Nyrs" cannot be empty and must have positive values only')
                 end
                 % Implicit SLC
-                if length(response_data.SLC)~=1 || response_data.SLC < 0 || isnan(response_data.SLC) || isinf(response_data.SLC)
-                    error('Input SLC must be a positive scalar')
-                elseif isempty(response_data.('SLC'))
+                if isempty(response_data.('SLC'))
                     response_data.('SLC') = 0;
+                elseif length(response_data.SLC)~=1 || response_data.SLC < 0 || isnan(response_data.SLC) || isinf(response_data.SLC)
+                    error('Input SLC must be a positive scalar')
                 end
                 % Skew Tides
                 if ~ismember(pst_options.ind_Skew, [0 1]) || isempty(pst_options.ind_Skew) || isnan(pst_options.ind_Skew) || isinf(pst_options.ind_Skew)
@@ -326,7 +332,7 @@ end
         if isempty(plot_options.yaxis_Label)
             plot_options.yaxis_Label = '';
         elseif ~ischar(plot_options.yaxis_Label)
-            plot_options.yaxis_Limits = '';
+            plot_options.yaxis_Label = '';
         end
         % Y Axis Limit
         if ~isnumeric(plot_options.yaxis_Limits)
