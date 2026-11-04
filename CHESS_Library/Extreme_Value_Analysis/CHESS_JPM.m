@@ -8,7 +8,9 @@ function [JPM_output] = CHESS_JPM(response_data, jpm_options, plot_options)
 %   their discrete storm weights (DSW) gives the annual exceedance
 %   frequency (AEF) of each response; the best-estimate curve and its
 %   confidence limits (CL) are interpolated in log(AEF) on a plot grid, a
-%   frequency table and a response table (CHESS_JPM_integration).
+%   frequency table and a response table (CHESS_JPM_integration). With
+%   use_AEP = 1 the AEP table is read at its AEF and the x outputs are
+%   converted to AEP.
 %   The inputs are checked first (errors for invalid fields); rows with
 %   the flag value, NaN, Inf or response <= 0 are removed (error when none
 %   is left). Integration methods:
@@ -73,7 +75,8 @@ function [JPM_output] = CHESS_JPM(response_data, jpm_options, plot_options)
 %   Outputs:
 %     JPM_output - hazard curves, struct; fields:
 %       .staID        - plot_options.staID
-%       .HC_plt_x     - plot grid AEF from 1e-6 to 10 (log spaced), 631 x 1
+%       .HC_plt_x     - plot grid AEF from 1e-6 to 10 (log spaced; AEP of
+%                       that grid when use_AEP = 1), 631 x 1
 %       .HC_plt       - response at HC_plt_x, columns [best estimate,
 %                       prc CLs], 631 x (1 + numel(prc))
 %       .HC_tbl_x     - table AEP 1/[2 5 10 ... 1e6] (18 values) or AEF

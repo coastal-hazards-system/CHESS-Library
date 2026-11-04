@@ -5,7 +5,7 @@ function [SST_output] = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, g
 %
 %   Fit step of CHESS_PST (inputs already checked there).
 %   Empirical curve: Weibull plotting position m/(n+1) times the sample
-%   intensity n/Nyrs (AEF; AEP when use_AEP = 1). Bootstrap
+%   intensity n/Nyrs (AEF). Bootstrap
 %   (ecdf_boot, bootstrap_sims samples); with ind_Skew = 1 and a gprMdl
 %   object, skew tides predicted by gprMdl (mean plus a random normal
 %   times the standard deviation) are added to each sample of the surge
@@ -20,6 +20,9 @@ function [SST_output] = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, g
 %   bootstrap sample gives an empirical curve.
 %   The mean and the prc percentiles of the simulated curves are made
 %   monotonic (Monotonic_adjustment) and interpolated into the tables.
+%   Everything is computed in AEF; with use_AEP = 1 the AEP table is read
+%   at its AEF (aep2aef) and HC_plt_x, HC_tbl_rsp_x and the HC_emp Hazard
+%   column are converted to AEP (aef2aep) at the end.
 %   Errors when ind_Skew = 1 and the mean curve reaches 1e3. With
 %   create_plots = 1 and a GPD fit, the bootstrap check figure
 %   SST_HC_bootCheck_<staID>_TH_<criterion>.png is written in path_out.
@@ -62,6 +65,12 @@ if pst_options.('use_AEP') %Select AEPs
 else %Select AEFs
     HC_tbl_x = 1./[0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000,5000,10000]';
 end
+% The Curves Are Computed In AEF; AEP Tables Are Read At Their AEF And The x Outputs Converted At The End
+if pst_options.use_AEP
+    to_aef = @aep2aef;
+else
+    to_aef = @(x) x;
+end
 % Set up responses for HC summary
 HC_tbl_rsp_y =(0.01:0.01:20)';
 % Set up AEFs for full HC; in log10 scale (for plotting), from 10^1 to 10^-6
@@ -98,11 +107,6 @@ HC_emp(:, 4) = HC_emp(:, 3)*Lambda_hist;
 % Compute Annual Recurrence Interval (ARI)
 HC_emp(:, 5) = 1./HC_emp(:, 4);
 ecdf_y = HC_emp(:, 1);
-% Convert To AEP
-if pst_options.use_AEP %Convert to AEP
-    HC_emp(:, 4) = aef2aep(HC_emp(:, 4));
-    HC_plt_x = aef2aep(HC_plt_x);
-end
 
 %% Perform bootstrap
 % Skew Tides Bootstrap
@@ -225,11 +229,6 @@ for k = 1:pst_options.bootstrap_sims
         y_comb = boot(:,k);
         x_comb = HC_emp(:,4);
     end
-    % Convert To AEP
-    if pst_options.use_AEP
-        x_comb = aef2aep(x_comb);
-    end
-
     % Delete duplicates
     [~, ia, ~] = unique(x_comb, 'stable');
     x_comb = x_comb(ia, :);
@@ -262,12 +261,12 @@ if gpd_pass && plot_options.create_plots
     title(ax, {'CHESS-SST '; [plot_options.staID ' Bootstrap Sample Plot']},'FontSize',12);
     % Define X Axis
     if pst_options.use_AEP == 1
-        AEF_ecdf = aef2aep(AEF_ecdf);
-        AEF_gpd = aef2aep(AEF_gpd);
+        to_axis = @aef2aep;
         xlim(ax, [1e-4 1]);
         set(ax, 'XTick', [1e-4 1e-3 1e-2 1e-1 1])
         xlabel(ax, 'Annual Exceedance Probability','FontSize',12);
     else
+        to_axis = @(x) x;
         xlim([1e-4 10]);
         set(ax, 'XTick', [1e-4 1e-3 1e-2 1e-1 1 10]);
         xlabel(ax, 'Annual Exceedance Frequency (yr^{-1})', 'FontSize',12);
@@ -278,16 +277,16 @@ if gpd_pass && plot_options.create_plots
     end
     ylabel(plot_options.yaxis_Label,'FontSize',12);
     % Historical
-    scatter(HC_emp(:,4), ecdf_y, 15, 'g', 'filled', 'MarkerEdgeColor', 'k');
+    scatter(to_axis(HC_emp(:,4)), ecdf_y, 15, 'g', 'filled', 'MarkerEdgeColor', 'k');
     % Resampling (last bootstrap sample)
-    scatter(HC_emp(:,4), PEAKS_rnd, 15, 'r', 'filled', 'MarkerEdgeColor', 'k');
+    scatter(to_axis(HC_emp(:,4)), PEAKS_rnd, 15, 'r', 'filled', 'MarkerEdgeColor', 'k');
     % Empirical
-    plot(AEF_ecdf, Resp_ecdf, 'y-', 'LineWidth', 2);
+    plot(to_axis(AEF_ecdf), Resp_ecdf, 'y-', 'LineWidth', 2);
     % MRL threshold
-    th_x = interp1(y_comb, x_comb, pd_TH_wOut(k));
+    th_x = to_axis(interp1(y_comb, x_comb, pd_TH_wOut(k)));
     scatter(th_x, pd_TH_wOut(k), 15, 'w', 'filled', 'MarkerEdgeColor', 'b');
     % GPD with MRL
-    plot(AEF_gpd, Resp_gpd, 'b-', 'LineWidth', 2)
+    plot(to_axis(AEF_gpd), Resp_gpd, 'b-', 'LineWidth', 2)
     % Legend
     legend({'Historical', 'Resampling', 'Empirical', 'MRL threshold', 'GPD'},...
         'Location', 'southoutside', 'Orientation', 'horizontal', 'NumColumns', 4, 'FontSize', 10);
@@ -332,20 +331,26 @@ for kk = 1:size(HC_plt, 2)
 
     % Interpolate
     HC_tbl_rsp_x(:, kk) = exp(interp1(dm1, dm2, HC_tbl_rsp_y, 'linear', 'extrap'));
-    HC_tbl_y(:, kk) = interp1(dm2, dm1, log(HC_tbl_x), 'linear', 'extrap');
+    HC_tbl_y(:, kk) = interp1(dm2, dm1, log(to_aef(HC_tbl_x)), 'linear', 'extrap');
 
     %interpol for 0.1 aep/aef
-    HCmn(1, kk) = interp1(dm2, dm1, log(0.1), 'linear', 'extrap');
+    HCmn(1, kk) = interp1(dm2, dm1, log(to_aef(0.1)), 'linear', 'extrap');
 end
 % Ensure No Duplicate Values
 [~, ia, ~] = unique(log(HC_emp(:, 4)), 'stable');
 % Compare if mean HC > 1.75* emp HC at 0.1 AEP/AEF,
-HCep = interp1(log(HC_emp(ia, 4)), HC_emp(ia, 1), log(0.1), 'linear', 'extrap');
+HCep = interp1(log(HC_emp(ia, 4)), HC_emp(ia, 1), log(to_aef(0.1)), 'linear', 'extrap');
 str1 = '';
 if HCmn(1) > 1.75*HCep
     str1 = 'Warning: At 0.1 AEP/AEF, best estimate HC value is greater than 1.75 times the empirical HC value. Manual verification is recommended.';
 end
 
+% Convert The x Outputs To AEP
+if pst_options.use_AEP
+    HC_plt_x = aef2aep(HC_plt_x);
+    HC_tbl_rsp_x = aef2aep(HC_tbl_rsp_x);
+    HC_emp(:, 4) = aef2aep(HC_emp(:, 4));
+end
 % Change negatives to NaN
 HC_tbl_y(HC_tbl_y<0) = NaN;
 HC_tbl_rsp_x(HC_tbl_rsp_x<1e-4) = NaN;

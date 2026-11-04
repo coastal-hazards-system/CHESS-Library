@@ -11,6 +11,8 @@ function JPM_outputs = CHESS_JPM_integration(response_data, jpm_options, plot_op
 %   into AEF, builds the CL curves from the uncertainty treatment and
 %   interpolates in log(AEF) on the plot grid, the frequency table and the
 %   response table. Responses <= 0 or NaN after these steps are dropped.
+%   With use_AEP = 1 the AEP table is read at its AEF (aep2aef) and
+%   HC_plt_x and HC_tbl_rsp_x are converted to AEP (aef2aep) at the end.
 %
 %   Inputs:
 %     response_data - checked response sample (CHESS_JPM response_data:
@@ -47,6 +49,12 @@ if jpm_options.('use_AEP') %Select AEPs
     HC_tbl_x = 1./[2 5 10 20 50 100 200 500 1000 2000 5000 1e4 2e4 5e4 1e5 2e5 5e5 1e6]';
 else %Select AEFs
     HC_tbl_x = 1./[0.1 0.2 0.5 1 2 5 10 20 50 100 200 500 1e3 2e3 5e3 1e4 2e4 5e4 1e5 2e5 5e5 1e6]';
+end
+% The Curves Are Computed In AEF; AEP Tables Are Read At Their AEF And The x Outputs Converted At The End
+if jpm_options.use_AEP
+    HC_tbl_x_aef = aep2aef(HC_tbl_x);
+else
+    HC_tbl_x_aef = HC_tbl_x;
 end
 % Set up responses for HC summary
 HC_tbl_rsp_y =(0.01:0.01:20)';
@@ -164,7 +172,7 @@ y_plt = interp1(Lx,y,log(HC_plt_x));
 % Interpolation to create hazard tables
 n = size(y, 2);
 HC_tbl_rsp_x = NaN(length(HC_tbl_rsp_y), n);
-HC_tbl_y = interp1(Lx, y, log(HC_tbl_x), 'linear', 'extrap');
+HC_tbl_y = interp1(Lx, y, log(HC_tbl_x_aef), 'linear', 'extrap');
 for NN=1:n
     [~, ia, ~] = unique(y(:, NN), 'stable');y2=y(ia,NN);Lx2=Lx(ia);
     HC_tbl_rsp_x(:, NN) = exp(interp1(y2, Lx2, HC_tbl_rsp_y, 'linear', 'extrap'));
@@ -176,6 +184,7 @@ y_plt(y_plt<0)=NaN;
 % Convert to AEP
 if jpm_options.use_AEP
     HC_tbl_rsp_x=aef2aep(HC_tbl_rsp_x);
+    HC_plt_x=aef2aep(HC_plt_x);
 end
 
 %% STORE OUTPUTS

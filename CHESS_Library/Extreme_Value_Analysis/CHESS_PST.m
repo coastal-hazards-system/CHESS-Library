@@ -8,7 +8,9 @@ function [SST_output] = CHESS_PST(response_data, pst_options, plot_options)
 %   or extracted from a time series (DataType 'Timeseries', CHESS_POT),
 %   is bootstrapped and fitted with a generalized Pareto distribution
 %   (GPD) above a mean residual life (MRL) threshold, giving the mean
-%   hazard curve and its confidence limits (CL) (CHESS_PST_Fit).
+%   hazard curve and its confidence limits (CL) (CHESS_PST_Fit). The
+%   curves are computed in AEF; with use_AEP = 1 the AEP table is read at
+%   its AEF and the x outputs are converted to AEP.
 %   The inputs are checked first (errors for invalid fields). POT rows
 %   with the flag value or with NaN, Inf or <= 0 (response, and response
 %   with tides when ind_Skew = 1) are removed; Timeseries rows with the

@@ -6,7 +6,10 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
 %   Computes response hazard curves from the forcing hazard curves of each
 %   storm type (pros_forcing_curves: SWL, Hm0_offshore, Hm0_toe, Tp, paired
 %   at equal AEF/AEP, for the y_table and y_plot rows). A storm type
-%   missing one of them is returned unchanged.
+%   missing one of them is returned unchanged. The new entries take
+%   x_plot and x_table of the first input entry of the storm type: AEF, or
+%   AEP when pros_use_aep = 1 (call_hazard_curve_builder computes in AEF
+%   and converts the x outputs), the unit of the RB curves.
 %     workflow 1 (EB1, called by PROS-RB): only the secondary floodwall
 %       responses, per CL column: p2dyn, p2sta, p2total, p3dyn, p3sta,
 %       p3total, pu (goda_forces_on_vertical_p2p3 with Hm0_offshore and

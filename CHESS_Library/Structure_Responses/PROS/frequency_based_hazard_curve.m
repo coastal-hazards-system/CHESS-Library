@@ -9,7 +9,9 @@ function fb_curve = frequency_based_hazard_curve(config, structure, hazard_curve
 %   Hm0_toe, Tp) are paired at equal AEF/AEP, the response is evaluated on
 %   a Monte Carlo of those paired forcing values perturbed with the run's
 %   forcing uncertainties, and its confidence limits are read from the
-%   sorted samples (chess_pros_frequency_base, workflow 4).
+%   sorted samples (chess_pros_frequency_base, workflow 4). x_plot and
+%   x_table are those of the forcing curves: AEF, or AEP when
+%   config.pros_use_aep = 1, like the RB curve it is compared with.
 %   The saved forcing hazard curves of the run are reused (no refit); only
 %   the requested response is computed and nothing is written to disk.
 %   The Monte Carlo draws are not seeded.
