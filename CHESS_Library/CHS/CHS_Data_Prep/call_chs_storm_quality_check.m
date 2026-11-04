@@ -13,8 +13,14 @@ function [config, storm, removed_storms, XC_Nyrs, XC_Nstm, prob_mass] = call_chs
 %   built when requested (create_priority_dataset, Peaks.WLP /
 %   Peaks.WHP). The wave model columns come from
 %   chs_wave_model_header_locator.
-%   Screening: storms with NaN or flagged values, a one-value water level
-%   Timeseries or no common ADCIRC/wave time range are listed in
+%   Timeseries wave flags: before the Timeseries and WLP datasets are
+%   built, flagged raw wave steps are filled (fill_flagged_wave_steps:
+%   Hm0 NaN/<= 0 -> 0.01 m, Tp NaN/<= 0 -> nearest valid Tp of the storm)
+%   so the step is kept.
+%   Screening: storms with NaN or flagged Peaks values, a one-value water
+%   level Timeseries, no valid Tp step, no common ADCIRC/wave time range,
+%   an interior gap of dropped Timeseries steps (chs_timeseries_formatter)
+%   or no WLP/WHP match (create_priority_dataset) are listed in
 %   removed_storms.Default and every dataset (Peaks Default / WLP / WHP,
 %   Timeseries Default) drops them by its own storm IDs. TC: the removed
 %   storms also leave prob_mass (Param and TC_Freq rows by the storm ID
@@ -62,7 +68,7 @@ function [config, storm, removed_storms, XC_Nyrs, XC_Nstm, prob_mass] = call_chs
 %   Tier: internal
 %
 %   See also build_storm_database, chs_peaks_formatter,
-%   chs_timeseries_formatter, create_priority_dataset,
+%   chs_timeseries_formatter, create_priority_dataset, fill_flagged_wave_steps,
 %   chs_wave_model_header_locator, chs_probability_mass_loader.
 %
 %   Developed by: Fabian A. Garcia Moreno ERDC-CHL
@@ -112,6 +118,9 @@ if use_timeseries == 1
     end
     % Pull Storm Data From Parsed H5 Files
     [timeseries_data, adcirc_bool_ts,  STWAVE_headers_location_ts, Tp_special_ts] = chs_file_selection(CHS_Data, 'Timeseries', storm_type);
+    % Fill Flagged Raw Wave Steps Before Any Interpolation (Timeseries.Default And WLP); No Valid Tp: Bad Storm
+    [timeseries_data{~adcirc_bool_ts}, no_tp_storms] = fill_flagged_wave_steps(timeseries_data{~adcirc_bool_ts}, STWAVE_headers_location_ts);
+    storm2rm = unique([storm2rm(:); no_tp_storms]);
     % Create ADCIRC-STWAVE TimeSeries Dataset
     [storm.Timeseries.Default, storm2rm] = chs_timeseries_formatter(timeseries_data{adcirc_bool_ts},...
         timeseries_data{~adcirc_bool_ts},...
@@ -120,15 +129,17 @@ if use_timeseries == 1
     if use_peaks == 1
         % Create Water Level Priority
         if WLP_switch == 1
-            [storm.('Peaks').WLP, ~] = create_priority_dataset(peaks_data{adcirc_bool},...
+            [storm.('Peaks').WLP, wlp_storm2rm] = create_priority_dataset(peaks_data{adcirc_bool},...
                 timeseries_data{adcirc_bool_ts}, timeseries_data{~adcirc_bool_ts},...
                 storm2rm, STWAVE_headers_location_ts, Tp_special_ts, 'wlp', disp_on);
+            storm2rm = unique([storm2rm; wlp_storm2rm(:)]);
         end
         % Create Wave Height Priority
         if WHP_switch == 1
-            [storm.('Peaks').WHP, ~] = create_priority_dataset(peaks_data{~adcirc_bool}, ...
+            [storm.('Peaks').WHP, whp_storm2rm] = create_priority_dataset(peaks_data{~adcirc_bool}, ...
                 timeseries_data{adcirc_bool_ts}, timeseries_data{~adcirc_bool_ts},...
                 storm2rm, STWAVE_headers_location, Tp_special, 'whp', disp_on);
+            storm2rm = unique([storm2rm; whp_storm2rm(:)]);
         end
     end
 end

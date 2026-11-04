@@ -13,11 +13,15 @@ function [storm_data, ts_storm2rm] = chs_timeseries_formatter(swl_timeseries, hm
 %   linearly interpolated to an hourly time step over their common time
 %   range. A raw peak (SWL, Hm0, Tp, wave dir) missed by the interpolation
 %   is written at the hourly time step nearest its time, so each
-%   hydrograph keeps its raw peak. Rows with flagged values (SWL < -90;
-%   Hm0, Tp or wave dir < -400) or NaN are dropped. Tp_special = 1 gives
-%   Tp = 1.2 * Tm. A storm in storms2rm or with a single water level value
-%   gets NaN data, a storm left with no rows gets empty data; both are
-%   added to ts_storm2rm.
+%   hydrograph keeps its raw peak. The raw wave records are expected with
+%   their flagged steps already filled (call_chs_storm_quality_check:
+%   fill_flagged_wave_steps). Rows with flagged values (SWL < -90; Hm0,
+%   Tp or wave dir < -400, a safety net) or NaN are dropped: at the start
+%   or end of the record they are trimmed, any other dropped row (an
+%   interior gap) makes the storm bad. Tp_special = 1 gives Tp = 1.2 *
+%   Tm. A storm in storms2rm or with a single water level value gets NaN
+%   data, a storm with an interior gap or no rows left gets empty data;
+%   all are added to ts_storm2rm.
 %
 %   Inputs:
 %     swl_timeseries          - converted ADCIRC Timeseries table
@@ -140,16 +144,16 @@ for stm = 1:num_storms
     %% REMOVE BAD ENTRIES
     % ADCIRC Flag Check
     storm_mat(storm_mat(:, 1) < -90, :) = NaN;
-    % STWAVE Flag Check
+    % STWAVE Flag Check (Safety Net: Raw Wave Flags Are Filled Upstream, fill_flagged_wave_steps)
     storm_mat(any(storm_mat(:, 2:4) < -400, 2), 2:4) = NaN;
-    % Remove NaNs
-    storm_mat(any(isnan(storm_mat), 2), :) = [];
-    % Empty Matrix Handling
-    if isempty(storm_mat)
+    % Rows With NaNs Are Dropped: Trimmed At The Start/End; An Interior Gap Or No Row Left Makes A Bad Storm
+    kept = find(~any(isnan(storm_mat), 2));
+    if isempty(kept) || numel(kept) ~= kept(end) - kept(1) + 1
         bad_count = bad_count + 1;
         bad_storms_buffer(bad_count) = current_stmID;
         continue;
     end
+    storm_mat = storm_mat(kept(1):kept(end), :);
     
     % Store Final Results
     storm_data{stm, 2} = storm_mat;

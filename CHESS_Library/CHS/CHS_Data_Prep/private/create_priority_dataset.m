@@ -17,9 +17,12 @@ function [storm_data, ts_storm2rm] = create_priority_dataset(peaks_table, timese
 %   'whp' (Wave Height Priority): peaks_table is the wave model Peaks
 %   table; its Hm0, Tp and wave dir are paired with the ADCIRC Timeseries
 %   SWL at the time step nearest the wave peak time, within +/- 3 hours.
-%   Tp_special = 1 gives Tp = 1.2 * Tm. A storm in storms2rm, with a
+%   Tp_special = 1 gives Tp = 1.2 * Tm. The wave Timeseries are expected
+%   with their flagged raw steps already filled (fill_flagged_wave_steps),
+%   so a WLP wave value is never a flag. A storm in storms2rm, with a
 %   single value in the paired Timeseries or with no match gets NaN data
-%   and is added to ts_storm2rm.
+%   and is added to ts_storm2rm; call_chs_storm_quality_check removes the
+%   ts_storm2rm storms from every dataset of the storm type.
 %
 %   Inputs:
 %     peaks_table            - converted Peaks table, ADCIRC for 'wlp' or
