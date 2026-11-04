@@ -860,7 +860,7 @@ classdef lcs_methods < CHESSPlotsBase
                 'un', false);
             % Bin Duration Values
             [bin_data, bin_edges] = compute_annual_distribution(self, dummy_stm_data, submerged_time_per_event,self.config.mcs_nYears,...
-                false, false, []);
+                false, is_count, []);
 
             [ax, pp, hb] = plot_annual_distribution(self, ax, bin_data, bin_edges, use_log_x, is_count, cb_log, cb_lim);
             pp.LineWidth = 0.2;
@@ -1377,7 +1377,7 @@ classdef lcs_methods < CHESSPlotsBase
 
         function d = event_data(self, ds_query, sel)
             % Rows Of The Chosen Life Cycle (And Year): mode 'ts' (One Row Per Time Step, Storms In Order) Or 'peaks' (One Row Per Storm,
-            % [year, order] Groups: Maxima, Rc Minimum). cols: SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc, Saved Responses
+            % [year, order, bin] Groups: Maxima, Rc Minimum). cols: SWL, Hm0_offshore, Hm0_toe, Tp, h, Rc, Saved Responses
             C = lcs_columns();
             pf = self.event_matrices(ds_query);
             M = pf{sel.lc};
@@ -1391,7 +1391,7 @@ classdef lcs_methods < CHESSPlotsBase
             Mk = M(rows, :);
             n = size(Mk, 1);
             if n > 0
-                [~, ~, g] = unique(Mk(:, [C.year C.order]), 'rows', 'stable'); % Storms (Rows Of A Storm Are Contiguous)
+                [~, ~, g] = unique(Mk(:, [C.year C.order C.bin]), 'rows', 'stable'); % Storms (Rows Of A Storm Are Contiguous; Order Restarts In Each Bin)
                 segs = accumarray(g, (1:n)', [], @(r) {r});
             else
                 g = zeros(0, 1);

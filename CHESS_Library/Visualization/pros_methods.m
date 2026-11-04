@@ -305,7 +305,7 @@ classdef pros_methods < CHESSPlotsBase
                 y_val = y_val(mask);
                 x_aef = x_aef(mask);
                 if ~isempty(resp_indx)
-                    resp_indx(mask) = resp_indx(mask);
+                    resp_indx = resp_indx(mask);
                 end
                 % Get Log Of AEF
                 lx = log(x_aef);
