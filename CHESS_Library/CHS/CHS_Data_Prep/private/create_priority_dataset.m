@@ -5,7 +5,9 @@ function [storm_data, ts_storm2rm] = create_priority_dataset(peaks_table, timese
 %       wave_headers, Tp_special, priority_type, print_progress)
 %
 %   Pairs the Peaks values of one model with the Timeseries values of the
-%   other. All tables are sorted by Storm ID and paired by row.
+%   other. All tables are sorted by numeric Storm ID and paired by row;
+%   they must hold the same storm IDs (error
+%   sort_tables_by_storm_id:stormIdMismatch).
 %   'wlp' (Water Level Priority): peaks_table is the ADCIRC Peaks table;
 %   its SWL is paired with the wave Timeseries Hm0, Tp and wave dir at the
 %   time step nearest the SWL peak time, within +/- 3 hours. When no wave
@@ -50,11 +52,9 @@ function [storm_data, ts_storm2rm] = create_priority_dataset(peaks_table, timese
 ts_storm2rm = storms2rm;
 % Define Time Window Around Peak To Pull Response From Timeseries
 tdelta = datenum(0, 0, 0, 3, 0, 0); %  +/- 3 hours
-% Get Storm Data Table
-peaks_table = sortrows(peaks_table,'Storm ID','ascend');
-% Sort Data Table
-timeseries_table_surge = sortrows(timeseries_table_surge,'Storm ID','ascend');
-timeseries_table_wave = sortrows(timeseries_table_wave,'Storm ID','ascend');
+% Sort By Numeric Storm ID; All Tables Must Hold The Same Storms (Paired By Row)
+[peaks_table, timeseries_table_surge, timeseries_table_wave] = sort_tables_by_storm_id(peaks_table,...
+    timeseries_table_surge, timeseries_table_wave);
 % Grab Storm IDs
 stmID = num2cell(str2double(peaks_table.("Storm ID")));
 % Initialize Storage Matrix

@@ -6,7 +6,9 @@ function [storm_data, ts_storm2rm] = chs_timeseries_formatter(swl_timeseries, hm
 %       print_progress)
 %
 %   Builds the Timeseries.Default dataset of one storm type. Both tables
-%   are sorted by Storm ID and paired by row. For each storm the ADCIRC
+%   are sorted by numeric Storm ID and paired by row; they must hold the
+%   same storm IDs (error sort_tables_by_storm_id:stormIdMismatch). For
+%   each storm the ADCIRC
 %   water level is kept within the wave model time range, then both are
 %   linearly interpolated to an hourly time step over their common time
 %   range. A raw peak (SWL, Hm0, Tp, wave dir) missed by the interpolation
@@ -51,9 +53,8 @@ if print_progress
     fprintf(1,'   Completion Progress:  0%%\n');
 end
 
-% Ensure Data Is Sorted Per Storm ID
-swl_timeseries = sortrows(swl_timeseries,'Storm ID','ascend');
-hm0_timeseries = sortrows(hm0_timeseries,'Storm ID','ascend');
+% Sort By Numeric Storm ID; Both Tables Must Hold The Same Storms (Paired By Row)
+[swl_timeseries, hm0_timeseries] = sort_tables_by_storm_id(swl_timeseries, hm0_timeseries);
 
 % Extract Storm IDs quickly as a numeric matrix
 stmID_vec = cellfun(@str2double, swl_timeseries.('Storm ID'));

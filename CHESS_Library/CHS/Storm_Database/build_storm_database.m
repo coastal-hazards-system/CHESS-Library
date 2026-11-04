@@ -13,7 +13,11 @@ function [storm, prob_mass, db_info] = build_storm_database(CHS_Data, options)
 %          exist).
 %       3. Per storm type with Peaks and Timeseries: hydrograph peaks
 %          replaced by the Peaks file values (chs_timeseries_peak_replacer).
-%       4. db_info (storm_db_info 'create').
+%       4. Storm ID alignment: every dataset of a storm type holds the
+%          same storm IDs in the same order, and for TC so do
+%          prob_mass.Param(:,1) and TC_Freq (when the probability masses
+%          were loaded); error build_storm_database:stormIdMismatch.
+%       5. db_info (storm_db_info 'create').
 %   Data types and WLP/WHP datasets are decided per storm type from the
 %   storm file slots (chs_storm_file_slots): Peaks / Timeseries when that
 %   storm type's slot is complete; WLP / WHP when requested and that
@@ -120,11 +124,39 @@ if any(has_peaks_and_timeseries)
     end
 end
 
+%% STORM ID ALIGNMENT: Every Dataset Of A Storm Type (And The TC Probability Masses) Holds The Same Storms In The Same Order
+check_storm_id_alignment(storm, prob_mass);
+
 %% STORM DATABASE DETAILS (Bias & Uncertainty, TC Bias Correction, XC Record)
 db_info = storm_db_info('create', options.bias_uncertainty, tc_bias_corrected, Nyrs_XC, Nstm_XC, options.source_file);
 end
 
 %% LOCAL FUNCTIONS
+function check_storm_id_alignment(storm, prob_mass)
+for st = reshape(fieldnames(storm), 1, [])
+    ref_ids = [];
+    ref_name = '';
+    for dtype = reshape(intersect({'Peaks', 'Timeseries'}, fieldnames(storm.(st{1})), 'stable'), 1, [])
+        for mtype = reshape(fieldnames(storm.(st{1}).(dtype{1})), 1, [])
+            name = sprintf('storm.%s.%s.%s', st{1}, dtype{1}, mtype{1});
+            ids = cell2mat(storm.(st{1}).(dtype{1}).(mtype{1})(:, 1));
+            if isempty(ref_name)
+                ref_ids = ids;
+                ref_name = name;
+            elseif ~isequal(ids, ref_ids)
+                error('build_storm_database:stormIdMismatch', '%s and %s do not hold the same storm IDs in the same order.', name, ref_name);
+            end
+        end
+    end
+    if strcmp(st{1}, 'TC') && ~isempty(prob_mass) && ~isempty(prob_mass.TC_Freq)
+        if ~isequal(prob_mass.Param(:, 1), ref_ids) || numel(prob_mass.TC_Freq) ~= numel(ref_ids)
+            error('build_storm_database:stormIdMismatch', ['prob_mass (Param column 1, TC_Freq) does not hold the storm IDs ',...
+                'of %s in the same order.'], ref_name);
+        end
+    end
+end
+end
+
 function report_progress(options, fraction, message)
 if ~isempty(options.progress_fcn)
     options.progress_fcn(fraction, message);

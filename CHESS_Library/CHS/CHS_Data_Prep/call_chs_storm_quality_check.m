@@ -15,10 +15,11 @@ function [config, storm, removed_storms, XC_Nyrs, XC_Nstm, prob_mass] = call_chs
 %   chs_wave_model_header_locator.
 %   Screening: storms with NaN or flagged values, a one-value water level
 %   Timeseries or no common ADCIRC/wave time range are listed in
-%   removed_storms.Default and their rows are removed from the Default
-%   Peaks and Timeseries datasets; the WLP / WHP datasets drop the same
-%   rows. TC: the removed storms also leave prob_mass (Param, TC_Freq,
-%   smpl1, smpl2, smpl3; TC_Freq rescaled to TotalFreq), and the SWL is
+%   removed_storms.Default and every dataset (Peaks Default / WLP / WHP,
+%   Timeseries Default) drops them by its own storm IDs. TC: the removed
+%   storms also leave prob_mass (Param and TC_Freq rows by the storm ID
+%   in Param column 1; smpl1, smpl2, smpl3; TC_Freq rescaled to
+%   TotalFreq), and the SWL is
 %   bias corrected when the region's bias & uncertainty files exist
 %   (chs_dependency_files bias_uncertainty_available). XC: never bias
 %   corrected; XC_Nstm and XC_Nyrs come from the ADCIRC Peaks file (else
@@ -135,33 +136,12 @@ end
 removed_storms.Default = storm2rm;
 
 %% REMOVE FLAGED STORMS
-% Remove Storms From "Default" Peaks Dataset
-if use_peaks == 1
-    % Identify Rows To Remove
-    rm_bool = ismember(cell2mat(storm.('Peaks').Default(:, 1)), removed_storms.Default);
-    % Remove Storms
-    storm.('Peaks').Default(rm_bool, :) = [];
-end
-% Remove Storms From "Default" Timeseries Dataset
-if use_timeseries == 1
-    % Identify Rows To Remove
-    rm_bool = ismember(cell2mat(storm.('Timeseries').Default(:, 1)), removed_storms.Default);
-    % Remove Storms
-    storm.('Timeseries').Default(rm_bool, :) = [];
-end
-% Remove Storms From Alternate Water Level Priority (WLP) Dataset
-if WLP_switch == 1 & use_peaks == 1
-    % Identify Rows To Remove
-    %         rm_bool_wlp = ismember(cell2mat(storm.('Peaks').WLP(:, 1)), removed_storms.WLP);
-    % Remove Storms
-    storm.('Peaks').WLP(rm_bool, :) = [];
-end
-% Remove Storms From Alternate Wave Height Priority (WLP) Dataset
-if WHP_switch == 1 & use_peaks == 1
-    % Identify Rows To Remove
-    %         rm_bool_whp = ismember(cell2mat(storm.('Peaks').WHP(:, 1)), removed_storms.WHP);
-    % Remove Storms
-    storm.('Peaks').WHP(rm_bool, :) = [];
+% Each Dataset (Peaks Default/WLP/WHP, Timeseries Default) Drops The Removed Storms By Its Own Storm IDs
+for dtype = reshape(fieldnames(storm), 1, [])
+    for mtype = reshape(fieldnames(storm.(dtype{1})), 1, [])
+        rm_bool = ismember(cell2mat(storm.(dtype{1}).(mtype{1})(:, 1)), removed_storms.Default);
+        storm.(dtype{1}).(mtype{1})(rm_bool, :) = [];
+    end
 end
 
 %% ADJUST STORM DEPENDANT PARAMETERS
@@ -172,14 +152,14 @@ switch storm_type
             % Something Went Wrong In PM Load
             warning('Something went wrong loading probability masses..');
         else
-            % Remove storms From Frequency Vector
-            prob_mass.TC_Freq(rm_bool,:)=[];
+            % Probability Mass Rows By Storm ID (Param Column 1)
+            pm_rm = ismember(prob_mass.Param(:, 1), removed_storms.Default);
+            prob_mass.TC_Freq(pm_rm, :) = [];
             % Redifine New Frequency Vector
             if ~isempty(storm2rm)
                 prob_mass.TC_Freq = prob_mass.TC_Freq*prob_mass.TotalFreq/sum(prob_mass.TC_Freq);
             end
-            % Remove storms From Other Vars
-            prob_mass.Param(rm_bool,:)=[];
+            prob_mass.Param(pm_rm, :) = [];
             %
             prob_mass.smpl1(ismember(prob_mass.smpl1,removed_storms.Default)) = [];
             prob_mass.smpl2(ismember(prob_mass.smpl2,removed_storms.Default)) = [];

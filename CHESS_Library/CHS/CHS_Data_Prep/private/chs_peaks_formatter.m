@@ -4,8 +4,9 @@ function [Storm, storm2rm] = chs_peaks_formatter(swl_peaks_table, hm0_peaks_tabl
 %       hm0_peaks_table, STWAVE_headers_location, Tp_special)
 %
 %   Builds the Peaks.Default dataset of one storm type from the converted
-%   CHS Peaks tables (chs_h5_converter). Both tables are sorted by Storm
-%   ID and paired by row. A flagged SWL (< -90) becomes NaN; a flagged
+%   CHS Peaks tables (chs_h5_converter). Both tables are sorted by
+%   numeric Storm ID and paired by row; they must hold the same storm IDs
+%   (error sort_tables_by_storm_id:stormIdMismatch). A flagged SWL (< -90) becomes NaN; a flagged
 %   wave value (Hm0, Tp or wave dir < -90 or 0) makes Hm0, Tp and wave dir
 %   NaN. The storms with a NaN SWL, Hm0, Tp or wave dir are listed in
 %   storm2rm (kept in Storm). A missing peak time gives a NaN
@@ -40,8 +41,8 @@ function [Storm, storm2rm] = chs_peaks_formatter(swl_peaks_table, hm0_peaks_tabl
 Storm = zeros(height(swl_peaks_table),5);
 
 %% STORM SURGE (ADCIRC) 
-% Get Storm Data Table
-swl_peaks_table = sortrows(swl_peaks_table,'Storm ID','ascend');
+% Sort By Numeric Storm ID; Both Tables Must Hold The Same Storms (Paired By Row)
+[swl_peaks_table, hm0_peaks_table] = sort_tables_by_storm_id(swl_peaks_table, hm0_peaks_table);
 % Extract Storm ID From ADCIRC Table
 stm_id = num2cell(str2double(swl_peaks_table.("Storm ID")));
 % Extract Water Level From ADyCIRC Table
@@ -50,8 +51,6 @@ Storm(:,1) = swl_peaks_table.("Water Elevation");
 Storm(Storm(:,1)<-90,1) = NaN(1,1);
 
 %% WAVES (STWAVE, SWAN, WAM)
-% Sort Data Table
-hm0_peaks_table = sortrows(hm0_peaks_table,'Storm ID','ascend');
 %%%%%% Hm0 %%%%%%%
 % Extract Hm0 Peak Values From Data Table
 Storm(:,2) = hm0_peaks_table.(STWAVE_headers_location.Hm0);
