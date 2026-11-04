@@ -15,10 +15,10 @@ function [data_table] = create_tide_file(station, datum, start_date, outName, pr
 %   values are the on-the-hour points of the 6-minute series.
 %   Harmonic ('R') stations only (noaa_station_catalog
 %   harmonic_predictions); NOAA rejects subordinate stations. The harmonic
-%   flag is options.harmonic_predictions when given, else the station's
-%   flag in the noaa_station_catalog tidepredictions list (one extra
-%   request; a station not in the list is not harmonic). A station that
-%   is not harmonic raises noaa:notHarmonic
+%   flag is options.harmonic_predictions when given (not empty), else the
+%   station's flag in the noaa_station_catalog tidepredictions list (one
+%   extra request; a station not in the list is not harmonic). A station
+%   that is not harmonic raises noaa:notHarmonic
 %   (download_noaa_tide_predictions) and sends no prediction request.
 %   Datums: whatever the station supports; noaa_station_details(station)
 %   lists them (datums table: name, description, api_code, value [m]).
@@ -51,8 +51,9 @@ function [data_table] = create_tide_file(station, datum, start_date, outName, pr
 %                    optional):
 %                      .harmonic_predictions - true for a harmonic ('R')
 %                          station (e.g. the caller already holds the
-%                          catalog flag), logical, default: the station's
-%                          flag in noaa_station_catalog (one request)
+%                          catalog flag), logical, default ([] or absent):
+%                          the station's flag in noaa_station_catalog (one
+%                          request)
 %   Outputs:
 %     data_table - hourly predictions written to outName, table: Date
 %                  (datetime, UTC without time zone), 'Prediction [m]'
@@ -79,7 +80,7 @@ last_hour = first_date + calyears(1) - caldays(1) + hours(23);
 target_date = (first_date : hours(1) : last_hour)';
 
 % Harmonic Flag: Given By The Caller, Else The Tide Prediction Station Catalog
-if isfield(options, 'harmonic_predictions')
+if isfield(options, 'harmonic_predictions') && ~isempty(options.harmonic_predictions)
     harmonic_predictions = options.harmonic_predictions;
 else
     report_progress(progress_fcn, 0, 'Checking the station...');

@@ -19,10 +19,9 @@ function predictions = download_noaa_tide_predictions(station_id, datum, first, 
 %   Inputs:
 %     station_id  - NOAA CO-OPS station id, char or string
 %     datum       - Data API datum code (e.g. 'MSL', 'MLLW', 'NAVD'), one
-%                   the station offers (see noaa_station_details). Sent as
-%                   given: datums endpoint names (NAVD88, GL_LWD) are not
-%                   converted here (noaa_datum_code does that), char or
-%                   string
+%                   the station offers (see noaa_station_details); the
+%                   datums endpoint names NAVD88 and GL_LWD are mapped to
+%                   NAVD and LWD (noaa_datum_code), char or string
 %     first, last - requested range (converted to UTC; a datetime without
 %                   time zone is taken as UTC), datetime
 %     interval    - prediction interval: '1', '6', '15', '30' [min], 'h'
@@ -70,7 +69,7 @@ first.TimeZone = 'UTC';
 last.TimeZone = 'UTC';
 
 endpoints = noaa_endpoints();
-request_url = [endpoints.data_api '?station=' station_id '&product=predictions&datum=' char(datum)...
+request_url = [endpoints.data_api '?station=' station_id '&product=predictions&datum=' noaa_datum_code(char(datum))...
     '&interval=' interval '&time_zone=gmt&units=metric&application=NOS.COOPS.TAC.WL&format=csv'];
 predictions = table(datetime.empty(0, 1), zeros(0, 1), 'VariableNames', {'DateTime', 'Prediction'});
 predictions.DateTime.TimeZone = 'UTC';

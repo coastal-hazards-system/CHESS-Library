@@ -5,7 +5,8 @@ function code = noaa_datum_code(name)
 %   The datums endpoint (noaa_station_details) names two datums
 %   differently from the data API: NAVD88 is requested as NAVD and GL_LWD
 %   as LWD. The match is case-insensitive; every other name is returned
-%   unchanged. Used by create_tide_file, noaa_station_details and
+%   unchanged. Used by create_tide_file, download_noaa_tide_predictions,
+%   download_noaa_water_levels, noaa_station_details and
 %   noaa_water_level_downloader.
 %
 %   Inputs:

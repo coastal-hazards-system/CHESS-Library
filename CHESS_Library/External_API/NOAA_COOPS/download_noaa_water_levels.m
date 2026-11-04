@@ -31,10 +31,9 @@ function [water_levels, windows] = download_noaa_water_levels(station_id, api_pr
 %     api_product - 'water_level', 'hourly_height', 'high_low',
 %                   'daily_mean' or 'monthly_mean', char or string
 %     datum       - Data API datum code (e.g. 'MSL', 'NAVD', 'IGLD'), one
-%                   the station offers (see noaa_station_details). Sent as
-%                   given: datums endpoint names (NAVD88, GL_LWD) are not
-%                   converted here (noaa_datum_code does that), char or
-%                   string
+%                   the station offers (see noaa_station_details); the
+%                   datums endpoint names NAVD88 and GL_LWD are mapped to
+%                   NAVD and LWD (noaa_datum_code), char or string
 %     first, last - requested range (converted to UTC; a datetime without
 %                   time zone is taken as UTC); [] for the start / end of
 %                   the inventory, datetime
@@ -110,7 +109,7 @@ end
 
 % Requests
 request_url = [endpoints.data_api '?station=' station_id '&product=' api_product...
-    '&datum=' char(datum) '&time_zone=gmt&units=metric&application=NOS.COOPS.TAC.WL&format=csv'];
+    '&datum=' noaa_datum_code(char(datum)) '&time_zone=gmt&units=metric&application=NOS.COOPS.TAC.WL&format=csv'];
 chunk_tables = {};
 for window_index = 1:height(windows)
     [chunk_first, chunk_last] = noaa_request_chunks(windows.first(window_index),...

@@ -17,15 +17,13 @@ function [Sdata, notFound] = noaa_water_level_downloader(idList, StationList, re
 %     Window: opMode 1 = whole inventory of the product (first segment
 %         start to last segment end); opMode 2 = [dBeg, dEnd], the same for
 %         every station (never narrowed by a previous station).
-%     Datum (WL_datum), as currently coded: requested_datum is upper-cased
-%         and mapped by noaa_datum_code (NAVD88 -> NAVD, GL_LWD -> LWD).
-%         Great Lakes stations (checked first): IGLD, or LWD when LWD is
-%         requested and the station offers it. Other stations: the
-%         requested code when the station offers it (StationList datums
-%         api_code); otherwise the first offered of NAVD, MSL, MLLW (when
-%         the requested code contains NAVD) or of MSL, MLLW, NAVD (any
-%         other request); else STND (also when the station has no datums).
-%         TP_datum = WL_datum.
+%     Datum (WL_datum): requested_datum is upper-cased and mapped by
+%         noaa_datum_code (NAVD88 -> NAVD, GL_LWD -> LWD); one rule for
+%         every station (Great Lakes included): the requested code is used
+%         when the station offers it (StationList datums api_code), else
+%         the element gets status 'datum not offered (offers: A, B, ...)'
+%         ('offers: none' for a station without datums) and is skipped
+%         before any download (no fallback datum). TP_datum = WL_datum.
 %     Measured data: download_noaa_water_levels (window intersected with
 %         the segments, each time requested once, NaN on regular grids,
 %         high_low never filled).
@@ -44,7 +42,7 @@ function [Sdata, notFound] = noaa_water_level_downloader(idList, StationList, re
 %         years = 365.2425 days), not the count of valid data.
 %     Beg, End: first and last DateTime of WL (NaT when empty).
 %     status: 'ok'; 'product not offered'; 'no inventory in the requested
-%         window'; 'no data returned' (WL all NaN or empty); 'download
+%         window'; 'datum not offered (offers: ...)'; 'no data returned' (WL all NaN or empty); 'download
 %         failed: <NOAA message>'; '; tide predictions failed: <message>'
 %         is appended when only TP failed.
 %   NOAA rejections (noaa:requestFailed) are reported in status and the
@@ -55,10 +53,11 @@ function [Sdata, notFound] = noaa_water_level_downloader(idList, StationList, re
 %   Inputs:
 %     idList          - station ids to download, cell, string or char
 %     StationList     - station list (noaa_station_list), struct array
-%     requested_datum - preferred datum: Data API code or datums endpoint
-%                       name (e.g. 'MSL', 'NAVD', 'NAVD88'; see
-%                       noaa_station_details for a station's datums),
-%                       char or string
+%     requested_datum - datum to download: Data API code or datums
+%                       endpoint name (e.g. 'MSL', 'NAVD', 'NAVD88', 'IGLD';
+%                       see noaa_station_details for a station's datums);
+%                       stations that do not offer it are skipped, char or
+%                       string
 %     products        - NOAA product names, any of 'Verified 6-Minute
 %                       Water Level', 'Preliminary 6-Minute Water Level',
 %                       'Verified Hourly Height Water Level', 'Verified
@@ -162,7 +161,17 @@ for station_index = 1:numel(list_row)
             continue
         end
 
-        entry.WL_datum = select_datum(station, requested_datum);
+        [entry.WL_datum, offered] = select_datum(station, requested_datum);
+        if isempty(entry.WL_datum)
+            if isempty(offered)
+                entry.status = 'datum not offered (offers: none)';
+            else
+                entry.status = ['datum not offered (offers: ' char(strjoin(offered, ', ')) ')'];
+            end
+            Sdata(end + 1, 1) = entry; %#ok<AGROW>
+            report_entry(station_index, numel(list_row), entry);
+            continue
+        end
         api_product = char(station.WL_api_product(find(product_segments, 1)));
         segments = table(string(station.WL_api_product(product_segments)),...
             string(station.WL_quality(product_segments)), segment_first, segment_last,...
@@ -237,32 +246,15 @@ end
 time.TimeZone = 'UTC';
 end
 
-function datum = select_datum(station, requested_datum)
+function [datum, offered] = select_datum(station, requested_datum)
 offered = strings(0, 1);
 if ~isempty(station.datums)
     offered = string({station.datums.api_code}');
 end
 requested = noaa_datum_code(upper(string(requested_datum)));
-if station.greatlakes
-    datum = 'IGLD';
-    if requested == "LWD" && any(offered == "LWD")
-        datum = 'LWD';
-    end
-    return
-end
+datum = '';
 if any(offered == requested)
     datum = char(requested);
-    return
-end
-if contains(requested, "NAVD")
-    fallback_order = ["NAVD", "MSL", "MLLW"];
-else
-    fallback_order = ["MSL", "MLLW", "NAVD"];
-end
-datum = 'STND';
-first_offered = find(ismember(fallback_order, offered), 1);
-if ~isempty(first_offered)
-    datum = char(fallback_order(first_offered));
 end
 end
 
