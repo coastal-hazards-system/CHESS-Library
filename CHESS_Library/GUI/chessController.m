@@ -48,6 +48,10 @@ classdef chessController < handle
         VIEWS = {'tree', 'project_panel', 'stormdb', 'run_controls', 'inputs_table', 'pse', 'constants', 'results', 'status'}
         CONTROL_INPUTS = {'storm_sampling', 'data_types', 'swl_slr', 'tide_file', 'apply_depth_limitation', 'responses'}
         FORCING_INPUTS = {'storm_duration', 'compute_storm_duration'} % Template Forcing Rows In The Inputs Table (Every PSE Type)
+        % Response Parameter Rows Whose Parent Is Not Their Symbol Prefix (response_parameter_rows): Shown When A Parent
+        % Response Switch Is Checked, Or A Parent Parameter Row Is Shown With Value 1
+        RESPONSE_PARAMETER_PARENTS = struct('dn50_use_legacy_model', {{'compute_dn50_seaside', 'compute_dn50_leeside'}},...
+            'dn50_legacy_submerged_correction', {{'dn50_use_legacy_model'}})
         GRAVITY = standard_gravity() % m/s^2, Library Value (Common/standard_gravity.m)
     end
 
@@ -141,6 +145,31 @@ classdef chessController < handle
         function drop_inputs(obj, names)
             % Inputs Table Values Dropped (Names Not Held Are Ignored)
             obj.inputs = rmfield(obj.inputs, intersect(fieldnames(obj.inputs), names));
+        end
+
+        function rows = response_parameter_rows(obj, tpl, resp_checked)
+            % Inputs Table Response Parameter Rows (Template "Structure Responses" Rows Not Described As "Compute..."), In
+            % Template Order: Shown When A Response Switch Prefixing The Symbol Is Checked (compute_damaging_depth ->
+            % compute_damaging_depth_Ks) Or A RESPONSE_PARAMETER_PARENTS Parent Is On (A Checked Switch, Or A Parameter Row
+            % Shown Above With Value 1: inputs, Else The Template Default)
+            resp_sym = tpl.responses(:, 1);
+            is_switch = startsWith(tpl.responses(:, 2), 'Comput');
+            shown = false(size(resp_sym));
+            for rr = find(~is_switch)'
+                parents = resp_sym(is_switch & cellfun(@(x) startsWith(resp_sym{rr}, [x '_']), resp_sym));
+                shown(rr) = any(ismember(parents, resp_checked));
+                if isfield(obj.RESPONSE_PARAMETER_PARENTS, resp_sym{rr})
+                    for parent = obj.RESPONSE_PARAMETER_PARENTS.(resp_sym{rr})
+                        kp = find(strcmp(resp_sym, parent{1}), 1);
+                        if ismember(parent{1}, resp_checked)
+                            shown(rr) = true;
+                        elseif ~isempty(kp) && ~is_switch(kp) && shown(kp) && isequal(obj.input(parent{1}, tpl.responses{kp, 4}), 1)
+                            shown(rr) = true;
+                        end
+                    end
+                end
+            end
+            rows = tpl.responses(shown, :);
         end
 
         function names = table_fields(obj)

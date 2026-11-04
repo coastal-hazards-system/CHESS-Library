@@ -756,16 +756,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             rows = cell(0, 4);
             % Forcing: Storm Duration And Per-Storm Timeseries Durations Always Shown (Every PSE Type; Dn50 Uses Them)
             rows = [rows; tpl.forcing(ismember(tpl.forcing(:, 1), app.controller.FORCING_INPUTS), :)];
-            % Response Parameters (Template Rows Not Described As "Compute...", e.g. compute_damaging_depth_Ks)
-            % Shown When The Response They Extend Is Checked
-            resp_sym = tpl.responses(:, 1);
-            is_switch = startsWith(tpl.responses(:, 2), 'Comput');
-            for rr = find(~is_switch)'
-                parent = resp_sym(is_switch & cellfun(@(x) startsWith(resp_sym{rr}, [x '_']), resp_sym));
-                if any(ismember(parent, resp_checked))
-                    rows = [rows; tpl.responses(rr, :)]; %#ok<AGROW>
-                end
-            end
+            % Response Parameters (Template Rows Not Described As "Compute...", e.g. compute_damaging_depth_Ks,
+            % dn50_use_legacy_model) Shown When The Response They Extend Is Checked
+            rows = [rows; app.controller.response_parameter_rows(tpl, resp_checked)];
             % Workflow Sections
             switch app.WorkflowDropDown.Value
                 case 1 % PROS-RB
@@ -2000,7 +1993,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.set_dropdown_items(app.StormIDDropDown_results, a_items);
             app.StormIDDropDown_results.Enable = a_on;
         end
-
     end
 
 
@@ -2490,8 +2482,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             app.controller.set_input(symbol, val);
-            % DPA Settings Rows Follow csr_call_dpa
-            if strcmp(symbol, 'csr_call_dpa')
+            % DPA Settings Rows Follow csr_call_dpa; The Legacy Dn50 Submerged Correction Row Follows dn50_use_legacy_model
+            if ismember(symbol, {'csr_call_dpa', 'dn50_use_legacy_model'})
                 app.controller.touch({'inputs_table'});
                 app.refresh();
             end
