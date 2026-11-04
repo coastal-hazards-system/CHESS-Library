@@ -94,8 +94,6 @@ end
 %% CHS_DEPENDENCIES STUDY GRID, BIAS & UNCERTAINTY FILES
 files = chs_dependency_files(chs_dependencies, region);
 if files.folder_exists && files.region_supported
-    w_state = warning('off');
-    w_cleanup = onCleanup(@() warning(w_state));
     % Study Grid Row (savepoint_grid_row.m) And Offshore Elevation (Grid Depth, Positive Down, Negated)
     loc = savepoint_grid_row(files, sp_ID, sp_coords);
     grid_row = loc.row;
