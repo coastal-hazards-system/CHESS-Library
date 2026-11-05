@@ -17,8 +17,8 @@ function [Dn50, Dn50_tag] = submerged_stone_armor_stability(Hs,Tp,h,Rc,Dn50,hc,S
 %     h     - water depth at the toe, SWL - toe elevation [m]
 %     Rc    - freeboard, crest elevation - SWL [m]
 %     Dn50  - stone size of the emergent-crest equation [m]
-%     hc    - structure height from the sea bottom [m] (CHESS passes the
-%             crest elevation, as the pre-ANN code did)
+%     hc    - structure height from the sea bottom [m] (CHESS passes
+%             crest elevation - toe elevation)
 %     S     - design damage level [-], scalar
 %     delta - armor relative buoyant density [-], scalar
 %     g     - gravitational acceleration [m/s^2], scalar

@@ -405,7 +405,7 @@ end
 function [Dn50_ss, Dn50_ls] = legacy_dn50_responses(response_switch, forcing, gammas, geometry, g, submerged_correction)
 emp_coeff = load_empirical_coefficients();
 Hm0 = forcing.Hm0; Tp = forcing.Tp; Tm = forcing.Tm; Tm10 = forcing.Tm10; h = forcing.h; Rc = forcing.Rc;
-crest_elev = geometry.crest_elev; crest_width = geometry.crest_width; cem_P = geometry.cem_P; armor_delta = geometry.armor_delta;
+crest_elev = geometry.crest_elev; crest_width = geometry.crest_width; cem_P = geometry.cem_P; armor_delta = geometry.armor_delta; toe_elev = geometry.toe_elev;
 seaside_design_S = geometry.seaside_design_S; leeside_design_S = geometry.leeside_design_S;
 mound_seaside_slope_cota = geometry.mound_seaside_slope_cota; mound_leeside_slope_cota = geometry.mound_leeside_slope_cota;
 % The Equations Flatten Hm0 But Not The Duration (Nz = duration./Tm(:)): One Duration [s] Per Hm0 Element, As A Column
@@ -415,9 +415,9 @@ Dn50_ls = [];
 if response_switch.compute_dn50_seaside == 1
     Dn50_ss = cellfun(@(a, b, c, d, e) melby_Dn50_seaside_stability(a, b, c, e, mound_seaside_slope_cota,...
         armor_delta, cem_P, seaside_design_S, g, emp_coeff.km1, emp_coeff.km2, d), Hm0, Tm, h, Rc, duration, 'un', false);
-    % Submerged Crest (Rc < 0): hc Is The Crest Elevation, As In The Pre-ANN Code
+    % Submerged Crest (Rc < 0): hc Is The Structure Height Above The Toe (crest_elev - toe_elev)
     if submerged_correction == 1
-        Dn50_ss = cellfun(@(a, b, c, d, e) submerged_stone_armor_stability(a, b, c, d, e, crest_elev,...
+        Dn50_ss = cellfun(@(a, b, c, d, e) submerged_stone_armor_stability(a, b, c, d, e, crest_elev - toe_elev,...
             seaside_design_S, armor_delta, g), Hm0, Tp, h, Rc, Dn50_ss, 'un', false);
     end
 end
@@ -426,7 +426,7 @@ if response_switch.compute_dn50_leeside == 1
         mound_seaside_slope_cota, mound_leeside_slope_cota, e, armor_delta, g, emp_coeff.k_ls1, emp_coeff.k_ls2, k.gamma_f),...
         Hm0, Tm10, Tm, Rc, duration, gammas, 'un', false);
     if submerged_correction == 1
-        Dn50_ls = cellfun(@(a, b, c, d, e) submerged_stone_armor_stability(a, b, c, d, e, crest_elev,...
+        Dn50_ls = cellfun(@(a, b, c, d, e) submerged_stone_armor_stability(a, b, c, d, e, crest_elev - toe_elev,...
             leeside_design_S, armor_delta, g), Hm0, Tp, h, Rc, Dn50_ls, 'un', false);
     end
 end
