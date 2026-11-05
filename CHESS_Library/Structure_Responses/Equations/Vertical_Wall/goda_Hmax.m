@@ -23,14 +23,15 @@ function [Hmax, hb]=goda_Hmax(Hm0,Ts,Rayleigh_H250,hs,d,Bm,berm_slope_tana,offsh
 %   (about T_m-1,0); Ts = 0.93*Tp for JONSWAP with gamma = 3.3 and
 %   approaches Tp for narrower spectra.
 %
-%   Inputs (any consistent length unit: m from damaging_depth, ft from
-%   goda_forces_on_vertical_p1; Hm0, Ts, hs and d of the same size):
+%   Inputs (any consistent length unit; m from damaging_depth and
+%   goda_vertical_wall_pressure_distribution; Hm0, Ts, hs and d of the
+%   same size):
 %     Hm0                 - offshore spectral significant wave height
 %     Ts                  - significant wave period [s]
 %     Rayleigh_H250       - ratio of the design height to Hm0 [-], scalar
 %                           (damaging_depth passes 1.6,
-%                           goda_forces_on_vertical_p1 its design_scale,
-%                           1.8 in CHESS)
+%                           goda_vertical_wall_pressure_distribution
+%                           its design_scale, 1.8 in CHESS)
 %     hs                  - water depth at the structure (berm) toe
 %     d                   - water depth over the toe berm crest (= hs
 %                           without a berm)
@@ -48,8 +49,7 @@ function [Hmax, hb]=goda_Hmax(Hm0,Ts,Rayleigh_H250,hs,d,Bm,berm_slope_tana,offsh
 %
 %   Tier: public
 %
-%   See also damaging_depth, goda_forces_on_vertical_p1,
-%   goda_forces_on_vertical_p2p3.
+%   See also damaging_depth, goda_vertical_wall_pressure_distribution.
 
 Hm0 = Hm0(:);
 Ts = Ts(:);

@@ -16,10 +16,11 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %       dn50_legacy_submerged_correction = 1 also
 %       submerged_stone_armor_stability; number of waves from
 %       storm_duration, never dt).
-%     Floodwall: q, q_wave_ot (Eurotop_r2p_q_Final); p1
-%       (goda_forces_on_vertical_p1); p2dyn, p2sta, p2total, p3dyn,
-%       p3sta, p3total, pu (goda_forces_on_vertical_p2p3; NaN where p1 is
-%       NaN); X_low, theta_low, X_up, theta_up, Bx, X_c_surge,
+%     Floodwall: q, q_wave_ot (Eurotop_r2p_q_Final); p1, p2dyn, p2sta,
+%       p2total, p3dyn, p3sta, p3total, pu
+%       (goda_vertical_wall_pressure_distribution, SI; wave terms and
+%       totals NaN where Rc < 0, static terms kept; every pressure NaN for
+%       a dry toe); X_low, theta_low, X_up, theta_up, Bx, X_c_surge,
 %       theta_center, Bjet, Vjet, Fjet (floodwall_nappe_response; NaN
 %       where q is NaN).
 %     Every type: Hm0t (Hm0_toe times the eurotop_wave_transmission Kt;
@@ -83,7 +84,8 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %   See also call_project_response, response_registry,
 %   call_eurotop_ifactors, Eurotop_r2p_q_Final, ann_rubblemound_stability,
 %   melby_Dn50_seaside_stability, van_gent_Dn50_leeside_stability,
-%   submerged_stone_armor_stability, damaging_depth, lcs_columns.
+%   submerged_stone_armor_stability, goda_vertical_wall_pressure_distribution,
+%   damaging_depth, lcs_columns.
 
 %% GRAB DETAILS FROM "config"
 % Strucutre Type
@@ -315,22 +317,20 @@ if response_switch.compute_q == 1 || response_switch.compute_nappe == 1
         wall_bottom_elev, cem_P, g, struc_type),...
         Hm0, Tm10, SWL, Rc, gammas, slope_aux,'un',false);
 end
-% Compute Wall Pressures
+% Compute Wall Pressures (Goda: hs = h, d = hb, hc = Rc; The Function Owns The NaN Rules)
 if response_switch.compute_p1 == 1 || response_switch.compute_p2_p3 == 1
-    % P1
-    Resp.p1 = cellfun(@(a, b, c, d) goda_forces_on_vertical_p1(a, b, 1.8,...
-        0, c, d, berm_width, rho_w, g, offshore_slope_tana, berm_slope_tana), Hm0_off, Ts, h, hb, 'un', false);
-end
-%
-if response_switch.compute_p2_p3 == 1
-    % Compute P2 & P3 Wall Pressures (Plots)
-    [Resp.p2dyn, Resp.p2sta, Resp.p2total,...
-        Resp.p3dyn, Resp.p3sta, Resp.p3total, Resp.pu] = cellfun(@(a, b, c, d, e, f) goda_forces_on_vertical_p2p3(a, b, 1.8,...
-        0, c, d, e, hw, f, rho_w, g), Hm0_off, Ts, h, hb, Rc, Resp.p1, 'un', false);
-    % No Wave Attack (P1 NaN, e.g. Dry Toe): Secondary Pressures Are Undefined, Not Zero
-    p_names = response_registry('output', 'names', 'compute_switch', 'compute_p2_p3');
-    for pp = 1:length(p_names)
-        Resp.(p_names{pp}) = cellfun(@nan_where, Resp.(p_names{pp}), Resp.p1, 'un', false);
+    units = chess_units('system', 'SI');
+    wall = struct('hw', hw, 'Bm', berm_width, 'berm_slope_tana', berm_slope_tana, ...
+        'offshore_slope_tana', offshore_slope_tana, 'rho_w', rho_w, 'g', g, 'design_scale', 1.8, 'beta', 0);
+    distribution = response_switch.compute_p2_p3 == 1;
+    P = cellfun(@(a, b, c, dd, e) goda_vertical_wall_pressure_distribution(a, b, c, dd, e, wall, units,...
+        distribution = distribution), Hm0_off, Ts, h, hb, Rc, 'un', false);
+    Resp.p1 = cellfun(@(s) s.p1, P, 'un', false);
+    if response_switch.compute_p2_p3 == 1
+        p_names = response_registry('output', 'names', 'compute_switch', 'compute_p2_p3');
+        for pp = 1:length(p_names)
+            Resp.(p_names{pp}) = cellfun(@(s) s.(p_names{pp}), P, 'un', false);
+        end
     end
 end
 %

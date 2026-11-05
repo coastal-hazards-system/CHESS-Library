@@ -2,10 +2,11 @@
   "_schemaVersion": "1.0.0",
   "chess_units": {
     "inputs": [
-      {"name": "unit_kind", "kind": "ordered", "type": ["char", "choices={'length','mass','density','force','pressure','time','angle','velocity','discharge_per_length','volume_per_length','force_per_length','dimensionless'}"]}
+      {"name": "unit_kind", "kind": "ordered", "type": ["char", "choices={'length','mass','density','force','pressure','time','angle','velocity','discharge_per_length','volume_per_length','force_per_length','dimensionless','system'}"]},
+      {"name": "system_name", "kind": "ordered", "type": ["char", "choices={'SI','Imperial'}"]}
     ],
     "outputs": [
-      {"name": "out", "type": ["char"]}
+      {"name": "out", "type": [["char"], ["struct"]]}
     ]
   },
   "discrete_standard_normal_scores": {

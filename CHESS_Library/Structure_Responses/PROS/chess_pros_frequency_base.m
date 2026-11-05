@@ -12,10 +12,10 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
 %   and converts the x outputs), the unit of the RB curves.
 %     workflow 1 (EB1, called by PROS-RB): only the secondary floodwall
 %       responses, per CL column: p2dyn, p2sta, p2total, p3dyn, p3sta,
-%       p3total, pu (goda_forces_on_vertical_p2p3 with Hm0_offshore and
-%       the p1 curve) and the nappe (floodwall_nappe_response with Hm0_toe
-%       and the q curve); skipped when the p1 or q curve they need is
-%       missing.
+%       p3total, pu (goda_vertical_wall_pressure_distribution, SI, with
+%       Hm0_offshore and the given p1 curve) and the nappe
+%       (floodwall_nappe_response with Hm0_toe and the q curve); skipped
+%       when the p1 or q curve they need is missing.
 %     workflow 4 (EB2, PROS-FB): every requested response
 %       (compute_structure_response) on a 10000-sample Monte Carlo of the
 %       first (best-estimate) column of the forcing curves with the
@@ -42,8 +42,9 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
 %                 compute_structure_response
 %     structure - structure geometry, 1x1 struct; reads crest_elevation,
 %                 toe_elevation, berm_crest_elevation, berm_crest_width,
-%                 berm_seaward_slope (toe berm), wall_bottom_elevation
-%                 (floodwall) [m, study datum, positive up]
+%                 berm_seaward_slope (toe berm), offshore_slope,
+%                 wall_bottom_elevation (floodwall) [m, study datum,
+%                 positive up]
 %     data_in   - hazard curves per storm type, struct with fields XC, TC
 %                 and/or CC, each a struct array of hazard curve entries
 %                 (set_hazard_curve_entry)
@@ -57,7 +58,8 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
 %   Tier: internal
 %
 %   See also chess_pros, frequency_based_hazard_curve, pros_forcing_curves,
-%   set_hazard_curve_entry, compute_structure_response.
+%   set_hazard_curve_entry, compute_structure_response,
+%   goda_vertical_wall_pressure_distribution.
 
     % ==========================================
     % 1. INITIALIZE CONFIG & STRUCTURE DETAILS
@@ -77,11 +79,11 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
     if config.add_toe_berm
         berm_elev  = structure.berm_crest_elevation;
         berm_width = structure.berm_crest_width;
-        berm_slope = structure.berm_seaward_slope;
+        berm_slope_tana = 1./structure.berm_seaward_slope;
     else
         berm_elev  = structure.toe_elevation;
         berm_width = 0;
-        berm_slope = 1; 
+        berm_slope_tana = 1;
     end
     
     % Rubblemound / Wall Logic
@@ -90,6 +92,12 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
     else
         hw = NaN; % Failsafe if accessed outside struc_type 2
     end
+
+    % Goda Wall Pressures (EB1 Secondary Responses; Same Settings As compute_structure_response)
+    units = chess_units('system', 'SI');
+    wall = struct('hw', hw, 'Bm', berm_width, 'berm_slope_tana', berm_slope_tana, ...
+        'offshore_slope_tana', 1./structure.offshore_slope, 'rho_w', rho_w, 'g', g, 'design_scale', 1.8, 'beta', 0);
+    p2_p3_names = response_registry('output', 'names', 'compute_switch', 'compute_p2_p3');
 
     % Mean Lake Level (EB2 SWL Uncertainty Is Computed On Surge, Not TWL)
     lake_level = mean_lake_level(config);
@@ -136,7 +144,7 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
             end
             
             % Compute Intermediate Variables
-            Tm10 = cellfun(@(x) x ./ 1.1, Tp, 'UniformOutput', false);
+            Ts = Tp; % assuming narrow spectra
             h    = cellfun(@(x) x - toe_elev, SWL, 'UniformOutput', false);
             Rc   = cellfun(@(x) crest_elev - x, SWL, 'UniformOutput', false);
             hb   = cellfun(@(x) x - berm_elev, SWL, 'UniformOutput', false);
@@ -149,10 +157,11 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                    if can_do_secondary
                        if req_p2_p3
                            p1 = get_hc_data(hc_data, 'p1', field);
-                           [Resp.(field).p2dyn, Resp.(field).p2sta, Resp.(field).p2total,...
-                               Resp.(field).p3dyn, Resp.(field).p3sta, Resp.(field).p3total, Resp.(field).pu] = ...
-                               cellfun(@(a, b, c, d, e, f) goda_forces_on_vertical_p2p3(a, b, 1.8, 0, c, d, e, hw, f, rho_w, g), ...
-                               Hm0_off, Tm10, h, hb, Rc, p1, 'UniformOutput', false);
+                           P = cellfun(@(a, b, c, dd, e, f) goda_vertical_wall_pressure_distribution(a, b, c, dd, e, ...
+                               wall, units, p1 = f), Hm0_off, Ts, h, hb, Rc, p1, 'UniformOutput', false);
+                           for pp = 1:length(p2_p3_names)
+                               Resp.(field).(p2_p3_names{pp}) = cellfun(@(s) s.(p2_p3_names{pp}), P, 'UniformOutput', false);
+                           end
                        end
 
                        if req_nappe
