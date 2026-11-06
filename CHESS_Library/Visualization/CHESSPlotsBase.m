@@ -614,8 +614,9 @@ classdef CHESSPlotsBase
             %       (elevations on the left yyaxis, everything else on the
             %       right; at most 2 unit groups).
             %       Peaks (data type Peaks, or the peaks view of
-            %       Timeseries): one row per storm; select 2 columns (1st
-            %       click = X, 2nd = Y) for a scatter.
+            %       Timeseries): one row per storm; select 1 column (Y vs
+            %       event table row) or 2 columns (1st click = X, 2nd = Y)
+            %       for a scatter.
             %
             %   Inputs:
             %     ds_query  - dataset query (storm_type, data_type, match_type)
@@ -634,13 +635,12 @@ classdef CHESSPlotsBase
             choices = self.event_choices(ds_query);
             sel = self.event_selection(sel, choices);
             fig = uifigure('Position', [60 60 1250 820]);
-            gl = uigridlayout(fig, [4 1], 'RowHeight', {30, 34, 440, '1x'});
+            gl = uigridlayout(fig, [4 1], 'RowHeight', {30, 34, '3x', '2x'});
             lt = uilabel(gl, 'Interpreter', 'html');
             lt.Layout.Row = 1;
             ctrl = [];
-            axp = uipanel(gl, 'BorderType', 'none');
-            axp.Layout.Row = 3;
-            ax = uiaxes(axp, 'Units', 'normalized', 'OuterPosition', [0 0 1 1]);
+            ax = uiaxes(gl); % Directly In The Grid: Resizes With The Window (Layout Survives cla Reset)
+            ax.Layout.Row = 3;
             ut = uitable(gl, 'RowName', {}, 'FontSize', self.base_fnt - 1, 'SelectionType', 'column', 'Multiselect', 'on');
             ut.Layout.Row = 4;
             st.order = {}; st.T = table(); st.info = struct(); st.ts = false;
@@ -720,19 +720,25 @@ classdef CHESSPlotsBase
             function redraw()
                 pick = st.order(~ismember(st.order, self.table_id_cols));
                 if ~st.ts
-                    if numel(pick) ~= 2
-                        show_msg({'Select 2 table columns to plot', '1st click = X axis, 2nd click = Y axis'});
+                    if ~ismember(numel(pick), [1 2])
+                        show_msg({'Select 1 table column (Y vs table row) or 2 columns', '1st click = X axis, 2nd click = Y axis'});
                         return
                     end
-                    [xl, ~, xlog] = self.field_info(pick{1}); [yl, ~, ylog] = self.field_info(pick{2});
+                    if isscalar(pick) % 1 Column: Y vs Event Table Row
+                        x = (1:height(st.T))'; y = st.T.(pick{1});
+                        xl = 'Event Table Row'; xlog = 0; [yl, ~, ylog] = self.field_info(pick{1});
+                    else
+                        x = st.T.(pick{1}); y = st.T.(pick{2});
+                        [xl, ~, xlog] = self.field_info(pick{1}); [yl, ~, ylog] = self.field_info(pick{2});
+                    end
                     cla(ax, 'reset');
                     aux_methods.initiate_axes(ax, xl, yl, '', self.base_fnt);
-                    ok = ~isnan(st.T.(pick{1})) & ~isnan(st.T.(pick{2}));
-                    scatter(ax, st.T.(pick{1})(ok), st.T.(pick{2})(ok), 30, [0 0.447 0.741], 'filled', 'MarkerEdgeColor', [.2 .2 .2]);
+                    ok = ~isnan(x) & ~isnan(y);
+                    scatter(ax, x(ok), y(ok), 30, [0 0.447 0.741], 'filled', 'MarkerEdgeColor', [.2 .2 .2]);
                     ax.XScale = aux_methods.tern(xlog == 1, 'log', 'linear');
                     ax.YScale = aux_methods.tern(ylog == 1, 'log', 'linear');
-                    aux_methods.pad_limits(ax, 'X', st.T.(pick{1})(ok));
-                    aux_methods.pad_limits(ax, 'Y', st.T.(pick{2})(ok));
+                    aux_methods.pad_limits(ax, 'X', x(ok));
+                    aux_methods.pad_limits(ax, 'Y', y(ok));
                 else
                     if isempty(pick)
                         show_msg({'Select one or more table columns', 'to plot their hydrographs'});
