@@ -1,15 +1,16 @@
-function P = goda_vertical_wall_pressure_distribution(Hm0, Ts, hs, d, hc, wall, units, options)
+function [P, eta_star] = goda_vertical_wall_pressure_distribution(Hm0, Ts, hs, d, hc, wall, units, options)
 % goda_vertical_wall_pressure_distribution  Goda pressure distribution on a vertical wall.
-%   P = goda_vertical_wall_pressure_distribution(Hm0, Ts, hs, d, hc, wall,
-%       units) returns the Goda wave pressure p1 at SWL, the pressures at
+%   [P, eta_star] = goda_vertical_wall_pressure_distribution(Hm0, Ts, hs, d,
+%       hc, wall, units) returns the Goda wave pressure p1 at SWL, the pressures at
 %       the top (p2) and the base (p3) of the wall and the uplift pressure
-%       pu at its seaward heel, for every forcing element.
-%   P = goda_vertical_wall_pressure_distribution(..., p1 = p1) uses the
-%       given p1 (e.g. a p1 hazard curve) instead of computing it; the
+%       pu at its seaward heel, for every forcing element, and the wave run-up
+%       height eta_star.
+%   [P, eta_star] = goda_vertical_wall_pressure_distribution(..., p1 = p1)
+%       uses the given p1 (e.g. a p1 hazard curve) instead of computing it; the
 %       design wave, hb, k, the alphas and eta_star still come from the
 %       forcing inputs.
-%   P = goda_vertical_wall_pressure_distribution(..., distribution = false)
-%       returns p1 only.
+%   [P, eta_star] = goda_vertical_wall_pressure_distribution(...,
+%       distribution = false) returns p1 only in P (eta_star is still returned).
 %
 %   Goda method of the CEM, Tables VI-5-53 and VI-5-55 (full-height wall,
 %   irregular waves), with the CEM variable names and lambda1 = lambda2 =
@@ -26,7 +27,7 @@ function P = goda_vertical_wall_pressure_distribution(Hm0, Ts, hs, d, hc, wall, 
 %     eta_star = 0.75*(1 + cos(beta))*lambda1*H_design
 %     p1 = 0.5*(1 + cos(beta))*(lambda1*alpha1 + lambda2*alpha2*
 %          cos(beta)^2)*gamma_w*H_design
-%     p2dyn = (1 - hc/eta_star)*p1 where eta_star > hc, else 0
+%     p2dyn = (1 - hc/eta_star)*p1 where eta_star > hc > 0, 0 where eta_star <= hc
 %     p3dyn = alpha3*p1
 %     pu = 0.5*(1 + cos(beta))*lambda3*alpha1*alpha3*gamma_w*H_design
 %     p2sta = gamma_w*max(-hc, 0), p3sta = gamma_w*hs
@@ -43,15 +44,22 @@ function P = goda_vertical_wall_pressure_distribution(Hm0, Ts, hs, d, hc, wall, 
 %   equations. hb is the depth at the breaker point (goda_Hmax) only.
 %
 %   Model rules (no depth clipping):
-%     - wave (dynamic) terms p1, p2dyn, p3dyn, pu, and the totals p2total,
-%       p3total, are NaN where hc < 0 (submerged crest: Goda applies up to
-%       SWL at the crest, hc = 0), and NaN where p1 is undefined;
-%     - static terms p2sta, p3sta are always computed (also where hc < 0)
-%       and never use eta_star or H_design;
+%     - hc < 0 (SWL above the crest, overflowing wall): every output (p1,
+%       p2dyn, p2sta, p2total, p3dyn, p3sta, p3total, pu, eta_star) is NaN;
+%     - p1, p3dyn, pu, p3sta and p3total are computed up to and including
+%       hc = 0 (SWL at the crest); all but p3sta are NaN where p1 is
+%       undefined;
+%     - p2dyn and p2total are NaN where hc <= 0 (the pressure at the top of
+%       the wall is not defined at or below SWL), and where p1 is NaN;
+%       p2sta = gamma_w*max(-hc, 0) = 0 for hc >= 0;
+%     - eta_star is NaN wherever p1 is NaN;
+%     - static terms never use eta_star or H_design;
 %     - dry toe (hs <= 0): every output is NaN, static terms included;
 %     - k is computed only where hs > 0, d > 0 and Ts > 0 (else the wave
 %       terms are NaN).
-%   Assumptions: the landside is always dry (still-water pressure acts on
+%   Assumptions: the protected area (landside) filling is not modelled: once
+%   SWL is above the crest (hc < 0) the wall is overflowing and no pressure
+%   is computed; the landside is always dry (still-water pressure acts on
 %   the seaward face only, no still-water uplift, pu is wave-only); the
 %   wall stands on the seabed and the mound is ignored (h_prime = d = hs,
 %   toe = wall bottom; CHESS hides toe berms, finalize_structure_config
@@ -101,6 +109,9 @@ function P = goda_vertical_wall_pressure_distribution(Hm0, Ts, hs, d, hc, wall, 
 %         p2sta, p2total (top of the wall), p3dyn, p3sta, p3total (base of
 %         the wall), pu (uplift at the seaward heel); p1 only with
 %         distribution = false
+%     eta_star - wave run-up height 0.75*(1 + cos(beta))*lambda1*H_design
+%         [length], same size as Hm0, from the breaker-limited H_design (also
+%         in given-p1 mode and with distribution = false); NaN where p1 is NaN
 %
 %   Errors: goda_vertical_wall_pressure_distribution:missingWallField when
 %   wall lacks a field.
@@ -188,21 +199,23 @@ end
 submerged_crest = hc < 0;
 dry_toe = hs <= 0;
 p1(submerged_crest | dry_toe) = NaN;
+eta_star(isnan(p1)) = NaN;
 if ~options.distribution
     P.p1 = to_project_units(p1, imp, units, data_dims);
+    eta_star = to_project_length(eta_star, imp, units, data_dims);
     return
 end
 p2dyn = (1 - hc./eta_star).*p1;
 p2dyn(eta_star <= hc) = 0;
-p2dyn(isnan(p1)) = NaN;
+p2dyn(isnan(p1) | hc <= 0) = NaN;
 p3dyn = alpha3.*p1;
 pu = 0.5*(1 + cos(beta))*lambda3*alpha1.*alpha3*gamma_w.*H_design;
 pu(isnan(p1)) = NaN;
 p2sta = gamma_w*max(-hc, 0);
 p2sta(isnan(hc)) = NaN;
 p3sta = gamma_w*hs;
-p2sta(dry_toe) = NaN;
-p3sta(dry_toe) = NaN;
+p2sta(dry_toe | submerged_crest) = NaN;
+p3sta(dry_toe | submerged_crest) = NaN;
 p2total = p2dyn + p2sta;
 p3total = p3dyn + p3sta;
 
@@ -215,6 +228,11 @@ P.p3dyn = to_project_units(p3dyn, imp, units, data_dims);
 P.p3sta = to_project_units(p3sta, imp, units, data_dims);
 P.p3total = to_project_units(p3total, imp, units, data_dims);
 P.pu = to_project_units(pu, imp, units, data_dims);
+eta_star = to_project_length(eta_star, imp, units, data_dims);
+end
+
+function L = to_project_length(L_ft, imp, units, data_dims)
+L = reshape(L_ft*imp.to_SI.length/units.to_SI.length, data_dims);
 end
 
 function p = to_project_units(p_psf, imp, units, data_dims)
