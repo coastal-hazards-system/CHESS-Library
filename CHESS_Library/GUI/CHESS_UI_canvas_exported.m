@@ -148,6 +148,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
     end
 
 
+
     methods (Access = private)
         function append_project(app, wProj)
             % Append SS Project & Make It Active (chessController.add_project), Then Refresh UI
@@ -812,18 +813,18 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 app.AlternativeMenu.Enable = false;
                 return
             end
-            % Project Dropdown
-            projList = {app.controller.projects.name};
+            % Project Dropdown (Dropdown Items Alphabetical, Case-Insensitive)
+            projList = alphabetical({app.controller.projects.name});
             app.ProjectDropDown.Items = projList;
             app.ProjectDropDown.Value = app.controller.project.name;
             app.ProjectPathEditField.Value = app.controller.project.get_project_field('path', '', '', 'proj');
             % PSE & Alternative Dropdowns
             [pse_name, alt_name] = app.controller.active_names();
-            pseList = app.controller.project.pse_list;
+            pseList = alphabetical(app.controller.project.pse_list);
             app.PSEDropDown.Items = pseList;
             if ~isempty(pse_name)
                 app.PSEDropDown.Value = pse_name;
-                app.AlternativeDropDown.Items = app.controller.project.get_project_field('alternative_list', pse_name, '', 'pse');
+                app.AlternativeDropDown.Items = alphabetical(app.controller.project.get_project_field('alternative_list', pse_name, '', 'pse'));
             else
                 app.AlternativeDropDown.Items = {};
             end
@@ -833,6 +834,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Menus
             app.PSEMenu.Enable = true;
             app.AlternativeMenu.Enable = ~isempty(pseList);
+
+            function names = alphabetical(names)
+                [~, ix] = sort(lower(names));
+                names = names(ix);
+            end
         end
 
         function populate_pse_responses(app, has_timeseries)
@@ -1490,8 +1496,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         function run_simulation(app, plan)
             % Run A chessController.plan_run Plan (execute_run) With An App-Scoped Progress Dialog (Locks The CHESS Window
             % Only), Then Show The Results Of The Current Key. The Inputs Table Shows An mcs_nLC Set By The LCS Convergence
-            % Question First. Failed: The Error Dialog Only (Slot Restored By The Controller). Done: Tree, Results Tab,
-            % Status Bar (How The Forcing Was Obtained), Then One Warning If The Project Update Failed
+            % Question First. Failed: The Error Dialog Only (Slot Restored By The Controller). Done: Tree, Results Tab
+            % (Filled, Not Selected: The Selected Tab Stays), Status Bar (How The Forcing Was Obtained), Then One Warning If The Project Update Failed
             if ismember('inputs_table', app.controller.take_changed())
                 tbl = app.WorkflowInputsTable.Data;
                 for kk = 1:size(tbl, 1)
@@ -1522,7 +1528,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.controller.use_key();
             app.populateResultsTab();
             app.set_sim_status(res.status_text);
-            app.TabGroup.SelectedTab = app.ResultsViewerTab;
             app.show_messages(msgs);
 
             function progress(value, message)
@@ -1822,10 +1827,15 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Rebuilt Only When Its Content Changed (Node List Kept In The Tree's UserData); Otherwise Only The Active Node Is
             % Highlighted, So Scrolling And Expanded / Collapsed Nodes Stay As The User Left Them. The Active Node Is Scrolled To
             [act_pse, act_alt] = app.controller.active_names();
-            % 1. Node List: {parent row (0: Tree), Text, NodeData}, Depth First (Creation Order); act_row: Active Node
+            % 1. Node List: {parent row (0: Tree), Text, NodeData}, Depth First (Projects, PSEs And Alternatives Alphabetical,
+            % Case-Insensitive; Simulation Bundles In Registry Order); act_row: Active Node
             items = cell(0, 3);
             act_row = 0;
-            for kk = 1:length(app.controller.projects)
+            proj_order = [];
+            if ~isempty(app.controller.projects) % No Projects Loaded: [] (No name Field)
+                proj_order = alphabetical_order({app.controller.projects.name});
+            end
+            for kk = proj_order
                 wObj = app.controller.projects(kk);
                 is_act = wObj == app.controller.project;
                 items(end+1, :) = {0, wObj.name, struct('type', 'proj', 'name', wObj.name)}; %#ok<AGROW>
@@ -1834,7 +1844,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     act_row = proj_row;
                 end
                 % Loop Across PSEs (Read Lists Directly, No Working Index Side Effects)
-                for jj = 1:length(wObj.pse_list)
+                for jj = alphabetical_order(wObj.pse_list)
                     pse_name = wObj.pse_list{jj};
                     items(end+1, :) = {proj_row, pse_name, struct('type', 'pse', 'name', pse_name)}; %#ok<AGROW>
                     pse_row = size(items, 1);
@@ -1847,7 +1857,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     end
                     % Loop Across Alternatives (Multi-Line: Stage Marker In The Text; Names Are Read From NodeData.name)
                     altList = wObj.alternative_list{jj};
-                    for ii = 1:length(altList)
+                    for ii = alphabetical_order(altList)
                         alt_text = altList{ii};
                         stage = wObj.alt_stage(pse_name, altList{ii});
                         if stage > 0
@@ -1907,8 +1917,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
             end
 
+            function ix = alphabetical_order(names)
+                [~, ix] = sort(lower(names));
+                ix = reshape(ix, 1, []); % Row: for Loops Over Its Elements
+            end
+
             function list = tree_nodes(parent)
-                % Tree Nodes Depth First (Creation Order)
+                % Tree Nodes Depth First (Display Order)
                 list = gobjects(0, 1);
                 for cc = 1:numel(parent.Children)
                     list = [list; parent.Children(cc); tree_nodes(parent.Children(cc))]; %#ok<AGROW>
@@ -1993,6 +2008,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.set_dropdown_items(app.StormIDDropDown_results, a_items);
             app.StormIDDropDown_results.Enable = a_on;
         end
+
     end
 
 
