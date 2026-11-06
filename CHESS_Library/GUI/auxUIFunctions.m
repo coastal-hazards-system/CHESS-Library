@@ -150,12 +150,14 @@ classdef auxUIFunctions < handle
         end
 
         function dropdown_input_dlgbox(obj, prompt, choices, title_str, ok_label)
-            % Pick One Of choices. dialog_answer = Selected Item On ok_label, [] Otherwise
+            % Pick One Of choices. dialog_answer = Selected Item On ok_label, [] Otherwise. An Empty Row Under The Dropdown
+            % (20 px Per Item, Up To 6) Keeps Its Open List Inside The Window (uifigure Clips It), So Long Lists Scroll
             if nargin < 5
                 ok_label = 'OK';
             end
             obj.dialog_answer = [];
-            [fig, gl] = obj.build_dialog(title_str, prompt, {'Cancel', ok_label}, 440, 22);
+            list_room = 20*min(numel(choices), 6);
+            [fig, gl] = obj.build_dialog(title_str, prompt, {'Cancel', ok_label}, 440, [22 list_room]);
             dd = uidropdown(gl, 'Items', choices, 'FontSize', 12);
             dd.Layout.Row = 2;
             fig.Visible = 'on';
