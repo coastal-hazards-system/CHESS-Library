@@ -148,7 +148,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
     end
 
 
-
     methods (Access = private)
         function append_project(app, wProj)
             % Append SS Project & Make It Active (chessController.add_project), Then Refresh UI
@@ -1046,12 +1045,18 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % [NEW] Flagged Refresh: The Views The Controller Marked Stale (chessController.take_changed, VIEWS Order) Redrawn:
             % Project Panel & Tree -> Storm DB Tab -> Run Tab Controls (Or Inputs Table Only) -> PSE Tab (After The Run Tab:
             % A Multi-Line Stage 2 Plot Follows Its Storm DB + Workflow) -> Constants -> Results Tab, Then Its Saved Simulation
-            % (Dialog Only When ask: A User Switch). Flags Raised While Redrawing Are Dropped (Drawn In This Pass)
+            % (Dialog Only When ask: A User Switch). Flags Raised While Redrawing Are Dropped (Drawn In This Pass).
+            % A Context Switch (Any Heavy View Stale) Shows An "Updating View" Dialog, Which Blocks The Window: Clicks Made
+            % Meanwhile Are Not Queued Up Behind The Redraw. Light Updates (Inputs Table, Status) Show None
             if nargin < 2
                 ask = false;
             end
             views = app.controller.take_changed();
             has = @(v) any(strcmp(views, v));
+            if any(ismember(views, {'project_panel', 'stormdb', 'run_controls', 'pse', 'results'}))
+                busy = uiprogressdlg(app.UIFigure, 'Title', 'CHESS', 'Message', 'Updating view...', 'Indeterminate', 'on');
+                busy_cleanup = onCleanup(@() delete(busy)); %#ok<NASGU> Closed On Exit, Errors Included
+            end
             if has('project_panel')
                 app.populate_project_panel(); % Tree Included
             elseif has('tree')
@@ -1795,6 +1800,30 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
         end
 
+        function tree_expand(app, nodes, flag)
+            % Expand (flag true) Or Collapse Project Tree Nodes And Keep Their Keys (NodeData.key) In The Tree's
+            % UserData.expanded, Restored When The Tree Is Rebuilt (R2022b Tree Nodes Have No Expanded Property). Also The
+            % Tree's NodeExpandedFcn / NodeCollapsedFcn (User Clicks)
+            if isempty(nodes)
+                return
+            end
+            for nn = 1:numel(nodes)
+                if flag
+                    expand(nodes(nn));
+                else
+                    collapse(nodes(nn));
+                end
+            end
+            keys = arrayfun(@(n) n.NodeData.key, nodes(:), 'un', false);
+            st = app.ProjectTree.UserData;
+            if flag
+                st.expanded = union(st.expanded, keys);
+            else
+                st.expanded = setdiff(st.expanded, keys);
+            end
+            app.ProjectTree.UserData = st;
+        end
+
         function proj = tree_node_project(app, node)
             % Project Of A Project Tree Node (Any Level)
             while ~strcmp(node.NodeData.type, 'proj')
@@ -1804,20 +1833,33 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function tree_show_level(app, level)
-            % Project Tree Right-Click Expand/Collapse: Nodes Down To level Shown (1 Projects, 2 PSEs, 3 Alternatives,
-            % 4 All, Simulation Bundles Included)
-            if level == 4
-                expand(app.ProjectTree, 'all');
-                return
+            % Project Tree Right-Click Expand/Collapse: 1 Projects Only, 2 PSEs Shown, 3 Focus PSE (PSEs Shown, Plus The
+            % Active PSE's Alternatives), 4 All (Simulation Bundles Included). R2022b Drops The Expand Of A Node Whose Parent
+            % Was Expanded In The Same Update: drawnow Between Levels
+            focus = [];
+            sel = app.ProjectTree.SelectedNodes;
+            if level == 3
+                level = 2;
+                if isscalar(sel)
+                    while ~ismember(sel.NodeData.type, {'proj', 'pse'})
+                        sel = sel.Parent;
+                    end
+                    if strcmp(sel.NodeData.type, 'pse')
+                        focus = sel;
+                    end
+                end
             end
             collapse(app.ProjectTree, 'all');
+            st = app.ProjectTree.UserData;
+            st.expanded = {};
+            app.ProjectTree.UserData = st;
             nodes = app.ProjectTree.Children(:);
             for lvl = 2:level
-                for nn = 1:numel(nodes)
-                    expand(nodes(nn));
-                end
+                app.tree_expand(nodes, true);
+                drawnow
                 nodes = vertcat(nodes.Children);
             end
+            app.tree_expand(focus, true);
         end
 
         function update_project_tree(app)
@@ -1882,33 +1924,68 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
             end
             % 2. Same Content As Shown: Keep The Nodes, Highlight Only. Else Rebuild (Old Right-Click Menus Deleted: They Belong
-            % To The Figure), All Expanded
+            % To The Figure): Nodes Expanded Before Stay Expanded (Key: Path Of type:name, In NodeData.key), Plus The Active
+            % Node (A New Simulation Bundle Shows); First Build: All Expanded
             nodes = tree_nodes(app.ProjectTree);
             sig = [items(:, 1:2), cellfun(@(d) [d.type '|' d.name], items(:, 3), 'un', false)];
-            if ~(isequal(sig, app.ProjectTree.UserData) && numel(nodes) == size(items, 1))
+            st = app.ProjectTree.UserData;
+            rebuilt = ~(isstruct(st) && isequal(sig, st.sig) && numel(nodes) == size(items, 1));
+            if rebuilt
                 delete(app.ProjectTree.Children);
                 delete(findall(app.UIFigure, 'Type', 'uicontextmenu', 'Tag', 'ProjectTreeNodeMenu'));
                 nodes = gobjects(size(items, 1), 1);
+                keys = cell(size(items, 1), 1);
+                depth = zeros(size(items, 1), 1);
                 for rr = 1:size(items, 1)
                     parent = app.ProjectTree;
+                    keys{rr} = [items{rr, 3}.type ':' items{rr, 3}.name];
+                    depth(rr) = 1;
                     if items{rr, 1} > 0
                         parent = nodes(items{rr, 1});
+                        keys{rr} = [keys{items{rr, 1}} '/' keys{rr}];
+                        depth(rr) = depth(items{rr, 1}) + 1;
                     end
-                    nodes(rr) = uitreenode(parent, 'Text', items{rr, 2}, 'NodeData', items{rr, 3});
+                    data = items{rr, 3};
+                    data.key = keys{rr};
+                    nodes(rr) = uitreenode(parent, 'Text', items{rr, 2}, 'NodeData', data);
                     add_node_menu(nodes(rr));
                 end
-                app.ProjectTree.UserData = sig;
-                if act_row > 0
-                    expand(app.ProjectTree, 'all');
+                app.ProjectTree.UserData = struct('sig', {sig}, 'expanded', {{}});
+                app.ProjectTree.NodeExpandedFcn = @(~, evt) app.tree_expand(evt.Node, true);
+                app.ProjectTree.NodeCollapsedFcn = @(~, evt) app.tree_expand(evt.Node, false);
+                if ~isstruct(st)
+                    if act_row > 0
+                        app.tree_show_level(4);
+                    end
+                else
+                    for dd = 1:max([depth; 0]) % Parents First (drawnow: See tree_show_level)
+                        reopen = nodes(depth == dd & ismember(keys, st.expanded));
+                        if ~isempty(reopen)
+                            app.tree_expand(reopen, true);
+                            drawnow
+                        end
+                    end
                 end
             end
-            % Highlight Active Node (Its Ancestors Expanded) And Scroll It Into View
+            % Highlight Active Node (Its Ancestors Expanded; Rebuilt: The Node Too) And Scroll It Into View
             if act_row > 0
                 act_node = nodes(act_row);
+                ancestors = gobjects(0, 1);
                 p = act_node.Parent;
                 while isa(p, 'matlab.ui.container.TreeNode')
-                    expand(p);
+                    ancestors = [p; ancestors]; %#ok<AGROW>
                     p = p.Parent;
+                end
+                expanded = app.ProjectTree.UserData.expanded;
+                for aa = 1:numel(ancestors) % Top Down, Collapsed Ones Only (drawnow: See tree_show_level; It Also Runs
+                    % Queued Callbacks, So It Is Skipped When Nothing Opens)
+                    if ~ismember(ancestors(aa).NodeData.key, expanded)
+                        app.tree_expand(ancestors(aa), true);
+                        drawnow
+                    end
+                end
+                if rebuilt
+                    app.tree_expand(act_node, true);
                 end
                 app.ProjectTree.SelectedNodes = act_node;
                 try
@@ -1939,7 +2016,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         uimenu(cm, 'Text', 'Expand all', 'Separator', 'on', 'MenuSelectedFcn', @(~, ~) app.tree_show_level(4));
                         uimenu(cm, 'Text', 'Collapse to projects', 'MenuSelectedFcn', @(~, ~) app.tree_show_level(1));
                         uimenu(cm, 'Text', 'Collapse to PSEs', 'MenuSelectedFcn', @(~, ~) app.tree_show_level(2));
-                        uimenu(cm, 'Text', 'Collapse to alternatives', 'MenuSelectedFcn', @(~, ~) app.tree_show_level(3));
+                        uimenu(cm, 'Text', 'Focus PSE', 'MenuSelectedFcn', @(~, ~) app.tree_show_level(3));
                         if strcmp(node.NodeData.type, 'proj')
                             uimenu(cm, 'Text', 'Rebuild simulations from disk', 'Separator', 'on',...
                                 'MenuSelectedFcn', @(~, ~) app.rebuild_sims(app.tree_node_project(node)));
