@@ -36,12 +36,12 @@ hold(ax, 'on');
 title({'CHESS-JPM '; ['Station: ',JPM_output.staID]}, 'FontSize',12);
 % Format X Axis
 if jpm_options.use_AEP == 1
-    xlim(ax, [1e-4 1]);
-    XTick=[1e-4 1e-3 1e-2 1e-1 1];
+    xlim(ax, [1e-6 1]);
+    XTick=[1e-6 1e-5 1e-4 1e-3 1e-2 1e-1 1];
     xlabel('Annual Exceedance Probability','FontSize',12);
 else
-    xlim(ax, [1e-4 10]);
-    XTick=[1e-4 1e-3 1e-2 1e-1 1 10];
+    xlim(ax, [1e-6 10]);
+    XTick=[1e-6 1e-5 1e-4 1e-3 1e-2 1e-1 1 10];
     xlabel('Annual Exceedance Frequency (yr^{-1})','FontSize',12);
 end
 set(ax, 'XTick', XTick);

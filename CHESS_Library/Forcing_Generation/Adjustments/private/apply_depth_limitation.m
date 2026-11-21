@@ -5,8 +5,8 @@ function [Hm0, Depth_Limited_Waves] = apply_depth_limitation(Hm0, Tp, h, g)
 %   Depth-limited wave height Hb = K_b * 0.1 * L * tanh(k * h), with K_b = 1,
 %   k the linear-theory wave number of Tp at depth h (wavnum1_VG) and
 %   L = 2*pi/k. Where Hb <= 0 (no positive depth) Hb takes the Hm0 value.
-%   Hm0 is replaced by Hb where Hm0 > Hb, and set to 0 where h < 0
-%   (emergent toe).
+%   Hm0 is replaced by Hb where Hm0 > Hb, and set to NaN where h <= 0
+%   (dry toe: no waves reach it, the wave responses are NaN).
 %
 %   Inputs:
 %     Hm0 - significant wave height [m], double array
@@ -15,7 +15,7 @@ function [Hm0, Depth_Limited_Waves] = apply_depth_limitation(Hm0, Tp, h, g)
 %     g   - gravity [m/s^2], scalar double
 %   Outputs:
 %     Hm0                 - depth-limited wave height [m], same size as the
-%                           input
+%                           input; NaN where h <= 0
 %     Depth_Limited_Waves - depth-limited wave height Hb [m], same size as
 %                           Hm0
 %
@@ -43,8 +43,8 @@ Depth_Limited_Waves(Depth_Limited_Waves<=0)=Hm0(Depth_Limited_Waves<=0); %negati
 Ratio_Check = Depth_Limited_Waves./h;
 % Replace Hm0 With Depth Limited Value If Hm0>Hm0_DL
 Hm0(Hm0>Depth_Limited_Waves) = Depth_Limited_Waves(Hm0>Depth_Limited_Waves);
-% Make sure to set to 0 instances of emergent toe (h<0)
-Hm0(h<0) = 0;
+% Dry Toe (h <= 0): No Waves
+Hm0(h<=0) = NaN;
 % Reshape
 Hm0 = reshape(Hm0,data_dims);
 Depth_Limited_Waves = reshape(Depth_Limited_Waves,data_dims);

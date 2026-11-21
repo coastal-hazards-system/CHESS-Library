@@ -8,8 +8,11 @@ function [config, structure] = call_input_parser(input_filename)
 %
 %   Every section row of the input file becomes a config field named by its
 %   'Model Variable Symbol' (last row wins); gravity_constant is set from
-%   standard_gravity. workflow must be a chess_workflows number (1 PROS-RB,
-%   2 DET, 3 LCS, 4 PROS-FB). The storm data in chs_zip is one of:
+%   standard_gravity. The inputs are then checked against the rules of the
+%   workflow and of the structure (validate_config: every problem in one
+%   error, validate_config:invalidInputs; workflow must be a chess_workflows
+%   number, 1 PROS-RB, 2 DET, 3 LCS, 4 PROS-FB). The storm data in chs_zip
+%   is one of:
 %     CHS input (.zip or a CHS_Data .mat) - the storm files are checked by
 %       name (chs_storm_file_slots: one study identity, chs_study_identity,
 %       and one ADCIRC + one wave file per slot) against this run's request
@@ -28,8 +31,10 @@ function [config, structure] = call_input_parser(input_filename)
 %     Storm .mat input (storm + prob_mass) - region and sp_ID from the file
 %       name (storm_mat_name_parts; else 'Custom_Modeling' and 1), storm_db
 %       defaults to the file name. Unless the storm database exists with a
-%       db_info, the data are validated, checked against this run's request
-%       and saved as the storm database with its db_info (storm_db_info;
+%       db_info, the data are validated, curated (curate_storm_database;
+%       storms without a curated Peaks SWL removed,
+%       remove_storms_without_water_level), checked against this run's
+%       request and saved as the storm database with its db_info (storm_db_info;
 %       Nyrs_XC/Nstm_XC moved out of storm.XC).
 %   An existing storm database's db_info is applied to config. The storm
 %   database folder and the workflow folder of the alternative are created
@@ -49,8 +54,9 @@ function [config, structure] = call_input_parser(input_filename)
 %
 %   Tier: public
 %
-%   See also read_chess_input, chess_setup_path, call_chs_data_formatter,
-%   call_chess_boundary_conditions, call_project_response, chess_paths.
+%   See also read_chess_input, validate_config, chess_setup_path,
+%   call_chs_data_formatter, call_chess_boundary_conditions,
+%   call_project_response, chess_paths.
 %
 %   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
@@ -64,10 +70,8 @@ config.gravity_constant = standard_gravity(); % m/s^2
 for jj = 1:size(input_rows, 1)
     config.(input_rows{jj, 1}) = input_rows{jj, 4};
 end
-%
-if ~ismember(config.workflow, [chess_workflows().number])
-    error('Error: config.workflow must be 1 (PROS), 2 (DET), 3 (LCS), or 4 (PROS-FB).');
-end
+% Every Missing Or Invalid Input Of The Workflow And Structure, Reported Before Anything Runs
+validate_config(config);
 % Make Sure Specified File Exist
 if ~exist(config.chs_zip, 'file') % Valid Zip Folder Detected
     error('Error: Provided file through config.chs_zip not found. Please verify path...');
@@ -214,12 +218,14 @@ end
 if ~chess_storm && strcmp(data_case, 'storm_data')
     % Load storm & prob_mass From Provided .mat
     load(config.chs_zip, 'storm', 'prob_mass');
-    % Validate "storm" dataset
-    storm = storm_validation(config, storm);
+    % Validate "storm" dataset, Then Curate Every Dataset (Hm0 Floor, SWL <= -100 m -> NaN)
+    storm = curate_storm_database(storm_validation(config, storm));
     % Validate prob_mass Based On Storm Content
     if isfield(storm, 'TC')
         prob_mass = prob_mass_validation(config, prob_mass, storm);
     end
+    % Storms Without A Curated Peaks Water Level Leave The Storm Data (TC Probability Masses Rescaled)
+    [storm, prob_mass] = remove_storms_without_water_level(storm, prob_mass);
     % This Run's Request Must Be In The Provided Storm Data (No CHS Files To Rebuild From)
     req = run_request(config);
     [stm_ok, dtype_ok, alt_ok] = storm_db_check(storm, prob_mass, req.storm_sampling,...

@@ -19,7 +19,10 @@ function [SST_output] = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, g
 %   above the threshold and the empirical values below. Otherwise each
 %   bootstrap sample gives an empirical curve.
 %   The mean and the prc percentiles of the simulated curves are made
-%   monotonic (Monotonic_adjustment) and interpolated into the tables.
+%   monotonic (Monotonic_adjustment) and interpolated into the frequency
+%   table (hazard_table_probabilities); the response table inverts them
+%   at the levels of pst_options.response_grid (exceedance_at_response,
+%   with extrapolation).
 %   Everything is computed in AEF; with use_AEP = 1 the AEP table is read
 %   at its AEF (aep2aef) and HC_plt_x, HC_tbl_rsp_x and the HC_emp Hazard
 %   column are converted to AEP (aef2aep) at the end.
@@ -37,7 +40,8 @@ function [SST_output] = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, g
 %     gprMdl         - skew tide Gaussian process regression model ([]
 %                      without skew tides)
 %     pst_options    - PST settings (use_AEP, bootstrap_sims, ind_Skew,
-%                      GPD_TH_crit, apply_GPD_to_SS, prc; see CHESS_PST),
+%                      GPD_TH_crit, apply_GPD_to_SS, prc, response_grid;
+%                      see CHESS_PST),
 %                      struct
 %     plot_options   - plot settings (create_plots, y_log, staID,
 %                      yaxis_Limits, yaxis_Label, path_out), struct
@@ -56,15 +60,12 @@ function [SST_output] = CHESS_PST_Fit(POT_no_tides, POT_with_tides, SLC, Nyrs, g
 %   Tier: internal
 %
 %   See also CHESS_PST, CHESS_PST_plot, CHESS_MRL, ecdf_boot,
-%   Monotonic_adjustment.
+%   Monotonic_adjustment, hazard_table_probabilities,
+%   hazard_plot_frequencies, exceedance_at_response.
 
 %% INITIALIZE FIELDS
 % Set up probabilities for HC summary
-if pst_options.('use_AEP') %Select AEPs
-    HC_tbl_x = 1./[2 5 10 20 50 100 200 500 1000 2000 5000 1e4 2e4 5e4 1e5 2e5 5e5 1e6]';
-else %Select AEFs
-    HC_tbl_x = 1./[0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000,5000,10000]';
-end
+HC_tbl_x = hazard_table_probabilities(pst_options.use_AEP);
 % The Curves Are Computed In AEF; AEP Tables Are Read At Their AEF And The x Outputs Converted At The End
 if pst_options.use_AEP
     to_aef = @aep2aef;
@@ -72,14 +73,9 @@ else
     to_aef = @(x) x;
 end
 % Set up responses for HC summary
-HC_tbl_rsp_y =(0.01:0.01:20)';
+HC_tbl_rsp_y = pst_options.response_grid(:);
 % Set up AEFs for full HC; in log10 scale (for plotting), from 10^1 to 10^-6
-d=1/90; v=10.^(1:-d:0)'; HC_plt_x=v; x=10;
-for i=1:6
-    HC_plt_x=[HC_plt_x; v(2:end)/x];
-    x=x*10;
-end
-HC_plt_x=flipud(HC_plt_x);
+HC_plt_x = hazard_plot_frequencies();
 % Sort POT sample in descending order
 POT_no_tides = sort(POT_no_tides, 'descend');
 HC_emp = POT_no_tides; % Response vector sorted in descending order; positive values only
@@ -262,13 +258,13 @@ if gpd_pass && plot_options.create_plots
     % Define X Axis
     if pst_options.use_AEP == 1
         to_axis = @aef2aep;
-        xlim(ax, [1e-4 1]);
-        set(ax, 'XTick', [1e-4 1e-3 1e-2 1e-1 1])
+        xlim(ax, [1e-6 1]);
+        set(ax, 'XTick', [1e-6 1e-5 1e-4 1e-3 1e-2 1e-1 1])
         xlabel(ax, 'Annual Exceedance Probability','FontSize',12);
     else
         to_axis = @(x) x;
-        xlim([1e-4 10]);
-        set(ax, 'XTick', [1e-4 1e-3 1e-2 1e-1 1 10]);
+        xlim([1e-6 10]);
+        set(ax, 'XTick', [1e-6 1e-5 1e-4 1e-3 1e-2 1e-1 1 10]);
         xlabel(ax, 'Annual Exceedance Frequency (yr^{-1})', 'FontSize',12);
     end
     % Define Y Axis
@@ -315,9 +311,10 @@ for kk = 1:size(HC_plt,2)
 end
 
 
-%% Interpolation to create response hazard table
+%% Interpolation to create the hazard tables
+% Response Table: Plot Curve Inverted At The Response Levels (In AEF)
+HC_tbl_rsp_x = exceedance_at_response(HC_plt_x, HC_plt, HC_tbl_rsp_y);
 % preallocate
-HC_tbl_rsp_x = NaN(length(HC_tbl_rsp_y), size(HC_plt, 2));
 HC_tbl_y = NaN(length(HC_tbl_x), size(HC_plt, 2));
 HCmn = NaN(1, size(HC_plt, 2));
 for kk = 1:size(HC_plt, 2)
@@ -330,7 +327,6 @@ for kk = 1:size(HC_plt, 2)
     ia = isnan(dm1) | isinf(dm1); dm1(ia) = []; dm2(ia) = [];
 
     % Interpolate
-    HC_tbl_rsp_x(:, kk) = exp(interp1(dm1, dm2, HC_tbl_rsp_y, 'linear', 'extrap'));
     HC_tbl_y(:, kk) = interp1(dm2, dm1, log(to_aef(HC_tbl_x)), 'linear', 'extrap');
 
     %interpol for 0.1 aep/aef
@@ -353,7 +349,6 @@ if pst_options.use_AEP
 end
 % Change negatives to NaN
 HC_tbl_y(HC_tbl_y<0) = NaN;
-HC_tbl_rsp_x(HC_tbl_rsp_x<1e-4) = NaN;
 
 %% Store parameters needed for manual GPD Shape parameter evaluation
 MRL_output.pd_TH_wOut = pd_TH_wOut;

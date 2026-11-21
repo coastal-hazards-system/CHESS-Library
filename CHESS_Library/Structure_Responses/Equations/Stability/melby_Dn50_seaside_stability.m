@@ -11,7 +11,7 @@ function [Dn50_Melby] = melby_Dn50_seaside_stability(Hsig,Tm,h,duration,Sslp,del
 %   am = 1/(km1*P^0.18*sqrt(Sslp)), surging (sm < smc)
 %   am = 1/(km2*P^0.18*Sslp^(0.5 - P)*sm^(-P/3));
 %   Dn50 = sqrt(Mf/delta)*h*am*(sqrt(Nz)/S)^0.2 with Nz = duration/Tm.
-%   NaN where Hsig <= 0.1, h < 0 or Rc/Dn50 < 1. Used by
+%   NaN where Hsig <= 0.1 m, h <= 0 (dry toe) or Rc/Dn50 < 1. Used by
 %   compute_structure_response when dn50_use_legacy_model = 1.
 %
 %   Inputs (Hsig, Tm, h and Rc of the same size; duration is not flattened,
@@ -119,6 +119,9 @@ Tm = Tm(:);
 h = h(:);
 Rc = Rc(:);
 Nz = duration./Tm;
+% Dry Toe: NaN (Set On The Depth So The Momentum Flux Powers Stay Real)
+dry_toe = h<=0;
+h(dry_toe) = NaN;
 
 %% COMPUTE Dn50
 % Momentum Flux Computations
@@ -142,7 +145,7 @@ am(sm<smc) = 1./(km2.*P.^0.18.*Sslp.^(0.5-P).*sm(sm<smc).^(-P./3));
 % COmpute Median Stone Size For Given S
 Dn50_Melby = sqrt(Mf./delta).*h.*am.*((ks.*sqrt(Nz))./S).^0.2;
 % Assign NaNs
-Dn50_Melby(Hsig<=0.1 | h<0) = NaN;
+Dn50_Melby(Hsig<=0.1 | dry_toe) = NaN; % [m] 0.1 m: no stone size for smaller waves
 % Compute Relative Freeboard 
 Rc_r =  Rc./Dn50_Melby;
 % Remove Response Entries Outside of Equation Bounds 

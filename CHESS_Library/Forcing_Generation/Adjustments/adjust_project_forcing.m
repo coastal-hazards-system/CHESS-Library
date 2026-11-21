@@ -12,7 +12,7 @@ function [project_forcing, config] = adjust_project_forcing(config, structure, p
 %     - Sea level rise: swl_slr is added to SWL (when not 0).
 %     - Hm0_toe: wave height at the toe from Hm0_offshore, the adjusted SWL
 %       and Tp (adjust_wave_height: depth limitation when
-%       apply_depth_limitation = 1, Hm0 = 0 where the toe is emergent).
+%       apply_depth_limitation = 1, NaN where the toe is dry, h <= 0).
 %       The toe is structure.toe_elevation; a floodwall (struc_type 2)
 %       without a toe berm (add_toe_berm ~= 1) uses
 %       structure.wall_bottom_elevation. Hm0_offshore is kept as is.
@@ -92,7 +92,7 @@ if swl_slr~=0
 end
 
 %% Hm0 ADJUSTMENTS
-% Hm0 At The Toe: Depth Limitation + Emergent Toe (Hm0 = 0) From The Water Depth @ Toe. Hm0_offshore Is Kept As Is
+% Hm0 At The Toe: Depth Limitation (NaN On A Dry Toe) From The Water Depth @ Toe. Hm0_offshore Is Kept As Is
 Hm0_toe = adjust_wave_height(Hm0, Tp, SWL, toe_elev, apply_DL, g);
 
 %% STORE ADJUSTED DATA

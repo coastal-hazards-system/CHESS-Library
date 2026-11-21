@@ -16,8 +16,9 @@ function [DamDepthElev,DamDepth]= damaging_depth(SWL,Hm0,Ts,offshore_elevation,K
 %   water level component (surge, tide and wave setup).
 %   DamDepth = DamDepthElev - offshore_elevation, clipped to 0 when
 %   negative (no water column above an offshore bed that is above the
-%   wave crest); NaN is kept. CHESS passes Ts = Tp (narrow spectrum,
-%   conservative; Ts = 0.93*Tp for JONSWAP with gamma = 3.3).
+%   wave crest); NaN is kept. Dry toe (hs <= 0): both outputs NaN.
+%   CHESS passes Ts = Tp (narrow spectrum, conservative; Ts = 0.93*Tp for
+%   JONSWAP with gamma = 3.3).
 %
 %   Inputs (lengths in m and g in m/s^2 in CHESS; any consistent units):
 %     SWL                 - still water level (surge, tide, setup) [m,
@@ -33,7 +34,8 @@ function [DamDepthElev,DamDepth]= damaging_depth(SWL,Hm0,Ts,offshore_elevation,K
 %                           0-1 rows of buildings, 0.7 for 2-3 rows, 0.5
 %                           for 4-5 rows, 0.3 for 6 or more rows
 %     hs                  - water depth at the structure toe, SWL - toe
-%                           elevation [m], same size as Ts
+%                           elevation [m], same size as Ts (hs <= 0: dry
+%                           toe, outputs NaN)
 %     d                   - water depth over the toe berm crest, SWL - berm
 %                           crest elevation [m] (= hs without a berm), same
 %                           size as Ts
@@ -46,9 +48,10 @@ function [DamDepthElev,DamDepth]= damaging_depth(SWL,Hm0,Ts,offshore_elevation,K
 %                           standard_gravity)
 %   Outputs:
 %     DamDepthElev - elevation of the controlling wave crest [m, study
-%                    datum, positive up], size of Ts
+%                    datum, positive up], size of Ts; NaN where hs <= 0
 %     DamDepth     - damaging depth, DamDepthElev - offshore_elevation,
-%                    clipped to 0 when negative, NaN kept [m], size of Ts
+%                    clipped to 0 when negative, NaN kept [m], size of Ts;
+%                    NaN where hs <= 0
 %
 %   Tier: public
 %
@@ -108,6 +111,10 @@ DamDepthElev = SWL + 0.7 * Ks * Hb;
 DamDepth = DamDepthElev - offshore_elevation;
 % No Water Column Above The Offshore Bed (Storm Below An Offshore Elevation Above Datum): Clip To 0 (NaN Kept)
 DamDepth(DamDepth < 0) = 0;
+% Dry Toe: No Damaging Depth
+dry_toe = hs(:) + zeros(size(DamDepth)) <= 0;
+DamDepthElev(dry_toe) = NaN;
+DamDepth(dry_toe) = NaN;
 % Resahpe Variables 
 DamDepth = reshape(DamDepth, var_shape);
 DamDepthElev = reshape(DamDepthElev, var_shape);

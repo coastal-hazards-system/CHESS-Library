@@ -7,10 +7,14 @@ function[km,kmest,ERROR] = wavnum1_VG(T,depth,grav)
 %   equation", Coastal Engineering, Vol 45, No. 2, pp 71-74.
 %
 %   The operations are element-wise, so T and depth may be arrays (same
-%   size, or compatible sizes for implicit expansion). With arrays the
-%   branch tests act on the whole array: the shallow-water initial guess
-%   sqrt(WHSQ) is used unless every element has WHSQ > 1, the Newton loop
-%   runs until every element has converged, and ERROR is a single flag.
+%   size, or compatible sizes for implicit expansion). Each element takes its
+%   own branch and converges on its own: the initial guess is WHSQ where
+%   WHSQ > 1 (deep water) and sqrt(WHSQ) elsewhere, and an element leaves
+%   the Newton loop once its correction is no larger than TOL = 1e-5 (or
+%   at once when the deep- or shallow-water limit already holds). The loop
+%   stops after 50 iterations: elements still not converged are set to NaN
+%   with warning 'wavnum1_VG:notConverged'. NaN inputs give NaN, and a
+%   negative depth (WHSQ < 0) gives NaN without a warning.
 %
 %   Inputs:
 %     T     - wave period [s], double scalar or array
@@ -24,8 +28,8 @@ function[km,kmest,ERROR] = wavnum1_VG(T,depth,grav)
 %     kmest - wave number empirical estimate (Guo 2002) [1/m or 1/ft],
 %             double, same size as km
 %     ERROR - 1 when the iteration converged, 0 when the slope check failed
-%             (in case slope causes error) [-], scalar double (one flag for
-%             the whole array)
+%             for any element (that element keeps its last iterate) [-],
+%             scalar double (one flag for the whole array)
 %
 %   Tier: internal
 %
@@ -34,39 +38,35 @@ function[km,kmest,ERROR] = wavnum1_VG(T,depth,grav)
 % HISTORY: Jeff Melby 4/27/09 (wavenum).
 
 TOL = 1.0E-5;
-CORR = 2 * TOL;
+MAX_ITER = 50;
 ERROR = 1;
 fq = 1./T;
-% solve for kh(x1) using iterative method
-% initial guess for X1 based on WHSQ
-WHSQ = (depth./grav).* (2*pi*fq).^2;
-if WHSQ > 1.0
-   X1 = WHSQ;
-   if tanh(X1) > 1.-TOL  % deep water limits
-     CORR = TOL - 1e-6;  % done, return to calling program
-   end
-else  
-   X1 = sqrt(WHSQ);
-   if abs(X1-tanh(X1)) < TOL % shallow water limits
-     CORR = TOL - 1e-6;  % done, return to calling program
-   end
+WHSQ = (depth./grav).*(2*pi*fq).^2;
+X1 = WHSQ;
+X1(WHSQ < 0) = NaN;  % set before sqrt so the array never turns complex
+X1 = sqrt(X1);
+deep = WHSQ > 1.0;
+X1(deep) = WHSQ(deep);
+done = (deep & tanh(X1) > 1-TOL) | (~deep & abs(X1-tanh(X1)) < TOL) | isnan(WHSQ) | WHSQ < 0;
+active = ~done;
+for iter = 1:MAX_ITER
+    idx = find(active);
+    if isempty(idx), break, end
+    x = X1(idx);
+    numer = x.*tanh(x) - WHSQ(idx);
+    denom = tanh(x) + x./cosh(x).^2;
+    slope_fail = abs(denom) < TOL;
+    corr = numer./denom;
+    corr(slope_fail) = 0;
+    X1(idx) = x - corr;
+    if any(slope_fail), ERROR = 0; end
+    active(idx(slope_fail | ~(abs(corr) > TOL))) = false;
 end
-
-%
-% iterative loop
-while abs(CORR) > TOL
-%   while ERROR >0
-      numer = X1 .* tanh(X1) - WHSQ;
-      denom = tanh(X1) + X1./(cosh(X1)).^2;
-% Check slope to avoid divide by zero
-      if abs(denom) < TOL
-         ERROR = 0; %ERROR IN SLOPE CHECK IN WAVNUM SUBROUTINE
-         CORR = TOL - 1e-6;
-      else
-         CORR = numer./denom;
-         X1 = X1 - CORR;
-      end
-%   end
+if any(active(:))
+    X1(active) = NaN;
+    warning('wavnum1_VG:notConverged', ...
+        'wavnum1_VG: %d of %d element(s) did not converge in %d iterations; set to NaN.', ...
+        nnz(active), numel(active), MAX_ITER);
 end
 km = X1 ./ depth;
 % check against the empirical estimate

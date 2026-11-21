@@ -6,8 +6,8 @@ function [Dn50, Dn50_tag] = submerged_stone_armor_stability(Hs,Tp,h,Rc,Dn50,hc,S
 %       VI-5-25) wherever the crest is below the SWL (Rc < 0).
 %
 %   Dn50_sub = -0.14*Hs/delta/sp^(1/3)/log(min(hc/h/(2.1 + 0.1*S), 1)),
-%   sp = Hs/Lp with Lp from wavnum1_VG (Tp, h). Hs < 0.1 is set to NaN
-%   before the computation. Used by compute_structure_response when
+%   sp = Hs/Lp with Lp from wavnum1_VG (Tp, h). The submerged stone size
+%   is NaN where Hs <= 0.1 m or h <= 0 (dry toe). Used by compute_structure_response when
 %   dn50_use_legacy_model = 1 and dn50_legacy_submerged_correction = 1.
 %
 %   Inputs (Hs, Tp, h, Rc and Dn50 of the same size; hc of that size or
@@ -24,7 +24,8 @@ function [Dn50, Dn50_tag] = submerged_stone_armor_stability(Hs,Tp,h,Rc,Dn50,hc,S
 %     g     - gravitational acceleration [m/s^2], scalar
 %   Outputs:
 %     Dn50     - stone size [m], size of Hs: the input Dn50 where Rc >= 0,
-%                the submerged stone size where Rc < 0
+%                the submerged stone size where Rc < 0 (NaN where
+%                Hs <= 0.1 m or h <= 0)
 %     Dn50_tag - logical, size of Hs: true where Rc < 0
 %
 %   Tier: public
@@ -91,7 +92,8 @@ delta = delta(:); %why do this, should be constant
 Rc = Rc(:);
 % hc is structure height from sea bottom
 Dn50 = Dn50(:);
-Hs(Hs<0.1)=nan; % had to do this on 8/3/23 to avoid errant Dn50 spikes for very small Hs
+Hs(Hs<=0.1 | h<=0)=nan; % [m] 0.1 m: had to do this on 8/3/23 to avoid errant Dn50 spikes for very small Hs; h <= 0: dry toe
+h(h<=0)=nan; % dry toe: keeps log(hc/h) real and finite
 %sop=g*Hs.*Tp.^2/2/pi; %deep water wave steepness based on Tp
 [kp,kpest,ERROR] = wavnum1_VG(Tp,h,g);
 Lp=2*pi./kp; %local wavelength based on Tp

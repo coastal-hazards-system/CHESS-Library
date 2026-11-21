@@ -60,6 +60,10 @@ function [JPM_output] = CHESS_JPM(response_data, jpm_options, plot_options)
 %       .use_AEP               - frequencies as AEP (1) or AEF (0)
 %       .prc                   - CL percentiles [%], up to 4 values
 %                                ([] = [2.28 15.87 84.13 97.72])
+%       .response_grid         - response levels of the response table
+%                                HC_tbl_rsp_y [response units], vector
+%                                (missing or [] =
+%                                response_hazard_grid(plot_options.staID))
 %       .stat_print            - clear the command window and print the
 %                                progress (0/1)
 %     plot_options - plot settings, struct; fields:
@@ -80,17 +84,21 @@ function [JPM_output] = CHESS_JPM(response_data, jpm_options, plot_options)
 %       .HC_plt       - response at HC_plt_x, columns [best estimate,
 %                       prc CLs], 631 x (1 + numel(prc))
 %       .HC_tbl_x     - table AEP 1/[2 5 10 ... 1e6] (18 values) or AEF
-%                       1/[0.1 0.2 0.5 ... 1e6] (22 values)
+%                       1/[0.1 0.2 0.5 ... 1e6] (22 values;
+%                       hazard_table_probabilities)
 %       .HC_tbl       - response at HC_tbl_x (same columns), negatives NaN
-%       .HC_tbl_rsp_y - response levels 0.01:0.01:20, 2000 x 1
+%       .HC_tbl_rsp_y - response levels jpm_options.response_grid, column
 %       .HC_tbl_rsp_x - AEF (AEP when use_AEP = 1) of each HC_tbl_rsp_y
-%                       level (same columns)
+%                       level (same columns; the integrated storm points
+%                       inverted with extrapolation,
+%                       exceedance_at_response)
 %   With create_plots = 1 the figure JPM_HC_<staID>_<PCHA_ATCS or
 %   PCHA_ITCS>.png (CHESS_JPM_plot) is written in <path_out>/JPM_outputs.
 %
 %   Tier: public
 %
-%   See also CHESS_PST, aef2aep, aep2aef.
+%   See also CHESS_PST, aef2aep, aep2aef, response_hazard_grid,
+%   hazard_table_probabilities, exceedance_at_response.
 
 %% General settings
 if jpm_options.stat_print == 1
@@ -260,6 +268,10 @@ end
             plot_options.staID = 'resp';
         elseif ~ischar(plot_options.staID)
             error('Error: plot_options.staID be a character array.')
+        end
+        % Response Levels Of The Response Table
+        if ~isfield(jpm_options, 'response_grid') || isempty(jpm_options.response_grid)
+            jpm_options.response_grid = response_hazard_grid(plot_options.staID);
         end
         % Y Axis Label
         if isempty(plot_options.yaxis_Label)

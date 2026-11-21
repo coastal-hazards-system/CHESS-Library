@@ -18,8 +18,8 @@ function [R2p, R2p_SWL, q, q_overflow, q_wave_ot]=Eurotop_r2p_q_Final(Hm0, T_m10
 %       exp(-(2.7*Rc/(xi*Hm0*gamma_b*gamma_f*gamma_beta_OT*gamma_v))^1.3),
 %       and Eq. 5.11, sqrt(g*Hm0^3)*0.09*exp(-(1.5*Rc/(Hm0*gamma_f*
 %       gamma_beta_OT*gamma_star))^1.3).
-%     0.1 < slope < 2: R2p = max(1.8*Hm0, min(0.8*Hm0/slope + 1.6, 3*Hm0))
-%       (Eq. 5.6, as coded); q_wave_ot from Eq. 5.18 (smooth slopes),
+%     0.1 < slope < 2: R2p = Hm0*min(max(0.8*slope + 1.6, 1.8), 3.0)
+%       (Eq. 5.6); q_wave_ot from Eq. 5.18 (smooth slopes),
 %       sqrt(g*Hm0^3)*a*exp(-(b*Rc/(Hm0*gamma_beta_OT))^1.3), with
 %       a = 0.09 - 0.01*(2 - slope)^2.1 and b = min(1.5 + 0.42*(2 -
 %       slope)^1.5, 2.35), each scaled by one randn draw per call (standard
@@ -29,7 +29,8 @@ function [R2p, R2p_SWL, q, q_overflow, q_wave_ot]=Eurotop_r2p_q_Final(Hm0, T_m10
 %   factors are not used): q_wave_ot = sqrt(g*Hm0^3)*0.047*
 %     exp(-(2.35*Rc/Hm0)^1.3) when (SWL - wall_toe)/Hm0 > 4 (no foreshore
 %     influence, Eq. 7.1), else sqrt(g*Hm0^3)*0.05*exp(-2.78*Rc/Hm0)
-%     (non-impulsive, Eq. 7.5).
+%     (non-impulsive, Eq. 7.5). Dry wall toe (SWL - wall_toe <= 0): q and
+%     q_wave_ot NaN (no waves reach the wall).
 %   structure_type 3, rubble mound: run-up as for levees (Eq. 6.1, same
 %     coefficients 1.65 and 1.0) with gamma_f replaced by gamma_f_surge =
 %     gamma_f + (xi - 1.8)*(1 - gamma_f)/8.2 for 1.8 < xi < 10;
@@ -40,8 +41,9 @@ function [R2p, R2p_SWL, q, q_overflow, q_wave_ot]=Eurotop_r2p_q_Final(Hm0, T_m10
 %   Rc < 0 (crest below SWL): the wave terms use Rc = 0 and the weir
 %   overflow q_overflow = 0.54*sqrt(g*|Rc|^3) (Eq. 5.20) is added,
 %   q = q_wave_ot + q_overflow. q_wave_ot below 1e-6 or NaN is set to 0.
-%   Rows without forcing (Hm0 <= 0, T_m10 <= 0, SWL <= -100 or any of them
-%   NaN) return NaN unless they overflow.
+%   Rows without forcing (Hm0 <= 0, T_m10 <= 0 or any of Hm0, T_m10, SWL
+%   NaN; the storm database sets SWL <= -100 m to NaN,
+%   curate_storm_forcing) return NaN unless they overflow.
 %   Berms: the berm influence enters only through gamma_b (levee and
 %   rubble mound run-up, levee overtopping); the berm breakwater factor of
 %   Eq. 6.11 is not used (internal berm width fixed at 0).
@@ -184,6 +186,7 @@ Rc_corrt(Rc>=0) = Rc(Rc>=0);
 % Initialize Variables
 R2p = zeros(size(SWL));
 q_wave_ot = zeros(size(SWL));
+dry_wall_toe = false(size(SWL));
 % Call Response Equation According To Structure Type
 switch structure_type
     case 1 % Levee
@@ -235,8 +238,8 @@ switch structure_type
         % 0.1 <= Seaward Slope < 2
         if ~isempty(indx2)
             % EurOtop Runup Eq 5.6
-            R2p_a = min([Hm0(indx2).*runup_coeff3./(slope(indx2)) + 1.6 , (3.*Hm0(indx2))],[],2,"omitnan");
-            R2p(indx2) = max([zeros(size(SWL(indx2))),max([R2p_a,(1.8.*Hm0(indx2))],[],2,"omitnan")],[],2,"omitnan");
+            R2p_a = Hm0(indx2).*min(max(runup_coeff3.*slope(indx2) + 1.6, 1.8), 3.0);   % EurOtop 2018 Eq 5.6: Ru2%/Hm0 = 0.8 cot(a) + 1.6, min 1.8, max 3.0
+            R2p(indx2) = max([zeros(size(SWL(indx2))), R2p_a],[],2,"omitnan");
             % EurOtop Overtopping eq 5.18- assumes only smooth slopes
             a_a = (0.09 - 0.01.*(2-(slope(indx2))).^2.1);
             a = a_a+(a_a.*0.15.*randn);
@@ -259,6 +262,7 @@ switch structure_type
         % q = sqrt(g.*Hm0.^3).*0.2.*exp(-4.7.*Rc_corrt./Hm0);
         % Sumberged depth of wall
         w_depth= SWL-wall_toe;
+        dry_wall_toe = w_depth <= 0;
         % depth above toe mound./berm in front of vertical wall
         d_wall = Rc_corrt- w_depth;
         % Initialize
@@ -324,13 +328,16 @@ q_wave_ot(isnan(q_wave_ot)) = 0;
 % q Overflow
 q = q_wave_ot + q_overflow;
 % Define NaN Index
-rIndx = Hm0<=0 | T_m10<=0 | SWL<=-100 | isnan(Hm0) | isnan(T_m10) | isnan(SWL);
+rIndx = Hm0<=0 | T_m10<=0 | isnan(Hm0) | isnan(T_m10) | isnan(SWL);
 rIndx(q_overflow>0) = false; % Ensures we capture the edge case of overflow only
 % Do not calculate structure response if no storm forcing
 q_wave_ot(rIndx) = NaN;
 q_overflow(rIndx) = NaN;
 q(rIndx) = NaN;
 R2p(rIndx) = NaN;
+% Dry Wall Toe: No Waves Reach The Wall
+q_wave_ot(dry_wall_toe) = NaN;
+q(dry_wall_toe) = NaN;
 % Compute R2p + SWL
 R2p_SWL = R2p + SWL;
 % Reshape

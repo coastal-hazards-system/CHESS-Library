@@ -1329,15 +1329,16 @@ classdef CHSStormDBImportUI < handle
                 reset_db_state(obj);
                 return;
             end
-            % Library Validation (Same As call_input_parser For storm Data)
+            % Library Validation And Curation (Same As call_input_parser For storm Data)
             try
                 st_types = intersect({'TC','XC'}, fieldnames(data.storm), 'stable');
                 has_dtype = @(dtype) ~isempty(st_types) && all(cellfun(@(x) isfield(data.storm.(x), dtype), st_types));
                 use = struct('use_peaks', +has_dtype('Peaks'), 'use_timeseries', +has_dtype('Timeseries'));
-                data.storm = storm_validation(use, data.storm);
+                data.storm = curate_storm_database(storm_validation(use, data.storm));
                 if isfield(data.storm, 'TC')
                     data.prob_mass = prob_mass_validation(use, data.prob_mass, data.storm);
                 end
+                [data.storm, data.prob_mass] = remove_storms_without_water_level(data.storm, data.prob_mass);
             catch me
                 obj.auxLib.error_dlgbox(me.message);
                 return;

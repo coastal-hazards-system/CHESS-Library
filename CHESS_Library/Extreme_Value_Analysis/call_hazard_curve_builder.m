@@ -13,15 +13,25 @@ function  [Output]= call_hazard_curve_builder(config, TC_Prob, Resp, storm_type,
 %   replicates). This is the response-based caller of PST/JPM for CHESS,
 %   not a general PST/JPM front end.
 %   Responses hold one column per replicate: the z = 0 replicate is
-%   dropped (drop_z0) before fitting and kept in POT (overlays). The
-%   forcing curves SWL, Tp and Hm0_offshore come in as the z = 0 column
-%   only and use JPM integration method 2 (PCHA ITCS: JPM adds the
-%   replicates); Hm0_toe comes in with every replicate and uses method 1
-%   (PCHA ATCS), like a response. Uncertainties, uncertainty treatment,
-%   labels and y scale come from response_library_headers. Great Lakes
+%   dropped (drop_z0) before fitting and kept in POT (overlays). Every
+%   variable uses JPM integration method 1 (PCHA ATCS). The XC forcing
+%   curves (pros_forcing_curves) come in as one z = 0 column; the TC
+%   forcing curves (registry rows with partition_uncertainty) hold the
+%   replicates of the first uncertainty partition (chess_pros) and their
+%   confidence limits use the uncertainty left after it
+%   (uncertainty_after_partition); with tide_application 0 this
+%   equals method 2 on the z = 0 values. Uncertainties, uncertainty
+%   treatment, labels and y scale come from response_library_headers. Great Lakes
 %   water levels (registry datum_elevation rows) are fitted as surge: the
 %   mean lake level (mean_lake_level) is removed before the fit and added
 %   back to the curves. SLC = 0 (the forcing SWL already holds swl_slr).
+%   The response table (tbl_rsp_x, tbl_rsp_y) of each variable is read on
+%   its fixed response grid (response_hazard_grid: registry hazard_grid or
+%   the unit_kind default, in the fitted space before the mean lake level
+%   is added back), the same grid for XC and TC so that
+%   call_hazard_curve_combiner reads both on it; fitted plot-curve values
+%   (all CLs) outside the grid range give the warning
+%   response_hazard_grid:outsideRange.
 %   Events PST/JPM discard (NaN, Inf, <= 0 after the lake level shift)
 %   are counted and reported in the figure title. Variables with no valid
 %   value (all NaN or all 0) and variables whose PST/JPM call errors,
@@ -60,13 +70,15 @@ function  [Output]= call_hazard_curve_builder(config, TC_Prob, Resp, storm_type,
 %                .tbl_rsp_x   - AEP of each tbl_rsp_y response level, one
 %                               column per CL (always AEP; used by
 %                               call_hazard_curve_combiner)
-%                .tbl_rsp_y   - response levels 0.01:0.01:20 plus the lake
-%                               offset [response units], 2000 x 1
+%                .tbl_rsp_y   - response levels of response_hazard_grid
+%                               plus the lake offset [response units],
+%                               column
 %
 %   Tier: internal
 %
 %   See also CHESS_PST, CHESS_JPM, set_hazard_curve_entry,
-%   call_hazard_curve_combiner, chess_pros, drop_z0.
+%   call_hazard_curve_combiner, chess_pros, drop_z0,
+%   uncertainty_after_partition, response_hazard_grid.
 
 
 disp('            Building hazard curves....');
@@ -119,17 +131,23 @@ for ii = 1:length(vars_to_process)
         otherwise
             lake_offset = 0;
     end
+    % TC Forcing Curves Hold The Replicates Of The First Uncertainty Partition (chess_pros): The Confidence Limits Take The Uncertainty Left
+    row = response_registry('name', resp_var);
+    if strcmp(storm_type, 'TC') && ~isempty(row) && row.partition_uncertainty
+        [U_a, U_r] = uncertainty_after_partition(U_a, U_r);
+    end
     % Response Information
     % SLC = 0: The Forcing SWL Already Includes swl_slr (adjust_project_forcing.m)
     response_data = struct('data', [zeros(drows*dcols, 1) fit_data(:)-lake_offset zeros(drows*dcols, 1)],...
         'flag_value', [],'Ua', U_a,'Ur', U_r, 'SLC', 0, 'tide_std', 0,...
         'lambda', [],'Nyrs', config.Nyrs_XC*dcols, 'gprMdl', [], 'DataType', 'POT');
-    % PST/JPM Options
+    % PST/JPM Options (Fixed Response Grid Of The Variable, Shared By XC And TC)
     eva_options = struct('integration_method', 1,...
         'uncertainty_treatment', uncert_treatment,...
         'tide_application', 0, 'ind_Skew', 0, 'use_AEP', config.pros_use_aep,...
         'prc', prc, 'stat_print', 0, 'tLag', 0, 'GPD_TH_crit', 2,...
-        'apply_GPD_to_SS', 1, 'bootstrap_sims', 100);
+        'apply_GPD_to_SS', 1, 'bootstrap_sims', 100,...
+        'response_grid', response_hazard_grid(resp_var));
     % Plot Options
     plot_options = struct('create_plots', 0,'staID', resp_var,'yaxis_Label', [],...
         'yaxis_Limits', [], 'y_log', y_scale_log,'path_out', '');
@@ -155,16 +173,9 @@ for ii = 1:length(vars_to_process)
     %% PREP NAMING STRINGS
     % Define Workflow String
     wstr = chess_workflows(config.workflow).wflow_name;
-    % PROS-RB Naming Overwrite When Calling PROS-FB
-    if ismember(resp_var, pros_forcing_curves())
-        % For FB Analysis The Forcing HC Are Created Using RB
-        if config.workflow == 4
-            wstr = 'PROS-RB'; % Forcing Fields Are Computed With Response Base
-        end
-        % Redifine Integration Method For JPM (Hm0_toe Holds Replicates Like Any Response: ATCS)
-        if ~strcmp(resp_var, 'Hm0_toe')
-            eva_options.integration_method = 2; % Let JPM Manage Replicates
-        end
+    % PROS-RB Naming Overwrite When Calling PROS-FB: The Forcing Curves Are Built Response Based
+    if config.workflow == 4 && ismember(resp_var, pros_forcing_curves())
+        wstr = 'PROS-RB';
     end
     % Define Figure Title
     title_str = {['CHESS: ' wstr ' | '  case_name ' | ' struc_id],...
@@ -224,6 +235,8 @@ for ii = 1:length(vars_to_process)
         continue;
     end
 
+    % Coverage Of The Fitted Curves (All CLs, No Lake Level) By The Fixed Grid: Warning Only
+    response_hazard_grid(resp_var, dummy.HC_plt);
     % Add Mean Lake Level Back To Response Valued Outputs (HC_tbl_rsp_x Holds AEF/AEP)
     dummy.HC_plt = dummy.HC_plt + lake_offset;
     dummy.HC_tbl = dummy.HC_tbl + lake_offset;

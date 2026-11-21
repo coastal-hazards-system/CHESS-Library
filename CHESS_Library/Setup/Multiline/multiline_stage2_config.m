@@ -24,7 +24,8 @@ function [config, structure] = multiline_stage2_config(config, structure)
 %       offshore_elevation = stage 1 toe_elevation
 %       (offshore_elevation_source 'stage 1 toe'), offshore_slope = stage 1
 %       offshore_slope (config and structure). Never the storm DB grid; no
-%       check that the stage 2 toe is deeper.
+%       check that the stage 2 toe is deeper. nearshore_slope is not
+%       inherited (stage 2's own input).
 %   Documented limits: no ponding/setup between the stages and no distance
 %   between them (display only); Tp and wave direction are unchanged by the
 %   transmission.

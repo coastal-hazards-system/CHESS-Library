@@ -32,12 +32,12 @@ function [P, eta_star] = goda_vertical_wall_pressure_distribution(Hm0, Ts, hs, d
 %     pu = 0.5*(1 + cos(beta))*lambda3*alpha1*alpha3*gamma_w*H_design
 %     p2sta = gamma_w*max(-hc, 0), p3sta = gamma_w*hs
 %     p2total = p2dyn + p2sta, p3total = p3dyn + p3sta
-%   The inputs are converted from the unit system (units) to SI for
-%   goda_Hmax and then to imperial units (ft, s, lbf/ft^3) for the Goda
-%   core, which stays imperial because its empirical coefficients were
-%   fitted in imperial units; the pressures (psf) are converted back to
-%   the unit system. gamma_w [lbf/ft^3] = rho_w*g [N/m^3] divided by the
-%   lbf/ft^3-to-N/m^3 factor (no lbm-to-lbf g_c factor).
+%   The inputs are converted from the unit system (units) to SI and the
+%   whole method (goda_Hmax and the Goda core) runs in SI (m, s, Pa), with
+%   gamma_w = rho_w*g [N/m^3]; the pressures and eta_star are converted
+%   back to the unit system. Goda's coefficients (alphas, lambdas, 0.75,
+%   0.5) are dimensionless, so the result does not depend on the unit
+%   system the core runs in.
 %
 %   Here hc is the crest freeboard, crest elevation - SWL (CHESS Rc); it is
 %   NOT the CHESS hc = crest - toe elevation used by the ANN and Dn50
@@ -145,38 +145,25 @@ end
 data_dims = size(Hm0);
 given_p1 = ~isempty(options.p1);
 
-%% PROJECT UNITS -> SI
+%% PROJECT UNITS -> SI (m, s, kg/m^3, m/s^2)
 length_SI = units.to_SI.length;
-Hm0_SI = Hm0(:)*length_SI;
-Ts_SI = Ts(:)*units.to_SI.time;
-hs_SI = hs(:)*length_SI;
-d_SI = d(:)*length_SI;
-hc_SI = hc(:)*length_SI;
-hw_SI = wall.hw*length_SI;
-Bm_SI = wall.Bm*length_SI;
-rho_w_SI = wall.rho_w*units.to_SI.density;
-g_SI = wall.g*units.to_SI.acceleration;
-
-%% BREAKER-LIMITED DESIGN WAVE (SI)
-[H_design_SI, hb_SI] = goda_Hmax(Hm0_SI, Ts_SI, wall.design_scale, hs_SI, d_SI, Bm_SI, ...
-    wall.berm_slope_tana, wall.offshore_slope_tana, g_SI);
-
-%% SI -> IMPERIAL GODA CORE (ft, s, lbf/ft^3, psf)
-imp = chess_units('system', 'Imperial');
-foot = imp.to_SI.length;
-hs = hs_SI/foot;
-d = d_SI/foot;
-hc = hc_SI/foot;
-hw = hw_SI/foot;
-H_design = H_design_SI/foot;
-hb = hb_SI/foot;
-Ts = Ts_SI;
-g = g_SI/imp.to_SI.acceleration;
-gamma_w = (rho_w_SI*g_SI)/(imp.to_SI.force/foot^3);
+Hm0 = Hm0(:)*length_SI;
+Ts = Ts(:)*units.to_SI.time;
+hs = hs(:)*length_SI;
+d = d(:)*length_SI;
+hc = hc(:)*length_SI;
+hw = wall.hw*length_SI;
+Bm = wall.Bm*length_SI;
+g = wall.g*units.to_SI.acceleration;
+gamma_w = wall.rho_w*units.to_SI.density*g;
 beta = wall.beta;
 lambda1 = 1;
 lambda2 = 1;
 lambda3 = 1;
+
+%% BREAKER-LIMITED DESIGN WAVE
+[H_design, hb] = goda_Hmax(Hm0, Ts, wall.design_scale, hs, d, Bm, ...
+    wall.berm_slope_tana, wall.offshore_slope_tana, g);
 
 %% COEFFICIENTS (CEM TABLE VI-5-53)
 k = NaN(size(hs));
@@ -190,9 +177,9 @@ h_prime = hw - hc;
 alpha3 = 1 - h_prime./hs.*(1 - 1./cosh(k.*hs));
 eta_star = 0.75*(1 + cos(beta))*lambda1*H_design;
 
-%% PRESSURES [psf]
+%% PRESSURES [Pa]
 if given_p1
-    p1 = options.p1(:)*units.to_SI.pressure/imp.to_SI.pressure;
+    p1 = options.p1(:)*units.to_SI.pressure;
 else
     p1 = 0.5*(1 + cos(beta))*(lambda1*alpha1 + lambda2*alpha2*cos(beta)^2)*gamma_w.*H_design;
 end
@@ -201,8 +188,8 @@ dry_toe = hs <= 0;
 p1(submerged_crest | dry_toe) = NaN;
 eta_star(isnan(p1)) = NaN;
 if ~options.distribution
-    P.p1 = to_project_units(p1, imp, units, data_dims);
-    eta_star = to_project_length(eta_star, imp, units, data_dims);
+    P.p1 = to_project_units(p1, units, data_dims);
+    eta_star = to_project_length(eta_star, units, data_dims);
     return
 end
 p2dyn = (1 - hc./eta_star).*p1;
@@ -219,22 +206,22 @@ p3sta(dry_toe | submerged_crest) = NaN;
 p2total = p2dyn + p2sta;
 p3total = p3dyn + p3sta;
 
-%% PSF -> PROJECT UNITS
-P.p1 = to_project_units(p1, imp, units, data_dims);
-P.p2dyn = to_project_units(p2dyn, imp, units, data_dims);
-P.p2sta = to_project_units(p2sta, imp, units, data_dims);
-P.p2total = to_project_units(p2total, imp, units, data_dims);
-P.p3dyn = to_project_units(p3dyn, imp, units, data_dims);
-P.p3sta = to_project_units(p3sta, imp, units, data_dims);
-P.p3total = to_project_units(p3total, imp, units, data_dims);
-P.pu = to_project_units(pu, imp, units, data_dims);
-eta_star = to_project_length(eta_star, imp, units, data_dims);
+%% SI -> PROJECT UNITS
+P.p1 = to_project_units(p1, units, data_dims);
+P.p2dyn = to_project_units(p2dyn, units, data_dims);
+P.p2sta = to_project_units(p2sta, units, data_dims);
+P.p2total = to_project_units(p2total, units, data_dims);
+P.p3dyn = to_project_units(p3dyn, units, data_dims);
+P.p3sta = to_project_units(p3sta, units, data_dims);
+P.p3total = to_project_units(p3total, units, data_dims);
+P.pu = to_project_units(pu, units, data_dims);
+eta_star = to_project_length(eta_star, units, data_dims);
 end
 
-function L = to_project_length(L_ft, imp, units, data_dims)
-L = reshape(L_ft*imp.to_SI.length/units.to_SI.length, data_dims);
+function L = to_project_length(L_m, units, data_dims)
+L = reshape(L_m/units.to_SI.length, data_dims);
 end
 
-function p = to_project_units(p_psf, imp, units, data_dims)
-p = reshape(p_psf*imp.to_SI.pressure/units.to_SI.pressure, data_dims);
+function p = to_project_units(p_Pa, units, data_dims)
+p = reshape(p_Pa/units.to_SI.pressure, data_dims);
 end

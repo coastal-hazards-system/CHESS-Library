@@ -45,9 +45,9 @@ function out = response_registry(options)
 %     data_type      - "Peaks" or "Timeseries", string or char
 %     compute_switch - config compute switch, e.g. 'compute_q', string or
 %                      char
-%     datum_elevation, pros_forcing_curve, fitted_by_pros_rb,
-%     pros_secondary_eb1, per_event, with_repairs - row flag value, scalar
-%                      logical (or 0/1)
+%     datum_elevation, pros_forcing_curve, partition_uncertainty,
+%     fitted_by_pros_rb, pros_secondary_eb1, per_event, with_repairs - row
+%                      flag value, scalar logical (or 0/1)
 %     cc_rule, cc_confidence_limit_method, armor_side, damage_summary - row
 %                      field value, string or char
 %   Outputs:
@@ -78,6 +78,12 @@ function out = response_registry(options)
 %           datum_elevation - value is an elevation referenced to the datum,
 %                            logical
 %           pros_forcing_curve - PROS forcing hazard curve, logical
+%           partition_uncertainty - PROS-RB TC forcing curve built from
+%                            the z = 0 values with the first uncertainty
+%                            partition (partitioned_replicates; the PCHA
+%                            ITCS replicates) and fitted with the
+%                            uncertainty left after it
+%                            (uncertainty_after_partition), logical
 %           fitted_by_pros_rb - hazard curve fitted by PROS-RB, logical
 %           pros_secondary_eb1 - secondary floodwall response (p2/p3, nappe)
 %                            computed by PROS from the EB1 forcing, logical
@@ -95,11 +101,16 @@ function out = response_registry(options)
 %           armor_side     - 'seaside', 'leeside' or '', char
 %           with_repairs   - armor damage with structure repairs, logical
 %           damage_summary - 'series', 'yearly_mean_max' or '', char
+%           hazard_grid    - response grid of the PROS hazard curves
+%                            (response_hazard_grid): [] = the default of
+%                            unit_kind, or a struct overriding it (range
+%                            [lo hi], spacing 'linear' with step, or 'log'
+%                            with points_per_decade), struct
 %
 %   Tier: internal
 %
 %   See also chess_units, response_library_headers, pros_forcing_curves,
-%   compute_structure_response, finalize_config.
+%   response_hazard_grid, compute_structure_response, finalize_config.
 %
 %   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 
@@ -112,6 +123,7 @@ arguments
     options.compute_switch (1,1) string
     options.datum_elevation (1,1) {mustBeNumericOrLogical}
     options.pros_forcing_curve (1,1) {mustBeNumericOrLogical}
+    options.partition_uncertainty (1,1) {mustBeNumericOrLogical}
     options.fitted_by_pros_rb (1,1) {mustBeNumericOrLogical}
     options.pros_secondary_eb1 (1,1) {mustBeNumericOrLogical}
     options.per_event (1,1) {mustBeNumericOrLogical}
@@ -139,7 +151,7 @@ end
 if isfield(options, 'data_type')
     keep = keep & arrayfun(@(row) ismember(char(options.data_type), row.data_types), registry);
 end
-for flag = {'datum_elevation', 'pros_forcing_curve', 'fitted_by_pros_rb', 'pros_secondary_eb1', 'per_event', 'with_repairs'}
+for flag = {'datum_elevation', 'pros_forcing_curve', 'partition_uncertainty', 'fitted_by_pros_rb', 'pros_secondary_eb1', 'per_event', 'with_repairs'}
     if isfield(options, flag{1})
         keep = keep & [registry.(flag{1})]' == logical(options.(flag{1}));
     end
@@ -167,6 +179,7 @@ function registry = build_registry()
 mean_damage = 'Mean Cumulative Damage $\bar{S}$';
 yearly_max_damage = 'Yearly Mean Maximum Cumulative Damage ($\bar{\bar{S}}_{max}$)';
 fitted = {'per_event', true, 'fitted_by_pros_rb', true};
+forcing_curve = {'pros_forcing_curve', true, 'partition_uncertainty', true};
 overtopping = [fitted, {'log_scale', 1, 'relative_uncertainty', 'q_u', ...
     'jpm_uncertainty_treatment', 'relative', 'cc_confidence_limit_method', 'als_relative'}];
 secondary = {'per_event', true, 'pros_secondary_eb1', true, 'cc_rule', 'skip', 'structure_types', 2};
@@ -176,15 +189,16 @@ rows = {
     % Forcing
     registry_row('SWL', 'forcing', 'display_name', 'SWL', 'axis_label', 'SWL [m, {datum}]', ...
         'absolute_uncertainty', 'chs_swl_u_a', 'relative_uncertainty', 'chs_swl_u_r', ...
-        'jpm_uncertainty_treatment', 'combined', 'datum_elevation', true, 'pros_forcing_curve', true)
+        'jpm_uncertainty_treatment', 'combined', 'datum_elevation', true, forcing_curve{:})
     registry_row('Hm0_offshore', 'forcing', 'display_name', '$H_{m_{0}}$ (offshore)', ...
         'absolute_uncertainty', 'chs_hm0_u_a', 'relative_uncertainty', 'chs_hm0_u_r', ...
-        'jpm_uncertainty_treatment', 'combined', 'pros_forcing_curve', true)
+        'jpm_uncertainty_treatment', 'combined', forcing_curve{:})
     registry_row('Hm0_toe', 'forcing', 'display_name', '$H_{m_{0}}$ (at toe)', ...
-        'relative_uncertainty', 'chs_hm0_u_r', 'jpm_uncertainty_treatment', 'relative', 'pros_forcing_curve', true)
+        'absolute_uncertainty', 'chs_hm0_u_a', 'relative_uncertainty', 'chs_hm0_u_r', ...
+        'jpm_uncertainty_treatment', 'combined', forcing_curve{:})
     registry_row('Tp', 'forcing', 'display_name', '$T_p$', 'unit_kind', 'time', ...
         'relative_uncertainty', 'chs_hm0_u_r', 'relative_uncertainty_rule', 'tp_from_hm0', ...
-        'jpm_uncertainty_treatment', 'relative', 'pros_forcing_curve', true)
+        'jpm_uncertainty_treatment', 'relative', forcing_curve{:})
     registry_row('h', 'forcing', 'display_name', '$h$')
     registry_row('Rc', 'forcing', 'display_name', '$R_c$')
     % Responses
@@ -267,10 +281,11 @@ function row = registry_row(name, kind, varargin)
 row = struct('name', name, 'kind', kind, 'compute_switch', '', 'display_name', '', 'axis_label', '', ...
     'unit_label', '', 'unit_kind', 'length', 'log_scale', 0, 'structure_types', [1 2 3], ...
     'data_types', {{'Peaks', 'Timeseries'}}, 'datum_elevation', false, 'pros_forcing_curve', false, ...
+    'partition_uncertainty', false, ...
     'fitted_by_pros_rb', false, 'pros_secondary_eb1', false, 'cc_rule', 'combine', ...
     'cc_confidence_limit_method', 'tropical_only', 'absolute_uncertainty', '', 'relative_uncertainty', '', ...
     'relative_uncertainty_rule', 'as_is', 'jpm_uncertainty_treatment', 'none', 'per_event', false, ...
-    'armor_side', '', 'with_repairs', false, 'damage_summary', '');
+    'armor_side', '', 'with_repairs', false, 'damage_summary', '', 'hazard_grid', []);
 for k = 1:2:numel(varargin)
     row.(varargin{k}) = varargin{k + 1};
 end

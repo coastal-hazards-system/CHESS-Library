@@ -163,7 +163,7 @@ classdef ProjectCreationUI < handle
 
             % Create UnitSystemDropDown
             obj.UnitSystemDropDown = uidropdown(obj.ChildGL_3);
-            obj.UnitSystemDropDown.Items = {'SI', 'Imperial'};
+            obj.UnitSystemDropDown.Items = {'SI'}; % SI Only: Imperial Inputs Are Not Converted By The Library
             obj.UnitSystemDropDown.BackgroundColor = [0.9412 0.9412 0.9412];
             obj.UnitSystemDropDown.Layout.Row = 1;
             obj.UnitSystemDropDown.Layout.Column = 2;

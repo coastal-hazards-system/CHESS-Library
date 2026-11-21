@@ -17,7 +17,9 @@ function [storm, prob_mass, db_info] = build_storm_database(CHS_Data, options)
 %          same storm IDs in the same order, and for TC so do
 %          prob_mass.Param(:,1) and TC_Freq (when the probability masses
 %          were loaded); error build_storm_database:stormIdMismatch.
-%       5. db_info (storm_db_info 'create').
+%       5. Forcing curation of every dataset (Peaks, Timeseries, WLP,
+%          WHP; curate_storm_database, curate_storm_forcing).
+%       6. db_info (storm_db_info 'create').
 %   Data types and WLP/WHP datasets are decided per storm type from the
 %   storm file slots (chs_storm_file_slots): Peaks / Timeseries when that
 %   storm type's slot is complete; WLP / WHP when requested and that
@@ -70,7 +72,8 @@ function [storm, prob_mass, db_info] = build_storm_database(CHS_Data, options)
 %   Tier: internal
 %
 %   See also call_chs_data_formatter, storm_db_info,
-%   storm_db_bias_uncertainty, chs_storm_file_slots, convert_chs_zip.
+%   storm_db_bias_uncertainty, chs_storm_file_slots, convert_chs_zip,
+%   curate_storm_database.
 %
 %   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 CHS_Data = strip_chs_data_folders(CHS_Data);
@@ -126,6 +129,9 @@ end
 
 %% STORM ID ALIGNMENT: Every Dataset Of A Storm Type (And The TC Probability Masses) Holds The Same Storms In The Same Order
 check_storm_id_alignment(storm, prob_mass);
+
+%% FORCING CURATION OF EVERY DATASET (Peaks, Timeseries, WLP, WHP)
+storm = curate_storm_database(storm);
 
 %% STORM DATABASE DETAILS (Bias & Uncertainty, TC Bias Correction, XC Record)
 db_info = storm_db_info('create', options.bias_uncertainty, tc_bias_corrected, Nyrs_XC, Nstm_XC, options.source_file);

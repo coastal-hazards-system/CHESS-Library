@@ -4,16 +4,17 @@ function [project_forcing] = apply_uncertainty(config, project_forcing, z_scores
 %
 %   Perturbs SWL, Hm0_offshore and Tp of a PROS dataset with the discrete
 %   standard normal z-scores, one z-score per replicate column
-%   (pcha_forcing_uncertainty):
+%   (pcha_forcing_uncertainty: the 'combined' standard deviation of
+%   combined_uncertainty, a zero uncertainty term means not given):
 %     - SWL: perturbed as surge (mean_lake_level removed first and added
 %       back; 0 outside the Great Lakes) with the SWL absolute and relative
 %       uncertainties.
-%     - Hm0_offshore: perturbed with the Hm0 uncertainties; values that are
-%       0 in the database stay 0 (wave responses NaN, surge responses such as
-%       the damaging depth still computed) and negative perturbed values are
-%       set to 0.01.
+%     - Hm0_offshore: perturbed with the Hm0 uncertainties (the storm
+%       database is curated, curate_storm_forcing: no Hm0 below 0.01 m).
 %     - Tp: Tp .* (1 + (sqrt(1 + u_r) - 1) .* z), u_r = Hm0 relative
 %       uncertainty.
+%   Then the Hm0 floor (floor_wave_height): Hm0_offshore <= 0.01 m ->
+%   0.01 m with the Wilson Tp (about 0.199 s) on those entries; NaN kept.
 %   Hm0_toe is derived later from Hm0_offshore (adjust_project_forcing).
 %
 %   Inputs:
@@ -35,7 +36,8 @@ function [project_forcing] = apply_uncertainty(config, project_forcing, z_scores
 %   Tier: internal
 %
 %   See also boundary_conditions_uncertainty, pcha_forcing_uncertainty,
-%   discrete_standard_normal_scores, mean_lake_level.
+%   combined_uncertainty, discrete_standard_normal_scores, mean_lake_level,
+%   floor_wave_height.
 
 %% GRAB INFORMATION FROM "config"
 swl_u_a = config.chs_swl_u_a;
@@ -62,34 +64,14 @@ SWL = cellfun(@(x, y) pcha_forcing_uncertainty(x, swl_u_a, swl_u_r, y),SWL, z_sc
 SWL = cellfun(@(x, y) x + lake_level, SWL ,'un',false);
 
 %% APPLY Hm0 & Tp UNCERTAINTY FOR STRUCTURE RESPONSE COMPUTATIONS
-% Check For Hm0 == 0 (No Waves In The Database: Excluded From Uncertainty, Restored To 0 Below)
-no_waves = cellfun(@(x) x == 0, Hm0, 'un', false);
-Hm0_w_Uncert = cellfun(@(x) Hm0_replace(1,x), Hm0, 'un', false);
-% Apply Uncertainty
-Hm0_w_Uncert = cellfun(@(x, y) pcha_forcing_uncertainty(x, hm0_u_a, hm0_u_r, y), Hm0_w_Uncert, z_scores_per_storm, 'un', false);
-% Replace Hm0 < 0 With 0.01
-Hm0  = cellfun(@(x) Hm0_replace(2,x), Hm0_w_Uncert, 'un', false);
-% Storms Without Waves Stay At Hm0 = 0: Wave Responses NaN, Surge Responses (e.g. Damaging Depth) Still Computed
-Hm0  = cellfun(@zero_where, Hm0, no_waves, 'un', false);
+Hm0 = cellfun(@(x, y) pcha_forcing_uncertainty(x, hm0_u_a, hm0_u_r, y), Hm0, z_scores_per_storm, 'un', false);
 % Tp
 Tp_U = sqrt(1+hm0_u_r)-1; %0.0724
 Tp = cellfun(@(x, y) x.*(1+Tp_U.*y), Tp, z_scores_per_storm, 'un', false);
+[Hm0, Tp] = cellfun(@floor_wave_height, Hm0, Tp, 'un', false);
 
 %% Store Results
 project_forcing.SWL = SWL;
 project_forcing.Hm0_offshore = Hm0;
 project_forcing.Tp = Tp;
-
-%% Define internal Aux Function
-    function x = zero_where(x, m)
-        x(m) = 0;
-    end
-    function Hm0 = Hm0_replace(cond,Hm0)
-        switch cond
-            case 1 % Hm0 == 0
-                Hm0(Hm0 == 0) =  NaN;
-            case 2 % Hm0 < 0 -> 0.01
-                Hm0(Hm0 < 0) =  0.01;
-        end
-    end
 end

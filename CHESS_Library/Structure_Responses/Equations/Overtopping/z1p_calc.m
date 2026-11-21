@@ -12,7 +12,8 @@ function[z1p] = z1p_calc(H,Tmm1,Rc,Sslp,grav)
 %   rubble mound roughness gamma_f = 0.55 for xi <= 2,
 %   0.05625*(xi - 2) + 0.55 for 2 < xi < 10 and 1.0 for xi >= 10.
 %   Freeboard restriction: z1p = 0 where Rc < 0.6 (in the units of Rc,
-%   i.e. 0.6 m in CHESS).
+%   i.e. 0.6 m in CHESS). H < 0 gives NaN before the square root (real
+%   output; z1p = 0 still applies where Rc < 0.6).
 %
 %   Inputs (H, Tmm1 and Rc of the same size):
 %     H    - spectral significant wave height at the toe [m]
@@ -42,6 +43,7 @@ function[z1p] = z1p_calc(H,Tmm1,Rc,Sslp,grav)
   % preliminary calculations
   Lmm1=grav.*Tmm1.^2./2./pi;
   som  = H./Lmm1;
+  som(H < 0) = NaN;
   SSPm = 1./Sslp./sqrt(som);  % Iribarren param
   c0 = 1.45;
   c1 = 5.1;

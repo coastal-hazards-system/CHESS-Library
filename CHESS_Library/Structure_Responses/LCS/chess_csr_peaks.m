@@ -11,11 +11,14 @@ function [PF_Summary,Reliab_Summary] = chess_csr_peaks(config, structure, emp_co
 %       and k_si);
 %     leeside limit state G_ls = R_ls - F_ls (Van Gent and Pozueta 2004,
 %       Melby 2009, r = 6; damage level leeside_design_S, coefficients
-%       k_ls1 and k_ls2);
+%       k_ls1 and k_ls2; the leeside slope enters only the slope factor
+%       a_ls, the run-up z1% and the crest velocity u1% are those of the
+%       seaward slope, z1p_calc and u1p_calc);
 %     overall G = min(G_ss, G_ls).
 %   Forcing: SWL, Hm0_toe, Tp (Tm = Tp/1.2, T_m-1,0 = Tp/1.1), h = SWL -
-%   toe elevation (0.01 when negative) and the number of waves Nz =
-%   storm_duration/Tm. Stone sizes: Dn = (mass/((1 + armor_delta)*
+%   toe elevation and the number of waves Nz = storm_duration/Tm. Dry toe
+%   (h <= 0): G_ss = G_ls = NaN (no wave attack, not a failure; the storm
+%   still counts in the life cycle). Stone sizes: Dn = (mass/((1 + armor_delta)*
 %   water_density))^(1/3).
 %   The reliability of a life cycle is 1 - (storms with G < 0)/(storms in
 %   the life cycle), 1 for a life cycle without storms; the probability of
@@ -47,7 +50,7 @@ function [PF_Summary,Reliab_Summary] = chess_csr_peaks(config, structure, emp_co
 %   Tier: internal
 %
 %   See also chess_csr, chess_csr_dpa, load_empirical_coefficients,
-%   lcs_columns.
+%   lcs_columns, z1p_calc, u1p_calc.
 %
 %   Developed by: Jeffrey A. Melby, PhD; Norberto Nadal-Caraballo, PhD;
 %   Victor M. Gonzalez, PE
@@ -161,8 +164,6 @@ dr = Sr.*dw;
 V_ls = leeside_mass./dr;
 % Seaside stone nominal diameter (m)
 Dn_ls = V_ls.^(1/3);
-% Tangent of the leeside stone armor slope angle
-tan_ls = 1./leeside_slope;
 
 %% READ & FORMAT ADDITIONAL DATA
 % Gravitational acceleration (m/s^2)
@@ -197,7 +198,9 @@ for lcS=1:length(LC_MCSimOUT)
     % deep water wave length based on mean wave period
     Lm0 = (g*Tm.^2)/(2*pi);
     % Compute Water Col
-    h = WL - toe_elevation; h(h<0) = 0.01;
+    h = WL - toe_elevation;
+    % Dry Toe: NaN Margins (Set On The Depth So The Momentum Flux Powers Stay Real); Not A Failure
+    h(h<=0) = NaN;
 
     %% SEASIDE STABILITY LIMIT STATE (MELBY AND KOBAYASHI 2011)
     % Fourrier Solution Coefficient
@@ -222,50 +225,13 @@ for lcS=1:length(LC_MCSimOUT)
     r = 6;
     % Freeboard Leeside
     Rc_ls = crest_elevation-toe_elevation-h;
-    % Empirical Coefficient
-    c0 = 1.45;
-    % Empirical Coefficient
-    c1 = 5.1;
-    % Empirical Coefficient
-    c2 = 0.25*(c1^2)/c0;
-    % Empirical Coefficient
-    p = 0.5*c1/c0;
     % Leeside Stability Coefficient
     a_ls = leeside_slope.^(-2.5/r).*(1+10*exp(-Rc_ls./Hm0)).^(1/r);
     % Compute Response Component
     R_ls = (sqrt(armor_delta).*Dn_ls.*S_ls.^(1/6))./a_ls;
-    % Wave Length
-    Lm10 = (g*Tm10.^2)/(2*pi);
-    % Surf Similarity Parameter
-    Irs1 = tan_ls./sqrt(Hm0./Lm10);
-
-    %% COMPUTE WAVE R1%
-    % Initialize Gamma_fc Var
-    Yfc = ones(size(Hm0));
-    % Compute Friction Factor On Crest as f(Irs1)
-    Yfc(Irs1<=2) = 0.55;
-    Yfc(Irs1>2 & Irs1<10) = 0.05625*(Irs1(Irs1>2 & Irs1<10)-2)+0.55;
-    Yfc(Irs1>=10) = 1.0;
-    % Initialize R1% Var
-    z1p = zeros(size(Hm0));
-    % Compute Logical Vector
-    ixIrs1 = (Irs1<=p);
-    % Compute z1p
-    z1p(ixIrs1) = Yfc(ixIrs1).*Hm0(ixIrs1).*(c0*Irs1(ixIrs1));% runup exceeded by % of the waves.
-    % COmpute Logical Vector
-    ixIrs1 = (Irs1>p);
-    % Compute z1p
-    z1p(ixIrs1,1) = Yfc(ixIrs1).*Hm0(ixIrs1).*(c1-c2./Irs1(ixIrs1));
-
-    %% CONTINUE LEESIDE STABILITY COMPUTATION
-    % Initialize u1p
-    u1p = zeros(size(WL));
-    % Negative Freeboard Failsafe
-    Rc_ls(Rc_ls<0.6) = 0;
-    % Compute 1% Overtopping Velocity
-    u1p(~(Rc_ls<0.6)) = sqrt(g*Hm0(~(Rc_ls<0.6))).*(1.7*Yfc(~(Rc_ls<0.6)).^0.5).*...
-        ((z1p(~(Rc_ls<0.6))-Rc_ls(~(Rc_ls<0.6)))./(Yfc(~(Rc_ls<0.6)).*Hm0(~(Rc_ls<0.6)))).^0.5...
-        ./(1+0.1*crest_width./Hm0(~(Rc_ls<0.6)));
+    % Run-Up And Crest Velocity Of The Seaward Slope
+    z1p = z1p_calc(Hm0, Tm10, Rc_ls, seaside_slope, g);
+    u1p = u1p_calc(crest_width, Rc_ls, z1p, Tm10, Hm0, seaside_slope, g);
     % Compute Forcing Component
     F_ls = k_ls2.^(1/6).*Nz.^(1/12).*(u1p.*Tm10./k_ls1);
     % Leeside Stability Performance

@@ -24,8 +24,16 @@ function [Dn50_SS, Dn50_LS] = ann_rubblemound_stability(Hs, Tm, Tm10, d, Rc, dur
 %     Leeside (12): [P, cot_a, cot_b, tan_m, gamma_f, Nwaves, B/Hs, hc/Hs,
 %                   Rc/Hs, s_om, Hs/d, S_LS]
 %     Nwaves = duration/Tm, s_om = Hs/(g*Tm^2/(2*pi)).
-%   Cut-offs (only these): Hs < 0.1 m gives NaN on both sides; no
-%   overtopping (z1p - Rc < 0, z1p_calc with Tm10) gives Dn50_LS = 0.
+%   Periods: Tm for the number of waves Nwaves and the steepness s_om;
+%   Tm10 for the run-up z1p and crest velocity u1p of the validity rules.
+%
+%   Validity rules (stone_size_validity, the same rules as the legacy
+%   equations of compute_structure_response), each gives NaN:
+%     Both sides: Hs <= 0.1 m; dry toe d <= 0.
+%     Seaside: Rc/Dn50_SS < 1 (also where Rc < 0: the ANN has no
+%              submerged correction).
+%     Leeside (Van Gent and Pozueta 2004): z1p - Rc < 0; u1p <= 0;
+%              Rc <= 0; Rc/Hs outside [0.3, 6] (z1p and u1p with Tm10).
 %   Training ranges (not enforced, for reference only):
 %     Seaside: P 0.1-0.64, cot_a 1.5-6, tan_m 0-0.05, gamma_f 0.55-1,
 %              Nwaves 698-9456, hc/Hs 1.2-59, Rc/Hs -6.7-44,
@@ -49,7 +57,7 @@ function [Dn50_SS, Dn50_LS] = ann_rubblemound_stability(Hs, Tm, Tm10, d, Rc, dur
 %     B        - crest width [m]
 %     cot_a    - seaside slope cot(alpha) [-]
 %     cot_b    - leeside slope cot(beta) [-]
-%     tan_m    - offshore (approach) slope tan(m) [-]
+%     tan_m    - nearshore approach slope tan(m) [-] (CHESS: 1/nearshore_slope)
 %     P        - notional permeability [-]
 %     gamma_f  - roughness influence factor [-]
 %     S_SS     - seaside design damage level [-]
@@ -57,12 +65,15 @@ function [Dn50_SS, Dn50_LS] = ann_rubblemound_stability(Hs, Tm, Tm10, d, Rc, dur
 %     delta    - armor relative buoyant density [-]
 %     g        - gravitational acceleration [m/s^2], scalar
 %   Outputs (size of the expanded inputs):
-%     Dn50_SS  - seaside median nominal stone diameter [m]
-%     Dn50_LS  - leeside median nominal stone diameter [m]
+%     Dn50_SS  - seaside median nominal stone diameter [m] (NaN outside
+%                the validity rules)
+%     Dn50_LS  - leeside median nominal stone diameter [m] (NaN outside
+%                the validity rules)
 %
 %   Tier: public
 %
-%   See also z1p_calc, compute_structure_response.
+%   See also stone_size_validity, z1p_calc, u1p_calc,
+%   compute_structure_response.
 %
 %   Developed by: Jeffrey A. Melby (networks); Fabian A. Garcia Moreno (port)
 
@@ -83,7 +94,8 @@ Tm = row(Tm);
 Tm10 = row(Tm10);
 d = row(d);
 Rc = row(Rc);
-Nwaves = row(duration)./Tm;
+duration = row(duration);
+Nwaves = duration./Tm;
 hc = row(hc);
 B = row(B);
 cot_a = row(cot_a);
@@ -94,8 +106,6 @@ gamma_f = row(gamma_f);
 S_SS = row(S_SS);
 S_LS = row(S_LS);
 delta = row(delta);
-% Very Small Waves: No Stone Size
-Hs(Hs < 0.1) = NaN;
 % Deep Water Wave Steepness (Mean Period)
 s_om = Hs./(g.*Tm.^2./(2*pi));
 
@@ -104,11 +114,15 @@ X_SS = [P; cot_a; tan_m; gamma_f; Nwaves; hc./Hs; Rc./Hs; s_om; Hs./d; S_SS];
 X_LS = [P; cot_a; cot_b; tan_m; gamma_f; Nwaves; B./Hs; hc./Hs; Rc./Hs; s_om; Hs./d; S_LS];
 
 %% STONE SIZE
-Dn50_SS = reshape(Hs./ann_forward(net.SS.layers, X_SS)./delta, dims);
+Dn50_SS = Hs./ann_forward(net.SS.layers, X_SS)./delta;
 Dn50_LS = Hs./ann_forward(net.LS.layers, X_LS)./delta;
-% No Overtopping (Run-Up Exceeded By 1% Of The Waves Below The Crest): No Leeside Damage
-z1p = z1p_calc(Hs, Tm10, Rc, cot_a, g);
-Dn50_LS((z1p - Rc) < 0) = 0;
+
+%% VALIDITY RULES
+[invalid_SS, invalid_LS] = stone_size_validity(Dn50_SS, Dn50_LS, Hs, Tm, Tm10, d, Rc, duration, B, cot_a,...
+    cot_b, delta, g, 0);
+Dn50_SS(invalid_SS) = NaN;
+Dn50_LS(invalid_LS) = NaN;
+Dn50_SS = reshape(Dn50_SS, dims);
 Dn50_LS = reshape(Dn50_LS, dims);
 end
 

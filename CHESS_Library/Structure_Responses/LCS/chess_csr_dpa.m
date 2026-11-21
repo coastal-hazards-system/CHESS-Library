@@ -9,10 +9,16 @@
 %   first-damage coefficient k_si (dS = 0.5) until the end of the first
 %   damaging storm and k_sp afterwards. Leeside damage:
 %   leeside_armor_stone_damage, with the run-up z1p_calc and the crest
-%   velocity u1p_calc. Forcing per row: SWL, Hm0_toe, Tp (Tm = Tp/1.2,
-%   T_m-1,0 = Tp/1.1) and the number of waves Nz = dt/Tm (dt, the row time
-%   step). csr_apply_cutoff_correction / csr_cutoff_offset raise the
-%   crest used for the submergence check of the damage functions.
+%   velocity u1p_calc. A row without wave attack is no damage (S keeps the
+%   damage of the previous row): seaside Hm0_toe <= 0.1 m, NaN or a dry
+%   toe (h = SWL - toe elevation <= 0, seaside_armor_stone_damage);
+%   leeside a dry toe (S and u1p of the previous row; the diagnostics
+%   z1p is NaN there) or no run-up over the crest
+%   (leeside_armor_stone_damage, e.g. Hm0_toe NaN). Forcing per row: SWL,
+%   Hm0_toe, Tp (Tm = Tp/1.2, T_m-1,0 = Tp/1.1) and the number of waves
+%   Nz = dt/Tm (dt, the row time step). csr_apply_cutoff_correction /
+%   csr_cutoff_offset raise the crest used for the submergence check of
+%   the damage functions.
 %   Each side is tracked without and with repairs
 %   (csr_apply_structure_repair: 0 none; 1 above the service limit
 %   seaside_design_S / leeside_design_S; 2 above the ultimate limit
@@ -32,8 +38,10 @@
 %     config        - CHESS configuration, 1x1 struct; reads
 %                     gravity_constant [m/s^2], water_density [kg/m^3],
 %                     mcs_nYears, csr_apply_structure_repair (0-3),
-%                     csr_apply_cutoff_correction (0/1) and
-%                     csr_cutoff_offset [m]
+%                     csr_apply_cutoff_correction (0/1),
+%                     csr_cutoff_offset [m] and project_CLs (percentiles
+%                     of stats, Repairs_Stats and the yearly curves, char,
+%                     e.g. '[16 84]')
 %     structure     - structure geometry, 1x1 struct; reads
 %                     crest_elevation, toe_elevation [m, study datum,
 %                     positive up], crest_width [m], seaside_slope,
@@ -59,18 +67,20 @@
 %           cycle with repairs: {rows where the limit was exceeded, life
 %           cycle index}, cell ({} without repairs)
 %       stats - final damage (last row of each life cycle, no repairs):
-%           mean and 10/16/84/90th percentiles, table (p, Smean, Sp,
-%           LSmean, LSp)
-%       Repairs_Stats - repairs on only: total, mean and 10/16/84/90th
+%           mean and project_CLs percentiles, table (p, Smean, Sp,
+%           LSmean, LSp; one row per percentile)
+%       Repairs_Stats - repairs on only: total, mean and project_CLs
 %           percentiles of the repair counts, seaside and leeside, table
+%           (Total_<Side>_Repairs, Mean_<Side>_Repairs,
+%           <Side>_Repair_<p>_Percentile per percentile, '.' as 'p')
 %       seaside_repair_count, leeside_repair_count - repairs off only:
 %           life cycles whose no-repairs damage reaches the ultimate limit
 %       Reliability_Seaside, Reliability_Leeside - 1 - (life cycles with a
 %           repair, or reaching the ultimate limit without repairs)/nLC
 %       Smax, LSmax - seaside and leeside yearly mean of the storm-maximum
 %           damage (no repairs), (mcs_nYears + 1) x 1, row 1 = year 0
-%       LSPcurves, SPcurves - leeside and seaside 10/16/84/90th
-%           percentiles, (mcs_nYears + 1) x 4
+%       LSPcurves, SPcurves - leeside and seaside yearly project_CLs
+%           percentiles, (mcs_nYears + 1) x numel(project_CLs)
 %       diagnostics - per-row forcing and damage, 1 x nLC cell of tables
 %           (WL, Hm0_toe, Tp, h, Nz, Rc, z1p, u1p, Szero_no_repairs,
 %           Ssea_no_repairs, Szero_with_repairs, Ssea_with_repairs,
@@ -186,7 +196,7 @@ end  % NLS
 disp([newline '      Computing Post Damage Statistics....']);
 
 %% POST DAMAGE STATISTICS
-statistics = final_damage_statistics(LC_SimOUT_hyd, damage, settings.nYears);
+statistics = final_damage_statistics(LC_SimOUT_hyd, damage, settings.nYears, settings.percentiles);
 diagnostics = diagnostics_tables(forcing, damage, nLC);
 repairs = repair_statistics(settings, damage, Seaside_Repair_Indexes, Leeside_Repair_Indexes);
 reliability = structure_reliability(settings.repair_switch, repairs, Seaside_Repair_Indexes, Leeside_Repair_Indexes, nLC);
@@ -205,6 +215,7 @@ settings.grav = config.gravity_constant;
 settings.Szerolim = 0.2;
 % Define Number of Years
 settings.nYears = config.mcs_nYears;
+settings.percentiles = cellfun(@str2double, strsplit(config.project_CLs(2:end-1), {' '}));
 % Grab Submergance Switch
 % Intentionally fixed at 0 (the config switch csr_compute_S_submerged was retired)
 settings.compute_S_submerged = 0;
@@ -299,6 +310,14 @@ forcing.step = cellfun(@(x) x(:, C.step),LC_SimOUT_hyd,'un',false);
 forcing.z1p = cellfun(@(w,x,y) z1p_calc(w,x,y,seaside_slope,grav),forcing.Hm0,forcing.Tm10,forcing.Rc,'un',false);
 % Compute u1%
 forcing.u1p = cellfun(@(v,w,x,y) u1p_calc(crest_width,v,w,x,y,seaside_slope,grav),forcing.Rc,forcing.z1p,forcing.Tm10,forcing.Hm0,'un',false);
+% Dry Toe (h <= 0): No Run-Up Or Crest Velocity
+forcing.z1p = cellfun(@nan_where_dry_toe, forcing.z1p, forcing.h, 'un', false);
+forcing.u1p = cellfun(@nan_where_dry_toe, forcing.u1p, forcing.h, 'un', false);
+end
+
+%% AUX FUNCTION: NaN WHERE THE TOE IS DRY (h <= 0)
+function x = nan_where_dry_toe(x, h)
+x(h <= 0) = NaN;
 end
 
 %% AUX FUNCTION: ZERO DAMAGE SERIES (ONE CELL PER LIFE CYCLE)
@@ -464,12 +483,7 @@ for time_step = 1:n_steps
         end
     else
         % Compute Incremental Leeside Damage
-        leeside_damage_value = ...
-            leeside_armor_stone_damage(leeside_with_repairs_last,...
-            forcing_lc.Hm0(time_step), forcing_lc.Tm10(time_step), u1p_last, settings.LDn,...
-            settings.leeside_slope, settings.seaside_slope, forcing_lc.WL(time_step), forcing_lc.Rc(time_step), forcing_lc.Nz(time_step), ...
-            settings.armor_delta, settings.K_ls1, settings.K_ls2, settings.crest_width, settings.crest_elevation,...
-            settings.grav, settings.compute_S_submerged, settings.cutoff_switch, settings.cutoff_delta);
+        leeside_damage_value = leeside_damage_step(forcing_lc, settings, time_step, leeside_with_repairs_last, u1p_last);
         leeside_with_repairs(time_step) = leeside_damage_value;
         % Store t-1 Damage State
         leeside_with_repairs_last = leeside_damage_value;
@@ -477,11 +491,7 @@ for time_step = 1:n_steps
 
     %% NO REPAIRS
     % Compute Incremental Leeside Damage
-    [leeside_damage_value, u1p_value] = leeside_armor_stone_damage(leeside_no_repairs_last,...
-        forcing_lc.Hm0(time_step), forcing_lc.Tm10(time_step), u1p_last, settings.LDn,...
-        settings.leeside_slope, settings.seaside_slope, forcing_lc.WL(time_step), forcing_lc.Rc(time_step), forcing_lc.Nz(time_step),...
-        settings.armor_delta, settings.K_ls1, settings.K_ls2, settings.crest_width, settings.crest_elevation,...
-        settings.grav, settings.compute_S_submerged, settings.cutoff_switch, settings.cutoff_delta);
+    [leeside_damage_value, u1p_value] = leeside_damage_step(forcing_lc, settings, time_step, leeside_no_repairs_last, u1p_last);
     leeside_no_repairs(time_step) = leeside_damage_value;
     u1p(time_step) = u1p_value;
     % Store t-1 Damage State
@@ -490,8 +500,22 @@ for time_step = 1:n_steps
 end
 end
 
+%% AUX FUNCTION: LEESIDE DAMAGE OF ONE ROW (DRY TOE h <= 0: NO DAMAGE, S AND u1p OF THE PREVIOUS ROW)
+function [S, u1p] = leeside_damage_step(forcing_lc, settings, time_step, S_last, u1p_last)
+if forcing_lc.h(time_step) <= 0
+    S = S_last;
+    u1p = u1p_last;
+    return
+end
+[S, u1p] = leeside_armor_stone_damage(S_last,...
+    forcing_lc.Hm0(time_step), forcing_lc.Tm10(time_step), u1p_last, settings.LDn,...
+    settings.leeside_slope, settings.seaside_slope, forcing_lc.WL(time_step), forcing_lc.Rc(time_step), forcing_lc.Nz(time_step),...
+    settings.armor_delta, settings.K_ls1, settings.K_ls2, settings.crest_width, settings.crest_elevation,...
+    settings.grav, settings.compute_S_submerged, settings.cutoff_switch, settings.cutoff_delta);
+end
+
 %% AUX FUNCTION: FINAL DAMAGE PERCENTILES AND YEARLY MEAN MAXIMUM DAMAGE CURVES
-function statistics = final_damage_statistics(LC_SimOUT_hyd, damage, nYears)
+function statistics = final_damage_statistics(LC_SimOUT_hyd, damage, nYears, p)
 %% STORE LAST COMPUTED DAMAGE FOR EACH LC
 % This will turn into a mean sigular value once percentiles are computed
 % Seaside
@@ -500,8 +524,8 @@ S_final = lc_values(damage.seaside_no_repairs, @(x) x(end));
 LS_final = lc_values(damage.leeside_no_repairs, @(x) x(end));
 
 %% COMPUTE MEAN DAMAGE CURVE
-[LSmax,LSPcurves,~] = compute_lcs_yearly_curve(LC_SimOUT_hyd, damage.leeside_no_repairs, nYears);
-[Smax,SPcurves,~] = compute_lcs_yearly_curve(LC_SimOUT_hyd, damage.seaside_no_repairs, nYears);
+[LSmax,LSPcurves,~] = compute_lcs_yearly_curve(LC_SimOUT_hyd, damage.leeside_no_repairs, nYears, p);
+[Smax,SPcurves,~] = compute_lcs_yearly_curve(LC_SimOUT_hyd, damage.seaside_no_repairs, nYears, p);
 % Fill values for year 0
 Smax = [0;Smax];
 LSmax = [0;LSmax];
@@ -509,11 +533,10 @@ SPcurves = [zeros(size(SPcurves(1,:)));SPcurves];
 LSPcurves = [zeros(size(SPcurves(1,:)));LSPcurves];
 
 %% COMPUTE STATISTICS - TABLE
-% Define Percentiles
-p = [10 16 84 90]';
-% Compute Percentiles
-Sp = prctile(S_final,[10 16 84 90])';
-LSp = prctile(LS_final,[10 16 84 90])';
+% Percentiles Of config.project_CLs
+p = p(:);
+Sp = reshape(prctile(S_final,p), [], 1);
+LSp = reshape(prctile(LS_final,p), [], 1);
 % Compute Mean Accumulated Damage For Bin
 Smean = repmat(mean(S_final,'omitnan'),size(p));
 LSmean = repmat(mean(LS_final,'omitnan'),size(p));
@@ -560,19 +583,15 @@ if settings.repair_switch > 0
     sea_repairs_mean = mean(sea_repairs);
     % Compute Leeside Mean Repairs
     lee_repairs_mean = mean(lee_repairs);
-    % Compute Seaside Repairs Percentiles
-    sea_repairs_percentiles = prctile(sea_repairs,[10 16 84 90]);
-    % Compute Leeside Repairs Percentiles
-    lee_repairs_percentiles = prctile(lee_repairs,[10 16 84 90]);
-    % Build Table
-    repairs.Repairs_Stats = table(sum(sea_repairs),sea_repairs_mean,sea_repairs_percentiles(1),sea_repairs_percentiles(2),...
-        sea_repairs_percentiles(3),sea_repairs_percentiles(4),sum(lee_repairs),lee_repairs_mean,...
-        lee_repairs_percentiles(1),lee_repairs_percentiles(2),lee_repairs_percentiles(3),...
-        lee_repairs_percentiles(4),'VariableNames',{'Total_Seaside_Repairs','Mean_Seaside_Repairs',...
-        'Seaside_Repair_10_Percentile','Seaside_Repair_16_Percentile','Seaside_Repair_84_Percentile',...
-        'Seaside_Repair_90_Percentile','Total_Leeside_Repairs','Mean_Leeside_Repairs',...
-        'Leeside_Repair_10_Percentile','Leeside_Repair_16_Percentile','Leeside_Repair_84_Percentile',...
-        'Leeside_Repair_90_Percentile'});
+    % Repairs Percentiles (config.project_CLs) And Table
+    p = settings.percentiles(:)';
+    pct_names = @(side) arrayfun(@(x) sprintf('%s_Repair_%s_Percentile', side, strrep(sprintf('%g', x), '.', 'p')), p, 'un', 0);
+    sea_repairs_percentiles = reshape(prctile(sea_repairs, p), 1, []);
+    lee_repairs_percentiles = reshape(prctile(lee_repairs, p), 1, []);
+    repairs.Repairs_Stats = array2table([sum(sea_repairs), sea_repairs_mean, sea_repairs_percentiles,...
+        sum(lee_repairs), lee_repairs_mean, lee_repairs_percentiles], 'VariableNames',...
+        [{'Total_Seaside_Repairs', 'Mean_Seaside_Repairs'}, pct_names('Seaside'),...
+        {'Total_Leeside_Repairs', 'Mean_Leeside_Repairs'}, pct_names('Leeside')]);
 else
     % Seaside N Repairs
     sea_repairs = sum(lc_values(damage.seaside_no_repairs, @max)>=settings.seaside_S_ULS);

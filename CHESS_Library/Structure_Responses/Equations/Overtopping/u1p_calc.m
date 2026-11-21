@@ -11,7 +11,9 @@ function u1p = u1p_calc(wdth,Rc,z1p,Tmm1,H,Sslp,grav)
 %   2 < xi < 10 and 1 for xi >= 10, xi = 1/(Sslp*sqrt(H/Lmm1)) and
 %   Lmm1 = grav*Tmm1^2/(2*pi). u1p = 0 where there is no run-up
 %   (z1p = 0), where the run-up stays below the crest (z1p - Rc < 0) and
-%   where Rc/H < 0.3 (van Gent and Pozueta validity limit).
+%   where Rc/H < 0.3 (van Gent and Pozueta validity limit). H < 0 gives
+%   NaN (applied after the zero rules). The output is real: z1p - Rc < 0
+%   and H < 0 are NaN before the square roots.
 %
 %   Inputs (Rc, z1p, Tmm1 and H of the same size):
 %     wdth - crest width [m], scalar
@@ -34,6 +36,7 @@ function u1p = u1p_calc(wdth,Rc,z1p,Tmm1,H,Sslp,grav)
     Lmm1=grav*Tmm1.^2./2./pi;
     % Spectral Mean Wave Slope
     som = H./Lmm1;
+    som(H < 0) = NaN;
     % Surf Similarity Parameter
     SSPm=1./Sslp./sqrt(som);
     % Friction Factor
@@ -44,10 +47,16 @@ function u1p = u1p_calc(wdth,Rc,z1p,Tmm1,H,Sslp,grav)
     % friction factor for crest
     gam_crest =gamf;
     % Compute u1%
-    u1pNum=sqrt((z1p-Rc)./gamf./H); % What To Do When z1p-Rc
+    % NaN Before The Square Roots Keeps The Output Real (z1p - Rc < 0 Is Set To 0 Below)
+    run_up_above_crest = z1p - Rc;
+    run_up_above_crest(run_up_above_crest < 0) = NaN;
+    H_sqrt = H;
+    H_sqrt(H < 0) = NaN;
+    u1pNum=sqrt(run_up_above_crest./gamf./H_sqrt);
     u1pNum(z1p == 0) = 0; % If there is no overtopping, there can't be flow velocity.
     u1pDenom=1+0.1.*wdth./H;
-    u1p=sqrt(grav.*H).*1.7.*sqrt(gam_crest).*u1pNum./u1pDenom;
+    u1p=sqrt(grav.*H_sqrt).*1.7.*sqrt(gam_crest).*u1pNum./u1pDenom;
     u1p((z1p-Rc)<0) = 0;
     u1p(Rc./H<0.3)=0; %JAM added on 2/23/26 from v&P paper.
+    u1p(H < 0) = NaN;
 end

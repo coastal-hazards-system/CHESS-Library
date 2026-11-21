@@ -13,9 +13,11 @@ function project_forcing = apply_stage1_transmission(config, project_forcing)
 %   per replicate (z = 0 included) and per life-cycle row or time step. Kt
 %   as in compute_structure_response for a rubble mound:
 %   eurotop_wave_transmission(Hm0_toe, Tp, crest_elevation - SWL,
-%   crest_width, 1/seaside_slope, g) of the stage 1 run's geometry. Kt = 0
-%   (e.g. Hm0_toe = 0 at a dry stage 1 toe) gives Hm0 = 0: the waves are
-%   dissipated, surge-only responses still run. The stage 2 toe is
+%   crest_width, 1/seaside_slope, g) of the stage 1 run's geometry. A dry
+%   stage 1 toe (SWL - stage 1 toe_elevation <= 0) gives Kt = NaN, so
+%   stage 2 Hm0_offshore and Hm0_toe are NaN on that row (wave responses
+%   NaN, surge-only responses still run); Kt = 0 gives Hm0 = 0 (the waves
+%   are dissipated). The stage 2 toe is
 %   toe_elevation, or wall_bottom_elevation for a floodwall without a toe
 %   berm (as in adjust_project_forcing). SWL, Tp, wDir, dt, storm_duration,
 %   storms/life cycles and replicates are kept as is: stage 1's
@@ -61,8 +63,7 @@ if config.struc_type == 2 && ~(isfield(config, 'add_toe_berm') && config.add_toe
 end
 geo = config.multiline.stage1_structure;
 g = config.gravity_constant;
-transmit = @(Hm0, Tp, SWL) cellfun(@(h, t, s) h.*eurotop_wave_transmission(h, t, geo.crest_elevation - s,...
-    geo.crest_width, 1/geo.seaside_slope, g), Hm0, Tp, SWL, 'un', false);
+transmit = @(Hm0, Tp, SWL) cellfun(@(h, t, s) h.*stage1_transmission(h, t, s, geo, g), Hm0, Tp, SWL, 'un', false);
 project_forcing = transform(project_forcing);
 
     function data = transform(data)
@@ -86,4 +87,10 @@ project_forcing = transform(project_forcing);
             end
         end
     end
+end
+
+%% LOCAL FUNCTIONS
+function Kt = stage1_transmission(Hm0, Tp, SWL, geo, g)
+Kt = eurotop_wave_transmission(Hm0, Tp, geo.crest_elevation - SWL, geo.crest_width, 1/geo.seaside_slope, g);
+Kt(SWL - geo.toe_elevation <= 0) = NaN;
 end

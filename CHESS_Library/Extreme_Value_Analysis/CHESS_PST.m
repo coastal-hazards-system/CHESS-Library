@@ -56,6 +56,9 @@ function [SST_output] = CHESS_PST(response_data, pst_options, plot_options)
 %       .use_AEP         - frequencies as AEP (1) or AEF (0)
 %       .prc             - CL percentiles [%], up to 4 values
 %                          ([] = [2.28 15.87 84.13 97.72])
+%       .response_grid   - response levels of the response table
+%                          HC_tbl_rsp_y [response units], vector (missing or [] =
+%                          response_hazard_grid(plot_options.staID))
 %       .stat_print      - clear the command window and print the
 %                          progress (0/1)
 %     plot_options - plot settings, struct; fields:
@@ -81,11 +84,13 @@ function [SST_output] = CHESS_PST(response_data, pst_options, plot_options)
 %       .HC_plt       - response at HC_plt_x, columns [bootstrap mean,
 %                       prc CLs], 631 x (1 + numel(prc))
 %       .HC_tbl_x     - table AEP 1/[2 5 10 ... 1e6] (18 values) or AEF
-%                       1/[0.1 0.2 0.5 ... 1e4] (16 values)
+%                       1/[0.1 0.2 0.5 ... 1e6] (22 values;
+%                       hazard_table_probabilities)
 %       .HC_tbl       - response at HC_tbl_x (same columns), negatives NaN
-%       .HC_tbl_rsp_y - response levels 0.01:0.01:20, 2000 x 1
-%       .HC_tbl_rsp_x - AEF/AEP of each HC_tbl_rsp_y level (same columns),
-%                       < 1e-4 set to NaN
+%       .HC_tbl_rsp_y - response levels pst_options.response_grid, column
+%       .HC_tbl_rsp_x - AEF/AEP of each HC_tbl_rsp_y level (same columns;
+%                       the plot curve inverted with extrapolation,
+%                       exceedance_at_response)
 %       .HC_emp       - empirical curve, table (Response, Rank, CCDF,
 %                       Hazard = AEF or AEP, ARI)
 %       .POT          - POT sample without tides, sorted in descending
@@ -101,7 +106,8 @@ function [SST_output] = CHESS_PST(response_data, pst_options, plot_options)
 %
 %   Tier: public
 %
-%   See also CHESS_JPM, aef2aep, aep2aef.
+%   See also CHESS_JPM, aef2aep, aep2aef, response_hazard_grid,
+%   hazard_table_probabilities, exceedance_at_response.
 
 %% Other settings
 if pst_options.stat_print == 1
@@ -329,6 +335,10 @@ end
             plot_options.staID = 'resp';
         elseif ~ischar(plot_options.staID)
             error('Error: plot_options.staID must be a character array.')
+        end
+        % Response Levels Of The Response Table
+        if ~isfield(pst_options, 'response_grid') || isempty(pst_options.response_grid)
+            pst_options.response_grid = response_hazard_grid(plot_options.staID);
         end
         % Y Axis Label
         if isempty(plot_options.yaxis_Label)

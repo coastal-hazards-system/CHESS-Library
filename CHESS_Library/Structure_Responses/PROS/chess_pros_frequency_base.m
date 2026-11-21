@@ -14,16 +14,22 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
 %       responses, per CL column: p2dyn, p2sta, p2total, p3dyn, p3sta,
 %       p3total, pu (goda_vertical_wall_pressure_distribution, SI, with
 %       Hm0_offshore and the given p1 curve) and the nappe
-%       (floodwall_nappe_response with Hm0_toe and the q curve); skipped
-%       when the p1 or q curve they need is missing.
+%       (floodwall_nappe_response with Hm0_toe and the q curve, NaN where
+%       q is NaN); skipped when the p1 or q curve they need is missing.
 %     workflow 4 (EB2, PROS-FB): every requested response
 %       (compute_structure_response) on a 10000-sample Monte Carlo of the
 %       first (best-estimate) column of the forcing curves with the
 %       database uncertainties: SWL (chs_swl_u_a, chs_swl_u_r, applied to
 %       SWL minus the mean lake level), Hm0_offshore (chs_hm0_u_a,
-%       chs_hm0_u_r), Hm0_toe (relative only, same draw) and Tp (relative
-%       sqrt(1 + chs_hm0_u_r) - 1, same draw); TC and CC uncertainties are
-%       reduced by a 0.1 partition, sqrt(u^2 - 0.1^2). storm_duration is
+%       chs_hm0_u_r), Hm0_toe (chs_hm0_u_a, chs_hm0_u_r, same draw) and Tp
+%       (relative sqrt(1 + chs_hm0_u_r) - 1, same draw), then the Hm0 floor
+%       (floor_wave_height: Hm0 <= 0.01 m -> 0.01 m; the Wilson Tp where
+%       Hm0_offshore is floored, a floored Hm0_toe keeps the sampled Tp;
+%       NaN, e.g. a dry toe, kept); TC and CC forcing curves already hold
+%       the first uncertainty partition, so their samples take the
+%       uncertainty left (uncertainty_after_partition); the standard
+%       deviation is the 'combined' one of combined_uncertainty (a zero
+%       uncertainty term means not given). storm_duration is
 %       config.storm_duration. Each response curve takes the sorted
 %       samples at the CL percentiles; R2p_SWL = SWL + R2p. The draws are
 %       not seeded.
@@ -59,7 +65,8 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
 %
 %   See also chess_pros, frequency_based_hazard_curve, pros_forcing_curves,
 %   set_hazard_curve_entry, compute_structure_response,
-%   goda_vertical_wall_pressure_distribution.
+%   goda_vertical_wall_pressure_distribution, combined_uncertainty,
+%   uncertainty_after_partition.
 
     % ==========================================
     % 1. INITIALIZE CONFIG & STRUCTURE DETAILS
@@ -98,6 +105,7 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
     wall = struct('hw', hw, 'Bm', berm_width, 'berm_slope_tana', berm_slope_tana, ...
         'offshore_slope_tana', 1./structure.offshore_slope, 'rho_w', rho_w, 'g', g, 'design_scale', 1.8, 'beta', 0);
     p2_p3_names = response_registry('output', 'names', 'compute_switch', 'compute_p2_p3');
+    nappe_names = response_registry('output', 'names', 'compute_switch', 'compute_nappe');
 
     % Mean Lake Level (EB2 SWL Uncertainty Is Computed On Surge, Not TWL)
     lake_level = mean_lake_level(config);
@@ -171,6 +179,10 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                                Resp.(field).theta_center, Resp.(field).Bjet, Resp.(field).Vjet, Resp.(field).Fjet] = ...
                                cellfun(@(a, b, c) floodwall_nappe_response(a, b, c, hw, rho_w, crest_elev), ...
                                SWL, Hm0_toe, q, 'UniformOutput', false);
+                           % No Overtopping Estimate (q NaN): Nappe Is Undefined
+                           for nn = 1:length(nappe_names)
+                               Resp.(field).(nappe_names{nn}) = cellfun(@nan_where_q_is_nan, Resp.(field).(nappe_names{nn}), q, 'UniformOutput', false);
+                           end
                        end
                         eb1_fields = fieldnames(Resp.(field));
                         for gg = 1:length(eb1_fields)
@@ -196,12 +208,15 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
                    project_forcing.Hm0_offshore = {pcha_forcing_uncertainty_EB2(Hm0_off{1},...
                        hm0_u(1), hm0_u(2),...
                        normU_hm0, storm_name)};
-                   % Hm0 At The Toe (Relative Uncertainty Only, Same Draw As Offshore; Samples Are Not Capped By The Breaker Limit)
+                   % Hm0 At The Toe (Absolute + Relative Uncertainty, Same Draw As Offshore; Samples Are Not Capped By The Breaker Limit)
                    project_forcing.Hm0_toe = {pcha_forcing_uncertainty_EB2(Hm0_toe{1},...
-                       0, hm0_u(2),...
+                       hm0_u(1), hm0_u(2),...
                        normU_hm0, storm_name)};
                    % Tp
                    project_forcing.Tp = {Tp{1}.*normU_tp};
+                   % Hm0 Floor (floor_wave_height): Wilson Tp Where Hm0_offshore Is Floored; A Floored Hm0_toe Keeps The Sampled Tp (Tp Is Shared)
+                   [project_forcing.Hm0_offshore{1}, project_forcing.Tp{1}] = floor_wave_height(project_forcing.Hm0_offshore{1}, project_forcing.Tp{1});
+                   project_forcing.Hm0_toe{1} = floor_wave_height(project_forcing.Hm0_toe{1}, project_forcing.Tp{1});
                    % Storm Duration [days] (Peaks Samples: No dt)
                    project_forcing.storm_duration  = {repmat(datenum(0,0,0,config.storm_duration,0,0), size(SWL{1}))};
                    % Per-Sample MC Forcing (Single Column, No z = 0 Replicate): Tag As PROS-FB Even When Called From A PROS-RB Run (frequency_based_hazard_curve.m)
@@ -273,29 +288,21 @@ function data_out = chess_pros_frequency_base(config, structure, data_in, outPat
         end
     end
 
+    function value = nan_where_q_is_nan(value, q_curve)
+        if isequal(size(value), size(q_curve))
+            value(isnan(q_curve)) = NaN;
+        elseif all(isnan(q_curve(:)))
+            value(:) = NaN;
+        end
+    end
+
     function iVar_w_u = pcha_forcing_uncertainty_EB2(iVar, u_a, u_r, normU, stm_type)
-        % Need To Adjust Ua, Ur If TC Data (10% -> Partioning Inside JPM)
+        % TC / CC Forcing Curves Already Hold The First Uncertainty Partition: Sample The Uncertainty Left
         switch stm_type
             case {'TC', 'CC'}
-                % Partition Uncertainty
-                p1_a = 0.1; %same units as response array
-                if u_a^2 >= p1_a^2
-                    u_a = sqrt(u_a^2-p1_a^2);
-                end
-                %partition of the relative unc
-                p1_r = .1; %dimensionless fraction
-                if u_r^2 >= p1_r^2
-                    u_r = sqrt(u_r^2-p1_r^2);
-                end
+                [u_a, u_r] = uncertainty_after_partition(u_a, u_r);
         end
         %
-        a = u_a+iVar; r = u_r.*iVar;
-        if u_a == 0 % Relative Only (Same As pcha_forcing_uncertainty.m)
-            u_iVar = 1./sqrt(1./(r).^2);
-        else
-            u_iVar = 1./sqrt(1./(a).^2 + 1./(r).^2);
-            u_iVar = u_iVar .* (a./abs(a));
-        end
-        iVar_w_u = iVar + u_iVar.*normU;
+        iVar_w_u = iVar + combined_uncertainty(iVar, u_a, u_r).*normU;
     end
 end

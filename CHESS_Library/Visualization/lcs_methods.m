@@ -511,7 +511,8 @@ classdef lcs_methods < CHESSPlotsBase
             prc = cellfun(@str2double, strsplit(self.config.project_CLs(2:end-1), {' '}));
             n = (1:n_lc)';
             run_mean = cumsum(lc_counts)./n;
-            half_ci = 1.96*std(lc_counts)./sqrt(n);
+            conf = self.config.lcs_convergence_confidence;
+            half_ci = norminv(0.5 + conf/2)*std(lc_counts)./sqrt(n);
             % Running Percentiles (prctile) On The First n Life Cycles, Log-Subsampled n For Speed
             n_pct = unique(round(logspace(0, log10(n_lc), min(n_lc, 100))))';
             run_pct = zeros(numel(n_pct), numel(prc));
@@ -538,7 +539,7 @@ classdef lcs_methods < CHESSPlotsBase
             c_pct = lines(7);
             c_pct = c_pct(mod(0:numel(prc) - 1, 4) + 4, :); % Colors 4-7: Distinct From The Bar / Reference Colors
             fill(ax, [n; flipud(n)], [run_mean - half_ci; flipud(run_mean + half_ci)], [0.6 0.6 0.6], 'EdgeColor', 'none',...
-                'FaceAlpha', 0.15, 'DisplayName', '95\% CI of the mean');
+                'FaceAlpha', 0.15, 'DisplayName', sprintf('%g\\%% CI of the mean', 100*conf));
             if sampling.lcs_mode == 0
                 fill(ax, x_band, m*[1 - tol, 1 - tol, 1 + tol, 1 + tol], self.sampling_colors.window, 'EdgeColor', 'none', 'FaceAlpha', 0.45,...
                     'DisplayName', sprintf('Tolerance: $\\lambda N (1 \\pm %g)$', tol));

@@ -175,8 +175,9 @@ classdef chessRunPlanner
             %   answers: struct, answers.(question id) ('saved_sim', 'cascade', 'lcs_convergence'); An Empty Answer Cancels
             %   out.status: 'ask' (out.question) | 'run' (out.plan For execute_run) | 'load' (Load The Saved Simulation) |
             %               'cancel' | 'failed' (Error Message Queued; Nothing Touched)
-            % Leftover Backups Of A Run That Never Finished Are Put Back First. Every Run Needs An Offshore Elevation (Storm DB
-            % Study Grid, Else The PSE Geometry): Checked Before Any Question (Library check_offshore_elevation)
+            % Leftover Backups Of A Run That Never Finished Are Put Back First. The Run Inputs Are Checked Against The Library
+            % Rules (validate_config; Problems: 'failed'). Every Run Needs An Offshore Elevation (Storm DB Study Grid, Else
+            % The PSE Geometry): Checked Before Any Question (Library check_offshore_elevation)
             if nargin < 2 || isempty(answers)
                 answers = struct();
             end
@@ -188,7 +189,17 @@ classdef chessRunPlanner
                 chessRunPlanner.restore_leftover_backups(bk);
                 pseObj = ctrl.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
                 dbObj = ctrl.project.get_project_field('stormDB_list', ctrl.selection.db, '', 'db');
-                check_offshore_elevation(chessRunPlanner.run_config(ctrl, false));
+                % Every Missing Or Invalid Input Of The Run (Library validate_config: Workflow And Structure Rules, Tide File
+                % Found When Random Tides Are On), In One Message, Before Any Question
+                run_inputs = chessRunPlanner.run_config(ctrl, false);
+                problems = validate_config(run_inputs);
+                if ~isempty(problems)
+                    ctrl.message('error', 'Error Message', sprintf('The run inputs have %d problem(s):\n%s', numel(problems),...
+                        strjoin(strcat({'   - '}, problems), newline)));
+                    out.status = 'failed';
+                    return
+                end
+                check_offshore_elevation(run_inputs);
                 % Saved Simulation For This Alternative / Workflow / Storm DB: "Hotstart" (Hidden When Not Available) |
                 % "Coldstart" | "Load existing" | "Cancel". No Saved Simulation: Coldstart
                 plan = struct('level', 'cold', 'reason', '', 'available', false, 'text', '', 'old', []);

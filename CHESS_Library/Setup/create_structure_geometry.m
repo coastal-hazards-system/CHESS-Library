@@ -25,7 +25,8 @@ function [structure] = create_structure_geometry(config)
 %                   Rubblemound - seaside_slope, leeside_slope, armor_delta,
 %                                 seaside_mass, leeside_mass, cem_P,
 %                                 seaside_design_S, leeside_design_S,
-%                                 seaside_S_uls, leeside_S_uls
+%                                 seaside_S_uls, leeside_S_uls,
+%                                 nearshore_slope (cot, ANN approach slope)
 %                   with a toe berm (add_toe_berm = 1) - berm_crest_width,
 %                                 berm_crest_elevation, berm_seaward_slope
 %                                 (Levee also berm_toe_elevation)
@@ -71,7 +72,7 @@ switch struc_type
             'leeside_slope','berm_crest_width','berm_crest_elevation','berm_seaward_slope',...
             'armor_delta','seaside_mass','leeside_mass','water_density','cem_P',...
             'seaside_design_S','leeside_design_S',...
-            'roughness_ifactor', 'seaside_S_uls', 'leeside_S_uls','offshore_slope'};
+            'roughness_ifactor', 'seaside_S_uls', 'leeside_S_uls','offshore_slope','nearshore_slope'};
 end
 
 % Temp Patch (Remove Berm Fields)

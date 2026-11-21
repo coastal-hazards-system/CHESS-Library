@@ -15,7 +15,8 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %       empirical coefficients from load_empirical_coefficients, and with
 %       dn50_legacy_submerged_correction = 1 also
 %       submerged_stone_armor_stability; number of waves from
-%       storm_duration, never dt).
+%       storm_duration, never dt; both models NaN outside the validity
+%       rules of stone_size_validity).
 %     Floodwall: q, q_wave_ot (Eurotop_r2p_q_Final); p1, p2dyn, p2sta,
 %       p2total, p3dyn, p3sta, p3total, pu
 %       (goda_vertical_wall_pressure_distribution, SI; wave terms and
@@ -36,6 +37,13 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %   elevation (floodwall without a toe berm: wall bottom elevation), hb =
 %   SWL - berm crest elevation (toe elevation without a toe berm), Rc =
 %   crest elevation - SWL; elevations are signed.
+%   Dry toe (h <= 0): every wave-driven response is NaN. Equations with a
+%   depth input apply the rule themselves (damaging_depth, the Goda
+%   pressures, melby_Dn50_seaside_stability,
+%   submerged_stone_armor_stability, stone_size_validity for Dn50 and
+%   Dn50_Lee); for the others it is applied here:
+%   R2p, R2p_SWL, q and q_wave_ot NaN (before Q_vol and the nappe, so the
+%   nappe is NaN and the dry rows add nothing to Q_vol) and Kt NaN (Hm0t).
 %   Errors: compute_structure_response:unsupportedStructureType,
 %   compute_structure_response:unsupportedWorkflow (Hm0t).
 %
@@ -55,7 +63,8 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %                       offshore_slope, roughness_ifactor, berm_* (toe
 %                       berm), seaside_slope and leeside_slope (types 1,
 %                       3), armor_delta, seaside_design_S,
-%                       leeside_design_S, cem_P (type 3),
+%                       leeside_design_S, cem_P, nearshore_slope (type 3;
+%                       ANN approach slope tan_m = 1/nearshore_slope),
 %                       wall_bottom_elevation (type 2), offshore_elevation
 %                       (optional); elevations [m, study datum, positive
 %                       up]
@@ -84,7 +93,8 @@ function [Resp] = compute_structure_response(config, structure, project_forcing,
 %   See also call_project_response, response_registry,
 %   call_eurotop_ifactors, Eurotop_r2p_q_Final, ann_rubblemound_stability,
 %   melby_Dn50_seaside_stability, van_gent_Dn50_leeside_stability,
-%   submerged_stone_armor_stability, goda_vertical_wall_pressure_distribution,
+%   submerged_stone_armor_stability, stone_size_validity,
+%   goda_vertical_wall_pressure_distribution,
 %   damaging_depth, lcs_columns.
 
 %% GRAB DETAILS FROM "config"
@@ -207,6 +217,8 @@ switch config.struc_type
         geometry.leeside_design_S = structure.leeside_design_S;
         % CEM P
         cem_P = structure.cem_P;
+        % Nearshore Slope In Front Of The Toe: Approach Slope tan(m) Of The Stone Size ANN (offshore_slope: Damaging Depth)
+        geometry.nearshore_slope_tana = 1./structure.nearshore_slope;
     case  2
         wall_bottom_elev = structure.wall_bottom_elevation;
         hw = crest_elev - wall_bottom_elev;
@@ -316,6 +328,8 @@ if response_switch.compute_q == 1 || response_switch.compute_nappe == 1
         f, e.gamma_f, e.gamma_beta_r2p, e.gamma_beta_q, e.gamma_star, e.gamma_v, e.gamma_b,...
         wall_bottom_elev, cem_P, g, struc_type),...
         Hm0, Tm10, SWL, Rc, gammas, slope_aux,'un',false);
+    Resp.q = cellfun(@nan_where_dry_toe, Resp.q, h, 'un', false);
+    Resp.q_wave_ot = cellfun(@nan_where_dry_toe, Resp.q_wave_ot, h, 'un', false);
 end
 % Compute Wall Pressures (Goda: hs = h, d = hb, hc = Rc; The Function Owns The NaN Rules)
 if response_switch.compute_p1 == 1 || response_switch.compute_p2_p3 == 1
@@ -353,7 +367,6 @@ function Resp = embankment_responses(response_switch, forcing, gammas, geometry,
 SWL = forcing.SWL; Hm0 = forcing.Hm0; Tm = forcing.Tm; Tm10 = forcing.Tm10;
 h = forcing.h; Rc = forcing.Rc; storm_dur = forcing.storm_dur;
 crest_elev = geometry.crest_elev; crest_width = geometry.crest_width; toe_elev = geometry.toe_elev; cem_P = geometry.cem_P;
-offshore_slope_tana = geometry.offshore_slope_tana;
 mound_seaside_slope_cota = geometry.mound_seaside_slope_cota;
 mound_leeside_slope_cota = geometry.mound_leeside_slope_cota;
 Resp = struct();
@@ -365,17 +378,21 @@ if response_switch.compute_r2p == 1 || response_switch.compute_q == 1 || respons
         f, e.gamma_f, e.gamma_beta_r2p, e.gamma_beta_q, e.gamma_star, e.gamma_v, e.gamma_b,...
         toe_elev, cem_P, g, struc_type),...
         Hm0, Tm10, SWL, Rc, gammas, slope_aux,'un',false);
+    % Dry Toe: No Run-Up Or Wave Overtopping
+    for name = {'R2p', 'R2p_SWL', 'q', 'q_wave_ot'}
+        Resp.(name{1}) = cellfun(@nan_where_dry_toe, Resp.(name{1}), h, 'un', false);
+    end
 end
 % Rubblemound Stone Size (Seaside & Leeside Component Stability ANN, ann_rubblemound_stability.m, Or The Legacy Equations)
 if struc_type == 3 && (response_switch.compute_dn50_seaside == 1 || response_switch.compute_dn50_leeside == 1)
     if legacy_dn50.use_legacy_model == 1
-        [Dn50_ss, Dn50_ls] = legacy_dn50_responses(response_switch, forcing, gammas, geometry, g, legacy_dn50.submerged_correction);
+        [Dn50_ss, Dn50_ls] = legacy_dn50_responses(forcing, gammas, geometry, g, legacy_dn50.submerged_correction);
     else
         seaside_design_S = geometry.seaside_design_S; leeside_design_S = geometry.leeside_design_S; armor_delta = geometry.armor_delta;
         % Number Of Waves Duration [s]: The Storm Duration (Event Length, Set With The Forcing), Never dt
         [Dn50_ss, Dn50_ls] = cellfun(@(a, b, c, d, e, f, k) ann_rubblemound_stability(a, b, c, d, e, f,...
             crest_elev - toe_elev, crest_width, mound_seaside_slope_cota, mound_leeside_slope_cota,...
-            offshore_slope_tana, cem_P, k.gamma_f, seaside_design_S, leeside_design_S, armor_delta, g),...
+            geometry.nearshore_slope_tana, cem_P, k.gamma_f, seaside_design_S, leeside_design_S, armor_delta, g),...
             Hm0, Tm, Tm10, h, Rc, storm_dur, gammas, 'un', false);
     end
     if response_switch.compute_dn50_seaside == 1
@@ -402,34 +419,33 @@ end
 end
 
 %% AUX FUNCTION: LEGACY RUBBLEMOUND STONE SIZE (MELBY SEASIDE, VAN GENT LEESIDE, OPTIONAL SUBMERGED CORRECTION)
-function [Dn50_ss, Dn50_ls] = legacy_dn50_responses(response_switch, forcing, gammas, geometry, g, submerged_correction)
+function [Dn50_ss, Dn50_ls] = legacy_dn50_responses(forcing, gammas, geometry, g, submerged_correction)
 emp_coeff = load_empirical_coefficients();
-Hm0 = forcing.Hm0; Tp = forcing.Tp; Tm = forcing.Tm; Tm10 = forcing.Tm10; h = forcing.h; Rc = forcing.Rc;
-crest_elev = geometry.crest_elev; crest_width = geometry.crest_width; cem_P = geometry.cem_P; armor_delta = geometry.armor_delta; toe_elev = geometry.toe_elev;
-seaside_design_S = geometry.seaside_design_S; leeside_design_S = geometry.leeside_design_S;
-mound_seaside_slope_cota = geometry.mound_seaside_slope_cota; mound_leeside_slope_cota = geometry.mound_leeside_slope_cota;
+[Dn50_ss, Dn50_ls] = cellfun(@(a, b, c, d, e, f, p, k) legacy_stone_sizes(a, b, c, d, e, f, p, k.gamma_f, geometry, g,...
+    emp_coeff, submerged_correction), forcing.Hm0, forcing.Tm, forcing.Tm10, forcing.h, forcing.Rc, forcing.storm_dur,...
+    forcing.Tp, gammas, 'un', false);
+end
+
+%% AUX FUNCTION: LEGACY STONE SIZES OF ONE FORCING ARRAY (BOTH SIDES, THEN THE VALIDITY RULES OF stone_size_validity.m)
+function [Dn50_ss, Dn50_ls] = legacy_stone_sizes(Hm0, Tm, Tm10, h, Rc, storm_dur, Tp, gamma_f, geometry, g, emp_coeff, submerged_correction)
+seaside_slope_cota = geometry.mound_seaside_slope_cota; leeside_slope_cota = geometry.mound_leeside_slope_cota;
+crest_width = geometry.crest_width; armor_delta = geometry.armor_delta;
 % The Equations Flatten Hm0 But Not The Duration (Nz = duration./Tm(:)): One Duration [s] Per Hm0 Element, As A Column
-duration = cellfun(@(d, a) reshape(d + zeros(size(a)), [], 1), forcing.storm_dur, Hm0, 'un', false);
-Dn50_ss = [];
-Dn50_ls = [];
-if response_switch.compute_dn50_seaside == 1
-    Dn50_ss = cellfun(@(a, b, c, d, e) melby_Dn50_seaside_stability(a, b, c, e, mound_seaside_slope_cota,...
-        armor_delta, cem_P, seaside_design_S, g, emp_coeff.km1, emp_coeff.km2, d), Hm0, Tm, h, Rc, duration, 'un', false);
-    % Submerged Crest (Rc < 0): hc Is The Structure Height Above The Toe (crest_elev - toe_elev)
-    if submerged_correction == 1
-        Dn50_ss = cellfun(@(a, b, c, d, e) submerged_stone_armor_stability(a, b, c, d, e, crest_elev - toe_elev,...
-            seaside_design_S, armor_delta, g), Hm0, Tp, h, Rc, Dn50_ss, 'un', false);
-    end
+duration = reshape(storm_dur + zeros(size(Hm0)), [], 1);
+Dn50_ss = melby_Dn50_seaside_stability(Hm0, Tm, h, duration, seaside_slope_cota, armor_delta, geometry.cem_P,...
+    geometry.seaside_design_S, g, emp_coeff.km1, emp_coeff.km2, Rc);
+Dn50_ls = van_gent_Dn50_leeside_stability(geometry.leeside_design_S, Hm0, Tm10, Tm, Rc, crest_width, seaside_slope_cota,...
+    leeside_slope_cota, duration, armor_delta, g, emp_coeff.k_ls1, emp_coeff.k_ls2, gamma_f);
+% Submerged Crest (Rc < 0): hc Is The Structure Height Above The Toe (crest_elev - toe_elev)
+if submerged_correction == 1
+    hc = geometry.crest_elev - geometry.toe_elev;
+    Dn50_ss = submerged_stone_armor_stability(Hm0, Tp, h, Rc, Dn50_ss, hc, geometry.seaside_design_S, armor_delta, g);
+    Dn50_ls = submerged_stone_armor_stability(Hm0, Tp, h, Rc, Dn50_ls, hc, geometry.leeside_design_S, armor_delta, g);
 end
-if response_switch.compute_dn50_leeside == 1
-    Dn50_ls = cellfun(@(a, b, c, d, e, k) van_gent_Dn50_leeside_stability(leeside_design_S, a, b, c, d, crest_width,...
-        mound_seaside_slope_cota, mound_leeside_slope_cota, e, armor_delta, g, emp_coeff.k_ls1, emp_coeff.k_ls2, k.gamma_f),...
-        Hm0, Tm10, Tm, Rc, duration, gammas, 'un', false);
-    if submerged_correction == 1
-        Dn50_ls = cellfun(@(a, b, c, d, e) submerged_stone_armor_stability(a, b, c, d, e, crest_elev - toe_elev,...
-            leeside_design_S, armor_delta, g), Hm0, Tp, h, Rc, Dn50_ls, 'un', false);
-    end
-end
+[invalid_ss, invalid_ls] = stone_size_validity(Dn50_ss, Dn50_ls, Hm0, Tm, Tm10, h, Rc, storm_dur, crest_width,...
+    seaside_slope_cota, leeside_slope_cota, armor_delta, g, submerged_correction);
+Dn50_ss(invalid_ss) = NaN;
+Dn50_ls(invalid_ls) = NaN;
 end
 
 %% AUX FUNCTION: TRANSMITTED WAVE HEIGHT Hm0t (INCIDENT Hm0 AT THE TOE x EUROTOP Kt)
@@ -443,6 +459,7 @@ else
 end
 crest_width = geometry.crest_width;
 [Kt] = cellfun(@(a,b,c) eurotop_wave_transmission(a,b,c,crest_width,seaward_slope_tana,g),Hm0,forcing.Tp,forcing.Rc,'un',false);
+Kt = cellfun(@nan_where_dry_toe, Kt, forcing.h, 'un', false);
 % Compute Transmitted Wave (Incident Hm0 At The Toe)
 switch workflow
     case 1 % PROS-RB: Best-Estimate (z = 0) Incident Hm0 x Kt Replicates (Same As Forcing HCs)
@@ -526,6 +543,11 @@ if is_timeseries
 else
     v = [];
 end
+end
+
+%% AUX FUNCTION: NaN WHERE THE TOE IS DRY (h = SWL - TOE ELEVATION <= 0)
+function x = nan_where_dry_toe(x, h)
+x(h <= 0) = NaN;
 end
 
 %% AUX FUNCTION: NaN WHERE THE REFERENCE RESPONSE IS NaN

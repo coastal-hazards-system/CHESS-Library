@@ -1,17 +1,19 @@
 
 
 
-function [Smax,SPcurves,yBox] = compute_lcs_yearly_curve(data, resp_vec, nYears)
+function [Smax,SPcurves,yBox] = compute_lcs_yearly_curve(data, resp_vec, nYears, p)
 % compute_lcs_yearly_curve  Yearly mean and percentiles of LCS storm maxima.
 %   [Smax, SPcurves, yBox] = compute_lcs_yearly_curve(data, resp_vec,
 %       nYears)
+%   [Smax, SPcurves, yBox] = compute_lcs_yearly_curve(data, resp_vec,
+%       nYears, p)
 %
 %   Takes the maximum of the response over each storm of every life cycle
 %   (Timeseries: from a row with step 0 to the row before the next storm;
 %   Peaks: one row per storm) and the storm's year. For each year
 %   1..nYears the storm maxima of that year are pooled over all life
-%   cycles: Smax is their mean (NaN omitted) and SPcurves their 10th,
-%   16th, 84th and 90th percentiles; a year without storms in any life
+%   cycles: Smax is their mean (NaN omitted) and SPcurves their
+%   percentiles p (prctile); a year without storms in any life
 %   cycle gives NaN. Smax is the mean of the storm maxima of the year, not
 %   of the yearly maxima of each life cycle.
 %
@@ -22,9 +24,12 @@ function [Smax,SPcurves,yBox] = compute_lcs_yearly_curve(data, resp_vec, nYears)
 %     resp_vec - response per row, nLC x 1 cell of column vectors (rows of
 %                data)
 %     nYears   - number of years per life cycle (mcs_nYears), scalar
+%     p        - percentiles [%], vector (optional, default [] = no
+%                percentile curves; chess_csr_dpa passes project_CLs)
 %   Outputs:
 %     Smax     - yearly mean of the storm maxima, nYears x 1 double
-%     SPcurves - yearly 10/16/84/90th percentiles, nYears x 4 double
+%     SPcurves - yearly percentiles p, nYears x numel(p) double (one
+%                column per percentile)
 %     yBox     - storm maxima of each year, nYears x 1 cell of column
 %                vectors
 %
@@ -32,6 +37,10 @@ function [Smax,SPcurves,yBox] = compute_lcs_yearly_curve(data, resp_vec, nYears)
 %
 %   See also chess_csr_dpa, lcs_methods, lcs_columns.
 
+if nargin < 4
+    p = [];
+end
+p = reshape(p, 1, []);
 num_LCs = length(data);
 % Life-Cycle Column Map
 C = lcs_columns();
@@ -85,7 +94,7 @@ all_storm_max = vertcat(all_storm_max{:});
 years = 1:nYears;
 yBox = cell(nYears, 1);
 Smax = zeros(nYears, 1);
-SPcurves = zeros(nYears, 4);
+SPcurves = zeros(nYears, numel(p));
 
 for jj = 1:nYears
     % Find all storms that occurred in this specific year across ALL life cycles
@@ -100,11 +109,13 @@ for jj = 1:nYears
     % Calculate statistical curves (handle empty years to prevent errors)
     if ~isempty(yr_data)
         Smax(jj) = mean(yr_data, 'omitnan');
-        SPcurves(jj, :) = prctile(yr_data, [10, 16, 84, 90]);
+        if ~isempty(p)
+            SPcurves(jj, :) = prctile(yr_data, p);
+        end
     else
         % Fallback if a year had absolutely zero storms across all LCs
         Smax(jj) = NaN;
-        SPcurves(jj, :) = NaN(1, 4);
+        SPcurves(jj, :) = NaN(1, numel(p));
     end
 end
 end

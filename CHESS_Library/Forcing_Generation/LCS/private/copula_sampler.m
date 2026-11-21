@@ -8,8 +8,12 @@ function Y = copula_sampler(storm_peaks, storm_indexes)
 %   back to values with the kernel inverse CDFs. The drawn values are not
 %   tied to the sampled storm IDs: storm_indexes only sets the number of
 %   draws. Each column is then scaled so its mean equals the storm_peaks
-%   column mean (NaN omitted), and Hm0 values below 0.05 m are set to
-%   0.05 m. Uses the global random number stream.
+%   column mean (NaN omitted); the scale factors come from the first draw
+%   and are kept. Rows whose scaled Hm0 is below 0.1 m are drawn again
+%   (copula, kernel inverse CDFs, the same scale factors) until none
+%   remain; errors (copula_sampler:copulaResampleLimit) when rows are
+%   still below 0.1 m after 100 redraw rounds. Uses the global random
+%   number stream.
 %
 %   Inputs:
 %     storm_peaks   - XC peak values [SWL, Hm0, Tp, wDir]: SWL [m, study
@@ -26,6 +30,8 @@ function Y = copula_sampler(storm_peaks, storm_indexes)
 %   See also sample_xc_storm.
 
 %% COMPUTE GAUSSIAN COPULA STATISTICAL PARAMETERS & SAMPLE STORMS
+    minimum_wave_height = 0.1; % [m]
+    maximum_redraw_rounds = 100;
     % Returns a probability density estimate, f, for each sample data column
     for k = 1:4
         X(:,k) = ksdensity(storm_peaks(:,k),storm_peaks(:,k),'function','cdf');
@@ -34,17 +40,35 @@ function Y = copula_sampler(storm_peaks, storm_indexes)
     Tau = corr(X,'type','Kendall'); % Maximums
     % Compute matrix of linear correlations (Rho)
     Rho = copulaparam('Gaussian',Tau,'type','Kendall'); % Maximums
-    % Compute random values; where 'r' = normal probabilities (pdf)
-    %sample random values from Gaussian copula
-    r = copularnd('Gaussian',Rho,size(storm_indexes,1)); % Maximums
-    % Computes 'inverse cumulative probability' (real values)
-    for k = 1:4
-        Y(:,k) = ksdensity(storm_peaks(:,k),r(:,k),'function','icdf');
-    end
+    Y = copula_draw(storm_peaks, Rho, size(storm_indexes,1));
 
     %% SCALE SAMPLED STORM RESPONSES
-    % Scale Responses By Individual Means
-    Y = Y.*mean(storm_peaks, 1, "omitnan")./mean(Y, 1, "omitnan");
-    % Cap sampled waves to positive values
-    Y(Y(:,2)<0.05,2)=0.05;
+    % Scale Responses By Individual Means (Factors Of The First Draw, Kept For The Redraws)
+    scale_factors = mean(storm_peaks, 1, "omitnan")./mean(Y, 1, "omitnan");
+    Y = Y.*scale_factors;
+
+    %% REDRAW STORMS WITH TOO SMALL WAVES
+    redraw = Y(:,2) < minimum_wave_height;
+    redraw_round = 0;
+    while any(redraw)
+        if redraw_round == maximum_redraw_rounds
+            error('copula_sampler:copulaResampleLimit',...
+                ['%d copula sampled XC storms still have Hm0 below %g m after %d redraw rounds: the XC peak ',...
+                'wave heights are too small for the copula sampler.'], nnz(redraw), minimum_wave_height,...
+                maximum_redraw_rounds);
+        end
+        redraw_round = redraw_round + 1;
+        Y(redraw,:) = copula_draw(storm_peaks, Rho, nnz(redraw)).*scale_factors;
+        redraw = Y(:,2) < minimum_wave_height;
+    end
+end
+
+%% LOCAL FUNCTIONS
+function Y = copula_draw(storm_peaks, Rho, number_of_draws)
+% Gaussian Copula Draws Mapped Back To Peak Values With The Kernel Inverse CDFs Of The storm_peaks Columns
+r = copularnd('Gaussian',Rho,number_of_draws);
+Y = zeros(number_of_draws, 4);
+for k = 1:4
+    Y(:,k) = ksdensity(storm_peaks(:,k),r(:,k),'function','icdf');
+end
 end
