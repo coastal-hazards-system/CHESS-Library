@@ -30,12 +30,12 @@ classdef chessResults
                 return
             end
             S = load(out_files.resp_data, 'Resp');
-            % Run's Structure (Saved By The Library call_project_response, With The Run's Resolved Offshore Elevation), Not The Current PSE
+            % Run's Structure (Saved By The Library chess.Model.compute_responses, With The Run's Resolved Offshore Elevation), Not The Current PSE
             C = load(config_file, 'config', 'structure');
             C.config = ctrl.localize_saved_config(C.config);
             state = struct('Resp', S.Resp, 'config', C.config, 'structure', C.structure,...
                 'project_forcing', [], 'prob_mass', [], 'out_files', out_files,...
-                'dbObj', ctrl.project.get_project_field('stormDB_list', ctrl.selection.db, '', 'db'),...
+                'dbObj', ctrl.project.storm_database(ctrl.selection.db),...
                 'frequency_based_curves', containers.Map());
             if any(C.config.workflow == [2 3]) && isfile(out_files.project_forcing) % DET (Forcing Not Copied Into Resp) & LCS Plots Need Project Forcing
                 P = load(out_files.project_forcing, 'project_forcing');
@@ -136,7 +136,7 @@ classdef chessResults
             if isstruct(data) && isfield(data, 'S')
                 s_fields = fieldnames(data(1).S)';
             end
-            series_names = response_registry('output', 'names', 'damage_summary', 'series');
+            series_names = chess.Common.response_registry('output', 'names', 'damage_summary', 'series');
             s_series = intersect(series_names, s_fields, 'stable');
             switch key
                 case 'hc'
@@ -163,11 +163,11 @@ classdef chessResults
                 case 'annual'
                     items = intersect(chessResults.response_list(ctrl, 'annual', data_type), [fieldnames(data)', s_fields], 'stable');
                 case 'armor'
-                    items = [intersect(response_registry('output', 'names', 'damage_summary', 'yearly_mean_max'), s_fields, 'stable'), s_series];
+                    items = [intersect(chess.Common.response_registry('output', 'names', 'damage_summary', 'yearly_mean_max'), s_fields, 'stable'), s_series];
                 case {'damaging', 'dashboard'}
                     items = s_series;
                 case 'final'
-                    items = intersect(response_registry('output', 'names', 'damage_summary', 'series', 'with_repairs', false), s_fields, 'stable');
+                    items = intersect(chess.Common.response_registry('output', 'names', 'damage_summary', 'series', 'with_repairs', false), s_fields, 'stable');
                 case 'submergence' % Field To Plot Relabeled As An Option
                     lbl = 'Normalize:';
                     items = {'percent', 'count'};
@@ -185,7 +185,7 @@ classdef chessResults
             on = false;
             lc_items = @(n) [{'All'}, arrayfun(@num2str, 1:n, 'un', false)];
             switch key
-                case 'hc' % No Numeric Run Sample (CC Is Derived, FB POT Is A Note): Nothing To Overlay (pros_methods.hc_plot Gate)
+                case 'hc' % No Numeric Run Sample (CC Is Derived, FB POT Is A Note): Nothing To Overlay (chess.Visualization.pros_methods.hc_plot Gate)
                     lbl = 'Add Events:';
                     sel = data(strcmp({data.var}, field));
                     if strcmp(ds_query.storm_type, 'CC') || isempty(sel) || ~isnumeric(sel(1).POT)
@@ -206,13 +206,13 @@ classdef chessResults
                 case 'armor' % Life Cycle Selection Applies To S_* Damage Series Only
                     lbl = 'Life Cycle:';
                     items = {'All'};
-                    if ismember(field, response_registry('output', 'names', 'damage_summary', 'series')) && isfield(data, 'S') && isfield(data.S, field)
+                    if ismember(field, chess.Common.response_registry('output', 'names', 'damage_summary', 'series')) && isfield(data, 'S') && isfield(data.S, field)
                         items = lc_items(numel(data.S.(field)));
                         on = true;
                     end
                 case 'sampling'
                     lbl = 'Life Cycle:';
-                    items = lc_items(numel(aux_methods.pull_data(ds_query, ctrl.results.project_forcing)));
+                    items = lc_items(numel(chess.Visualization.aux_methods.pull_data(ds_query, ctrl.results.project_forcing)));
                     on = true;
                 case 'submergence'
                     lbl = 'X Scale:';
@@ -225,7 +225,7 @@ classdef chessResults
             % Annual Distribution Bin Edges (Plot Option Or Library Estimate) & Results Table Column Labels.
             % No Finite Response Values: No Edges, No Labels (The Library Plot Shows "No finite response values to plot")
             if isempty(edges)
-                data = aux_methods.pull_data(ds_query, ctrl.results.Resp);
+                data = chess.Visualization.aux_methods.pull_data(ds_query, chessPlot.Resp); % Display Copy: Edges In The Plot Units
                 if isfield(data, field)
                     resp_vector = data.(field);
                 else
@@ -235,7 +235,7 @@ classdef chessResults
                     labels = {};
                     return
                 end
-                [~, ~, ~, ~, ~, ~, x_log] = response_library_headers(ctrl.results.config, field);
+                [~, ~, ~, ~, ~, ~, x_log] = chess.Common.response_library_headers(ctrl.results.config, field);
                 edges = chessPlot.generate_bin_guess(resp_vector, 5, x_log);
             end
             edges = edges(:)';
@@ -247,7 +247,7 @@ classdef chessResults
         end
 
         function tf = results_have_forcing_curves(ctrl)
-            % Any Dataset / Match Type / Storm Type Of The Loaded Resp Holds All PROS Forcing Hazard Curves (pros_forcing_curves.m)
+            % Any Dataset / Match Type / Storm Type Of The Loaded Resp Holds All PROS Forcing Hazard Curves (chess.Common.pros_forcing_curves)
             tf = false;
             Resp = ctrl.results.Resp;
             for dt = fieldnames(Resp)'
@@ -263,25 +263,29 @@ classdef chessResults
         end
 
         function fb_curve = frequency_based_curve(ctrl, ds_query, response_name)
-            % Frequency-Based (FB) Hazard Curve Of One Response Of The Loaded PROS-RB Results (frequency_based_hazard_curve.m,
+            % Frequency-Based (FB) Hazard Curve Of One Response Of The Loaded PROS-RB Results (chess.Model.Pros.frequency_based_hazard_curves,
             % Run's Saved config And structure), Computed Once Per Results Load ([] If The Response Was Not Produced)
             key = strjoin({ds_query.data_type, ds_query.match_type, ds_query.storm_type, response_name}, '|');
             curves = ctrl.results.frequency_based_curves;
             if ~isKey(curves, key)
-                curves(key) = frequency_based_hazard_curve(ctrl.results.config, ctrl.results.structure,...
-                    aux_methods.pull_data(ds_query, ctrl.results.Resp), ds_query.storm_type, response_name);
+                results_model = chess.Model.for_workflow(ctrl.results.config, ctrl.results.structure);
+                curves(key) = results_model.frequency_based_hazard_curves(...
+                    chess.Visualization.aux_methods.pull_data(ds_query, ctrl.results.Resp), ds_query.storm_type, response_name);
             end
             fb_curve = curves(key);
         end
 
         function [column_names, data] = frequency_based_table(ctrl, ds_query, response_name, fb_curve)
             % Results Table Of The RB vs FB Comparison: AEF/AEP | RB Best Estimate And CLs | FB Best Estimate And CLs, One Row
-            % Per Table AEF/AEP Of Either Curve (NaN Where A Curve Has No Value). fb_curve Omitted -> frequency_based_curve
+            % Per Table AEF/AEP Of Either Curve (NaN Where A Curve Has No Value). fb_curve Omitted -> frequency_based_curve.
+            % Values In The Project Unit System (The Saved Curves And The FB Cache Are SI)
             if nargin < 4
                 fb_curve = chessResults.frequency_based_curve(ctrl, ds_query, response_name);
             end
-            hazard_curves = aux_methods.pull_data(ds_query, ctrl.results.Resp);
+            hazard_curves = chess.Visualization.aux_methods.pull_data(ds_query, ctrl.results.Resp);
             rb_curve = hazard_curves(strcmp({hazard_curves.var}, response_name));
+            rb_curve = chess.Visualization.CHESSPlotsBase.display_hazard_curves(rb_curve, ctrl.project.unit_system, ctrl.results.config);
+            fb_curve = chess.Visualization.CHESSPlotsBase.display_hazard_curves(fb_curve, ctrl.project.unit_system, ctrl.results.config);
             if ctrl.results.config.pros_use_aep == 1
                 x_label = 'AEP';
             else
@@ -352,13 +356,13 @@ classdef chessResults
             elseif add_events > 0 || strcmp(row.key, 'scheme') % Events Overlay / Sampling Scheme Need Project Forcing + TC Probability Masses
                 [project_forcing, dsw] = chessResults.results_forcing(ctrl);
             end
-            chessPlot = CHESSPlots(config, state.Resp, storm, project_forcing, dsw, state.structure, base_fnt, ctrl.project.unitsys);
+            chessPlot = chess.Visualization.CHESSPlots(config, state.Resp, storm, project_forcing, dsw, state.structure, base_fnt, ctrl.project.unit_system);
             try
                 switch row.key
                     case 'hc' % PROS Hazard Curve (+ Table)
                         chessPlot.hc_plot(ax, ds_query, field, add_events);
-                        if request.in_results_tab
-                            data = aux_methods.pull_data(ds_query, state.Resp);
+                        if request.in_results_tab % Display Copy (Project Unit System)
+                            data = chess.Visualization.aux_methods.pull_data(ds_query, chessPlot.Resp);
                             data = data(strcmp({data.var}, field));
                             cls = arrayfun(@(x) ['CL' num2str(x)], data.CL, 'un', false);
                             cls(data.CL == 50) = {'BE'};
@@ -372,8 +376,8 @@ classdef chessResults
                         end
                     case 'fb_compare' % PROS-RB Hazard Curve vs Its Frequency-Based (FB) Curve (+ Table)
                         if strcmp(field, '-') % No Response With An FB Curve For This Storm Type
-                            ax = aux_methods.initiate_axes(ax, '', '', '', base_fnt);
-                            aux_methods.display_no_data(ax, base_fnt, 'No response with a frequency-based curve for this storm type');
+                            ax = chess.Visualization.aux_methods.initiate_axes(ax, '', '', '', base_fnt);
+                            chess.Visualization.aux_methods.display_no_data(ax, base_fnt, 'No response with a frequency-based curve for this storm type');
                         else
                             % FB Monte Carlo Runs Once Per Response (Cached On The Controller Until The Next Results Load)
                             busy_dialog = [];
@@ -398,14 +402,14 @@ classdef chessResults
                             end
                         end
                     case 'det_scatter' % Deterministic: Response vs Forcing (X: Storm ID Dropdown, Y: Field, Color: Plot Options)
-                        fields = chessResults.det_fields(ctrl, aux_methods.pull_data(ds_query, state.Resp));
+                        fields = chessResults.det_fields(ctrl, chess.Visualization.aux_methods.pull_data(ds_query, state.Resp));
                         c_field = opts.c_field;
                         if isempty(c_field) || ~any(strcmp(fields, c_field))
                             c_field = fields{max([1, find(strcmp(fields, 'Hm0_toe'), 1)])};
                         end
                         chessPlot.response_vs_forcing_plot(ax, ds_query, aux, field, c_field);
-                        if request.in_results_tab % Table: The Plotted Values (Per Storm; Timeseries -> Storm Maxima)
-                            mx = aux_methods.pull_data(ds_query, state.Resp).Max;
+                        if request.in_results_tab % Table: The Plotted Values (Per Storm; Timeseries -> Storm Maxima; Display Copy)
+                            mx = chess.Visualization.aux_methods.pull_data(ds_query, chessPlot.Resp).Max;
                             results_table.column_names = {'Storm ID', aux, field, c_field};
                             results_table.data = [mx.storm_id(:), mx.(aux)(:), mx.(field)(:), mx.(c_field)(:)];
                         end
@@ -414,10 +418,10 @@ classdef chessResults
                     case 'det_compare' % Deterministic: Peaks Value vs Timeseries Peak (Same Storms, 1:1 Line)
                         chessPlot.peaks_vs_timeseries_plot(ax, ds_query, field);
                         if request.in_results_tab
-                            pk = aux_methods.pull_data(ds_query, state.Resp).Max;
+                            pk = chess.Visualization.aux_methods.pull_data(ds_query, chessPlot.Resp).Max; % Display Copy
                             q_ts = ds_query;
                             q_ts.data_type = 'Timeseries';
-                            ts = aux_methods.pull_data(q_ts, state.Resp).Max;
+                            ts = chess.Visualization.aux_methods.pull_data(q_ts, chessPlot.Resp).Max;
                             [ids, ia, ib] = intersect(pk.storm_id, ts.storm_id);
                             results_table.column_names = {'Storm ID', ['Peaks ' field], ['Timeseries ' field]};
                             results_table.data = [ids(:), pk.(field)(ia), ts.(field)(ib)];
@@ -462,8 +466,8 @@ classdef chessResults
         end
 
         function fields = det_fields(~, data)
-            % Deterministic Results: Plottable Fields (Forcing First, Then Responses), Same Order As det_methods.available_fields
-            forcing = response_registry('output', 'names', 'kind', 'forcing');
+            % Deterministic Results: Plottable Fields (Forcing First, Then Responses), Same Order As chess.Visualization.det_methods.available_fields
+            forcing = chess.Common.response_registry('output', 'names', 'kind', 'forcing');
             data_names = setdiff(fieldnames(data.Max), {'storm_id', 'time'}, 'stable')';
             fields = [forcing(ismember(forcing, data_names)), setdiff(data_names, forcing, 'stable')];
         end
@@ -483,32 +487,32 @@ classdef chessResults
 
         function fields = response_list(ctrl, list_name, data_type)
             % Response Names Accepted By Library Plot Methods (Registry Per-Event Responses)
-            %   'annual': lcs_methods.annual_response_distribution | 'event': CHESSPlotsBase.storm_event_viewer (Per Structure Type)
+            %   'annual': chess.Visualization.lcs_methods.annual_response_distribution | 'event': chess.Visualization.CHESSPlotsBase.storm_event_viewer (Per Structure Type)
             %   data_type 'Peaks': Registry Responses Not Computed For Peaks Dropped (Q_vol*)
             switch list_name
                 case 'annual'
-                    fields = response_registry('output', 'names', 'per_event', true);
+                    fields = chess.Common.response_registry('output', 'names', 'per_event', true);
                 case 'event'
-                    fields = response_registry('output', 'names', 'per_event', true, 'structure_type', ctrl.results.structure.struc_type);
+                    fields = chess.Common.response_registry('output', 'names', 'per_event', true, 'structure_type', ctrl.results.structure.struc_type);
             end
             fields = chessResults.keep_fields_for_data_type(fields, data_type);
         end
 
         function names = frequency_based_responses()
             % Responses With A Frequency-Based Curve: PROS-RB Fitted Registry Responses Computed For Peaks (Not Q_vol*)
-            names = response_registry('output', 'names', 'fitted_by_pros_rb', true, 'data_type', 'Peaks');
+            names = chess.Common.response_registry('output', 'names', 'fitted_by_pros_rb', true, 'data_type', 'Peaks');
         end
 
         function tf = has_forcing_curves(hazard_curves)
-            % Saved Hazard Curve Entries Hold All PROS Forcing Hazard Curves (pros_forcing_curves.m)
-            tf = isstruct(hazard_curves) && isfield(hazard_curves, 'var') && all(ismember(pros_forcing_curves(), {hazard_curves.var}));
+            % Saved Hazard Curve Entries Hold All PROS Forcing Hazard Curves (chess.Common.pros_forcing_curves)
+            tf = isstruct(hazard_curves) && isfield(hazard_curves, 'var') && all(ismember(chess.Common.pros_forcing_curves(), {hazard_curves.var}));
         end
 
         function fields = keep_fields_for_data_type(fields, data_type)
             % Drop Registry Responses Not Computed For The Data Type; Unregistered Names And An Empty Data Type Are Kept
             if ~isempty(data_type)
-                registered = response_registry('output', 'names');
-                fields = fields(~ismember(fields, registered) | ismember(fields, response_registry('output', 'names', 'data_type', data_type)));
+                registered = chess.Common.response_registry('output', 'names');
+                fields = fields(~ismember(fields, registered) | ismember(fields, chess.Common.response_registry('output', 'names', 'data_type', data_type)));
             end
         end
     end

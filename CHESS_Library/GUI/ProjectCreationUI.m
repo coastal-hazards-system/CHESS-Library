@@ -290,7 +290,7 @@ classdef ProjectCreationUI < handle
                     return
                 end
                 try
-                    leftover = chessProject.delete_folder(proj_dir);
+                    leftover = chess.Project.delete_folder(proj_dir);
                 catch ME
                     obj.auxLib.error_dlgbox(ME.message);
                     return
@@ -303,7 +303,7 @@ classdef ProjectCreationUI < handle
             mkdir(proj_dir);
             CLs = [obj.ConfidenceLimitsEditField.Value, obj.ConfidenceLimitsEditField_2.Value,...
                 obj.ConfidenceLimitsEditField_3.Value, obj.ConfidenceLimitsEditField_4.Value];
-            obj.chess_project = chessProject(name, folder, obj.VerticalDatumEditField.Value, CLs, obj.UnitSystemDropDown.Value);
+            obj.chess_project = chess.Project.create(name, folder, obj.VerticalDatumEditField.Value, CLs, obj.UnitSystemDropDown.Value);
             obj.proj_name = name;
             % Long Folder Path: Warning Text For The Caller (Creation Proceeds)
             n_max = ProjectCreationUI.max_output_path_length(folder, name);
@@ -331,13 +331,13 @@ classdef ProjectCreationUI < handle
     methods (Access=private)
         function update_status(obj, name)
             % Name Lamp + Message (While Typing, On Change, On A New Folder), Folder Lamp, Folder Button And Create Button.
-            % Red: Invalid Or A Loaded Project's Name (chessProject.name_problem), Or A File / Non-Project Folder Of That Name
+            % Red: Invalid Or A Loaded Project's Name (chess.Project.name_problem), Or A File / Non-Project Folder Of That Name
             % In The Folder. Yellow: A CHESS Project Folder (CHESS_project_<name>.mat Inside) Of That Name, Overwrite Asked At
             % Create. Green: OK. Create Needs An Existing Folder And A Green Or Yellow Name
             name = char(name);
             folder = obj.ProjectPathEditField.Value;
             has_folder = ~isempty(folder) && isfolder(folder);
-            msg = chessProject.name_problem(name, obj.project_names, '');
+            msg = chess.Project.name_problem(name, obj.project_names, '');
             obj.ProjectPathButton.Enable = isempty(msg);
             state = 'red';
             if isempty(msg)
@@ -380,13 +380,13 @@ classdef ProjectCreationUI < handle
     methods (Static)
         function n = max_output_path_length(base_path, proj_name)
             % Estimated Longest Output Path Under The Project Folder (Characters). Longest Writer: The Run Files
-            % (Library chess_paths, Used By CHESS_UI_canvas get_config_path):
+            % (Library chess.ProjectPaths.build, Used By CHESS_UI_canvas get_config_path):
             %   <base>\<project>\PSE\<pse>\<alt>\<workflow folder>\<db>_<workflow name>_project_responses.mat
             % Workflow 1: Longest Folder/Name ('PROS'/'PROS-RB'); '_project_responses.mat' Is The Longest Suffix
             % (Of _config_file/_project_forcing/_sampling_seed/_project_responses .mat). PSE, Alternative And
             % Storm DB Names Are Not Known At Project Creation: 32 Characters Allowed For Each
             name_allowance = repmat('x', 1, 32);
-            paths = chess_paths(base_path, proj_name, name_allowance, name_allowance, 1, name_allowance);
+            paths = chess.ProjectPaths.build(base_path, proj_name, name_allowance, name_allowance, 1, name_allowance);
             n = numel(paths.out_files.resp_data);
         end
     end

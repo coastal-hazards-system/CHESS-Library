@@ -39,7 +39,7 @@ classdef PSECreationUI < handle
         function obj = PSECreationUI(pse_type, chess_project, alt_pse_name, parent_fig, ml_stage)
             % parent_fig: Optional Window This Wizard Opens Centered On ([]: Screen)
             % ml_stage: Optional Multi-Line Stage (Default 0): 1 New Multi-Line PSE (alt_pse_name ''), 2 Stage 2 Alternative Of
-            %   Multi-Line PSE alt_pse_name. The Alternative Name Gets The Locked Suffix chessProject.stage_suffix(ml_stage)
+            %   Multi-Line PSE alt_pse_name. The Alternative Name Gets The Locked Suffix chess.Project.stage_suffix(ml_stage)
             if nargin < 4
                 parent_fig = [];
             end
@@ -57,45 +57,23 @@ classdef PSECreationUI < handle
             obj.pse_type = pse_type;
             obj.pse_to_copy = alt_pse_name;
             % Populate PSE Table
-            intialize_table(obj, pse_type, obj.chess_project.unitsys);
-            %
-            pse_list = obj.chess_project.get_project_field('pse_list', '', '', 'proj');
-            passCond = ~isempty(pse_list);
-            %
-            if passCond % Already Have 1 or More PSEs
-                if isempty(alt_pse_name) % New PSE Being Added
-                    % Add Alternative
-                    obj.chess_project.add_project_field('pse_list', obj.alt_name, obj.pse_name, obj.alt_name, 'pse');
-                    obj.chess_project.add_project_field('alternative_list', {{obj.alt_name}}, obj.pse_name, obj.alt_name, 'pse');
-                    obj.chess_project.add_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
-                else % New Alternative Being Added
-                    % Set PSE Name To Existing
-                    obj.pse_name = alt_pse_name;
-                    % Get ALternative List
-                    alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, obj.alt_name, 'pse');
-                    % Grab Table From The First Existing Alternative Of This PSE Type (Multi-Line PSEs Mix Types), Else The Template
-                    geo_list = obj.chess_project.get_project_field('pse_geometry', obj.pse_name, '', 'pse');
-                    same_type = find(cellfun(@(g) isstruct(g) && isfield(g, 'pse_type') && strcmp(g.pse_type, pse_type), geo_list), 1);
-                    load_pse_table = obj.PSETable.Data;
-                    if ~isempty(same_type)
-                        load_pse_table = obj.chess_project.get_project_field('pse_tables', obj.pse_name, alt_list{same_type}, 'alt');
-                    end
-                    % Assign Loaded Table To Alternative
-                    obj.chess_project.add_project_field('alternative_list', obj.alt_name, obj.pse_name, obj.alt_name, 'alt');
-                    obj.chess_project.add_project_field('pse_tables', {load_pse_table}, obj.pse_name, obj.alt_name, 'alt');
-                    obj.PSETable.Data = load_pse_table;
-                    % Set PSE Name And Lock It
-                    obj.PSENameEditField.Value = alt_pse_name;
-                    obj.PSENameEditField.Editable = false;
-                    obj.PSENameEditField.Enable = false;
+            intialize_table(obj, pse_type, obj.chess_project.unit_system);
+            % New Alternative Of An Existing PSE: PSE Name Locked, Table From Its First Alternative Of This PSE Type
+            % (Multi-Line PSEs Mix Types), Else The Template. Nothing Is Added To The Project Before Create
+            if ~isempty(alt_pse_name)
+                obj.pse_name = alt_pse_name;
+                alt_list = obj.chess_project.alternative_names(obj.pse_name);
+                struc_type = chessProjectView.structure_type(pse_type);
+                same_type = find(cellfun(@(alt) obj.chess_project.alternative(obj.pse_name, alt).structure_type == struc_type, alt_list), 1);
+                if ~isempty(same_type)
+                    obj.PSETable.Data = chessProjectView.input_table(obj.chess_project, obj.pse_name, alt_list{same_type});
                 end
-            else % First PSE In Project
-                obj.chess_project.set_project_field('pse_list', obj.pse_name, obj.pse_name, obj.alt_name, 'pse');
-                obj.chess_project.set_project_field('pse_tables', {obj.PSETable.Data}, obj.pse_name, obj.alt_name, 'pse');
-                obj.chess_project.set_project_field('alternative_list', {obj.alt_name}, obj.pse_name, obj.alt_name, 'pse');
+                obj.PSENameEditField.Value = alt_pse_name;
+                obj.PSENameEditField.Editable = false;
+                obj.PSENameEditField.Enable = false;
             end
             % Create Geometry
-            obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, pse_type);
+            obj.pse_geometry = chessProjectView.table_geometry(obj.pse_type, obj.PSETable.Data, obj.chess_project.unit_system);
             % Plot Geometry
             obj.plot_pse();
             % Verify If Berm BOx SHould Be Checked
@@ -107,52 +85,30 @@ classdef PSECreationUI < handle
     %% DEFINE CLASS UI COMPONENT CREATION METHOD
     methods (Access = private)
         function intialize_table(obj, pse_type, unitsys)
-            % PSE Table Rows Come From CHESS-Library Template (Geometry + Properties)
-            tpl = obj.chess_project.get_library_template(pse_type);
-            rows = [tpl.geometry; tpl.properties];
-            % Toe Berm Is Optional Only When Template Defines add_toe_berm
-            % (Hidden For Floodwalls Until Conceptual Models Are Set: Library finalize_structure_config Removes Them)
-            berm_indx = strcmp(rows(:, 1), 'add_toe_berm');
-            berm_allowed = any(berm_indx) && ~strcmp(pse_type, 'Floodwall');
+            % PSE Table Rows Come From CHESS-Library Template (Geometry + Properties; chessProjectView.template_rows).
+            % Toe Berm Is Optional Only When The Template Defines add_toe_berm (Hidden For Floodwalls Until Conceptual
+            % Models Are Set); Berm Rows Shown Only When Berm Is Checked. Template Values Are SI: Dimensional Inputs Converted
+            % For Imperial Projects
+            [rows, obj.berm_rows, berm_allowed, berm_default] = chessProjectView.template_rows(pse_type, unitsys);
             obj.AddBermCheckBox.Enable = berm_allowed;
             obj.AddBermCheckBox.Visible = ~strcmp(pse_type, 'Floodwall');
-            obj.AddBermCheckBox.Value = berm_allowed && isequal(rows{berm_indx, 4}, 1);
-            rows(berm_indx, :) = [];
-            % Berm Rows Shown Only When Berm Is Checked
-            is_berm = startsWith(rows(:, 1), 'berm_');
-            obj.berm_rows = rows(is_berm & berm_allowed, :);
-            rows(is_berm, :) = [];
+            obj.AddBermCheckBox.Value = berm_default;
             if obj.AddBermCheckBox.Value
                 rows = [rows; obj.berm_rows];
-            end
-            % Template Values Are SI; Convert Lengths & Masses For Imperial Projects
-            if strcmp(unitsys, 'Imperial')
-                rows = obj.convert_rows(rows, unitsys);
-                obj.berm_rows = obj.convert_rows(obj.berm_rows, unitsys);
             end
             % Populate Table
             obj.PSETable.Data = rows;
         end
 
-        function rows = convert_rows(obj, rows, unitsys)
-            % Convert Template SI Values ([m], [kg]) To Project Unit System
-            dims = {'[m]', 'length'; '[kg]', 'mass'};
-            for dd = 1:size(dims, 1)
-                pull_indx = strcmp(rows(:, 3), dims{dd, 1});
-                [conv, ~, lbl] = obj.chess_project.convert_units(1, dims{dd, 2}, 'SI', unitsys);
-                rows(pull_indx, 4) = cellfun(@(x) x*conv, rows(pull_indx, 4), 'un', false);
-                rows(pull_indx, 3) = {['[' lbl ']']};
-            end
-        end
         function plot_pse(obj)
-            % Wizard Plot: The Alternative Being Created; A Multi-Line Stage 2 In Line Behind Its PSE's Stage 1, Drawn From
-            % Stage 1's Current PSE Geometry (No Run Tab Storm DB / Workflow Here To Pick A Stage 1 Run)
+            % Wizard Plot: The Alternative Being Created (Its Table's Geometry); A Multi-Line Stage 2 In Line Behind Its
+            % PSE's Stage 1, Drawn From Stage 1's Current Inputs (No Run Tab Storm DB / Workflow Here To Pick A Stage 1 Run)
             if obj.ml_stage == 2
-                s1_alt = obj.chess_project.stage1_alt(obj.pse_name);
-                obj.chess_project.plot_multiline(obj.pse_name, s1_alt,...
-                    obj.chess_project.get_project_field('pse_geometry', obj.pse_name, s1_alt, 'alt'), obj.alt_name, obj.PSEAxes);
+                s1_alt = obj.chess_project.stage1_alternative(obj.pse_name);
+                chessProjectView.plot_multiline(obj.chess_project, obj.pse_name, s1_alt,...
+                    chessProjectView.geometry(obj.chess_project, obj.pse_name, s1_alt), obj.alt_name, obj.pse_geometry, obj.PSEAxes);
             else
-                obj.chess_project.plot_geometry(obj.pse_name, obj.alt_name, obj.PSEAxes);
+                chessProjectView.plot_structure(obj.chess_project, obj.pse_geometry, obj.pse_name, obj.alt_name, obj.PSEAxes);
             end
         end
 
@@ -177,14 +133,9 @@ classdef PSECreationUI < handle
             % Create PSEAxes
             obj.PSEAxes = uiaxes(obj.GridLayout);
             title(obj.PSEAxes, ['Project: ' obj.chess_project.name ' | PSE Type: ' pse_type]);
-            switch obj.chess_project.unitsys
-                case 'SI'
-                    lunit = 'm';
-                case 'Imperial'
-                    lunit = 'ft';
-            end
+            lunit = chess.Common.chess_units('system', obj.chess_project.unit_system).symbol.length;
             xlabel(obj.PSEAxes, ['X Distance [' lunit ']']);
-            ylabel(obj.PSEAxes, ['Elevation [' lunit '] (' obj.chess_project.vdatum ')']);
+            ylabel(obj.PSEAxes, ['Elevation [' lunit '] (' obj.chess_project.vertical_datum ')']);
             zlabel(obj.PSEAxes, 'Z');
             obj.PSEAxes.Box = 'on';
             obj.PSEAxes.XGrid = 'on';
@@ -233,7 +184,7 @@ classdef PSECreationUI < handle
 
             % Create StageSuffixLabel (Multi-Line: Locked Name Suffix)
             obj.StageSuffixLabel = uilabel(obj.controlGridLayout);
-            obj.StageSuffixLabel.Text = chessProject.stage_suffix(obj.ml_stage);
+            obj.StageSuffixLabel.Text = chess.Project.stage_suffix(obj.ml_stage);
             obj.StageSuffixLabel.Layout.Row = 1;
             obj.StageSuffixLabel.Layout.Column = 4;
 
@@ -310,9 +261,8 @@ classdef PSECreationUI < handle
             elseif ~obj.AddBermCheckBox.Value
                 obj.PSETable.Data(is_berm, :) = [];
             end
-            % Create Geometry
-            obj.chess_project.set_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
-            obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, obj.pse_type);
+            % Create Geometry (Library Rules; An Error Leaves The Previous Geometry)
+            obj.pse_geometry = chessProjectView.table_geometry(obj.pse_type, obj.PSETable.Data, obj.chess_project.unit_system);
             % Plot Geometry
             obj.plot_pse();
         end
@@ -322,28 +272,31 @@ classdef PSECreationUI < handle
         end
 
         function ok = check_names(obj, pse_value, alt_value)
-            % PSE And Alternative Names (While Typing And On Change): chessProject.name_problem Against The Project's Names
+            % PSE And Alternative Names (While Typing And On Change): chess.Project.name_problem Against The Project's Names
             % And The Folders On Disk (An Orphan Folder Blocks The Name). First Problem Shown Under The Fields; Create
-            % Enabled Only When Both Are Valid. The Names Are Applied To The Project At Create
+            % Enabled Only When Both Are Valid. The Alternative Is Added To The Project At Create
             msg = '';
             if isempty(obj.pse_to_copy) % New PSE Being Added
-                pse_list = obj.chess_project.get_project_field('pse_list', '', '', 'proj');
-                pse_msg = chessProject.name_problem(pse_value, pse_list, '', chess_paths(obj.chess_project.path, obj.chess_project.name).pse_root_dir);
+                pse_list = obj.chess_project.pse_names();
+                pse_msg = chess.Project.name_problem(pse_value, pse_list, '', chess.ProjectPaths.build(obj.chess_project.root_folder, obj.chess_project.name).pse_root_dir);
                 if ~isempty(pse_msg)
                     msg = ['PSE name: ' pse_msg];
                 end
                 alt_dir = ''; % New PSE: No Alternative Folder Can Exist Under It Yet
             else % New Alternative Being Added
-                alt_dir = chess_paths(obj.chess_project.path, obj.chess_project.name, obj.pse_name).pse_dir;
+                alt_dir = chess.ProjectPaths.build(obj.chess_project.root_folder, obj.chess_project.name, obj.pse_name).pse_dir;
             end
             if isempty(msg)
-                alt_list = obj.chess_project.get_project_field('alternative_list', obj.pse_name, '', 'pse');
+                alt_list = {};
+                if ~isempty(obj.pse_to_copy)
+                    alt_list = obj.chess_project.alternative_names(obj.pse_name);
+                end
                 alt_msg = '';
                 if isempty(alt_value) && obj.ml_stage > 0 % The Suffix Alone Is Not A Name
                     alt_msg = 'Enter a name.';
                 end
                 if isempty(alt_msg)
-                    alt_msg = chessProject.name_problem([char(alt_value) obj.StageSuffixLabel.Text], alt_list, '', alt_dir);
+                    alt_msg = chess.Project.name_problem([char(alt_value) obj.StageSuffixLabel.Text], alt_list, '', alt_dir);
                 end
                 if ~isempty(alt_msg)
                     msg = ['Alternative name: ' alt_msg];
@@ -357,24 +310,32 @@ classdef PSECreationUI < handle
         function PSETableCellEdit(obj, event)
             indices = event.Indices;
             newData = event.NewData;
-            % Create Geometry
-            obj.chess_project.set_project_field('pse_tables', obj.PSETable.Data, obj.pse_name, obj.alt_name, 'alt');
-            obj.pse_geometry = obj.chess_project.create_geometry(obj.pse_name, obj.alt_name, obj.pse_type);
+            % Create Geometry (Library Rules; An Error Leaves The Previous Geometry)
+            obj.pse_geometry = chessProjectView.table_geometry(obj.pse_type, obj.PSETable.Data, obj.chess_project.unit_system);
             % Plot Geometry
             obj.plot_pse();
         end
 
         function CreatePSEButtonPushed(obj, event)
-            % Names Re-Checked (The Disk May Have Changed), Then Applied Over The Placeholders (Alternative: Name + Locked Suffix)
+            % Names Re-Checked (The Disk May Have Changed), Then The Alternative Is Added (Alternative: Name + Locked Suffix)
             if ~obj.check_names(obj.PSENameEditField.Value, obj.AlternativeNameEditField.Value)
                 return
             end
+            new_pse = obj.pse_name;
             if isempty(obj.pse_to_copy)
-                obj.chess_project.set_project_field('pse_list', obj.PSENameEditField.Value, obj.pse_name, obj.alt_name, 'pse');
-                obj.pse_name = obj.PSENameEditField.Value;
+                new_pse = obj.PSENameEditField.Value;
             end
             new_alt = [obj.AlternativeNameEditField.Value obj.StageSuffixLabel.Text];
-            obj.chess_project.set_project_field('alternative_list', new_alt, obj.pse_name, obj.alt_name, 'alt');
+            % The Alternative Goes Into The Project (Library Record: Structure Type, Inputs, Multi-Line Stage); A Library
+            % Error (Inputs That Do Not Build The Structure) Is Shown Under The Names And Nothing Is Added
+            try
+                obj.chess_project.add_alternative(new_pse, new_alt, chessProjectView.structure_type(obj.pse_type),...
+                    chessProjectView.table_inputs(obj.PSETable.Data), obj.ml_stage);
+            catch ME
+                obj.NameMessageLabel.Text = ME.message;
+                return
+            end
+            obj.pse_name = new_pse;
             obj.alt_name = new_alt;
             % Store Project Component Mapping
             obj.pse_created = 1;

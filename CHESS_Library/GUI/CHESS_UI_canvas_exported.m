@@ -177,8 +177,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 if any(strcmp(app.StormTypeDropDown_2.Items, rules.storm_type))
                     app.StormTypeDropDown_2.Value = rules.storm_type;
                 end
-                if ~isempty(rules.swl_slr)
-                    app.SeaLevelChangeEditField.Value = rules.swl_slr;
+                if ~isempty(rules.swl_slr) % Stage 1 Run Value Is SI: Shown In The Project Unit System
+                    shown = chess.Config.from_SI(struct('swl_slr', rules.swl_slr), app.controller.project.unit_system);
+                    app.SeaLevelChangeEditField.Value = round(shown.swl_slr, 12, 'significant');
                 end
                 if ~isempty(rules.tide_name) % ItemsData Are Paths ('None' Kept)
                     [~, tide_names, tide_ext] = cellfun(@fileparts, app.TidesFileDropDown.ItemsData, 'un', false);
@@ -240,8 +241,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if strcmp(key, 'event')
                 config.sp_ID = CHSStormDBImportUI.get_savepoint_id(state.dbObj); % Title (GUI Run Configs Leave sp_ID Empty)
             end
-            chessPlot = CHESSPlots(config, state.Resp, [], app.controller.results_project_forcing(), [], state.structure,...
-                app.plotFontSize, app.controller.project.unitsys);
+            chessPlot = chess.Visualization.CHESSPlots(config, state.Resp, [], app.controller.results_project_forcing(), [], state.structure,...
+                app.plotFontSize, app.controller.project.unit_system);
             sel = app.results_selection_for(key, ds_query);
             on_change = @(s) app.results_selection_changed(key, s, ds_query);
             switch key
@@ -609,7 +610,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function plot_pse_geometry(app, ax, base_fnt, keep_text_box)
-            % Active Alternative's Transect Into ax (chessProject.plot_geometry). keep_text_box: Pop-Out Text Box (Offshore End:
+            % Active Alternative's Transect Into ax (chessProjectView.plot_geometry). keep_text_box: Pop-Out Text Box (Offshore End:
             % chessController.popout_offshore_elevation). Multi-Line Stage 2: In Line Behind Stage 1 As Run For The Run Tab Storm DB +
             % Workflow (multiline_stage1_row: Stage 1's PSE Geometry With That Run's Kt Geometry, Row structure_kt); No Such Run:
             % Stage 2 Alone With A Note
@@ -621,20 +622,20 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 app.controller_done();
             end
             stage1 = [];
-            if app.controller.project.alt_stage(pse_name, alt_name) == 2
+            if app.controller.project.stage(pse_name, alt_name) == 2
                 [s1_row, ~, run_label] = app.multiline_stage1_row();
                 if isempty(run_label)
                     stage1 = 'Stage 1 not shown: no Run tab storm DB';
                 elseif isempty(s1_row)
                     stage1 = ['Stage 1 not run for ' run_label];
                 else
-                    stage1 = app.controller.project.get_project_field('pse_geometry', pse_name, app.controller.project.stage1_alt(pse_name), 'alt');
+                    stage1 = chessProjectView.geometry(app.controller.project, pse_name, app.controller.project.stage1_alternative(pse_name));
                     for fld = fieldnames(s1_row.structure_kt)'
                         stage1.(fld{1}) = s1_row.structure_kt.(fld{1});
                     end
                 end
             end
-            app.controller.project.plot_geometry(pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source, stage1);
+            chessProjectView.plot_geometry(app.controller.project, pse_name, alt_name, ax, base_fnt, keep_text_box, offshore_elevation, elevation_source, stage1);
         end
 
         function plot_storm_db(app, ax, base_fnt)
@@ -647,7 +648,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 base_fnt = app.plotFontSize;
             end
             % Pull Storm DB (Cached). Storm DB Of An Older CHESS Version (No db_info): Alert, No Plot
-            dbObj = app.controller.project.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db');
+            dbObj = app.controller.project.storm_database(app.StormDBDropDown.Value);
             if ~app.db_info_ok(dbObj)
                 cla(ax);
                 legend(ax, 'off');
@@ -661,21 +662,21 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 'data_type', app.DataTypeDropDown.Value,...
                 'match_type', app.MatchTypeDropDown.Value);
             % Library Plot Object (Storm Database Only: No PSE, Workflow Or Results)
-            config = struct('project_datum', app.controller.project.vdatum, 'apply_random_tides', 0,...
+            config = struct('project_datum', app.controller.project.vertical_datum, 'apply_random_tides', 0,...
                 'region', dbObj.study, 'sp_ID', CHSStormDBImportUI.get_savepoint_id(dbObj), 'struc_id', '', 'case_name', '',...
-                'r2p_u', 0, 'q_u', 0, 'dn50_u', 0, 'p1_u', 0,... % Axis Labels Only (response_library_headers)
+                'r2p_u', 0, 'q_u', 0, 'dn50_u', 0, 'p1_u', 0,... % Axis Labels Only (chess.Common.response_library_headers)
                 'chs_swl_u_a', 0, 'chs_swl_u_r', 0, 'chs_hm0_u_a', 0, 'chs_hm0_u_r', 0);
             % TC SWL Bias Correction State & Coefficients From The Storm DB's db_info (Raw Signal Is Corrected Like The Imported storm)
             db_info = CHSStormDBImportUI.get_db_info(dbObj);
             config.tc_bias_corrected = db_info.tc_bias_corrected;
             config.chs_swl_b_a = db_info.chs_swl_b_a;
             config.chs_swl_b_r = db_info.chs_swl_b_r;
-            chessPlot = CHESSPlotsBase(config, [], storm, [], [], [], base_fnt, app.controller.project.unitsys);
+            chessPlot = chess.Visualization.CHESSPlotsBase(config, [], storm, [], [], [], base_fnt, app.controller.project.unit_system);
             % Plot (And Tab Table) According To Data Type
             cla(ax);
             legend(ax, 'off');
             field_names = {'SWL', 'Hm0', 'Tp'};
-            stm_data = aux_methods.pull_data(ds_query, storm);
+            stm_data = chess.Visualization.aux_methods.pull_data(ds_query, storm);
             stm_list = cell2mat(stm_data(:, 1));
             y_field = app.FieldToPlotDropDown.Value;
             y_lbl = app.FieldToPlotDropDown.Items{strcmp(field_names, y_field)};
@@ -709,7 +710,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         end
 
         function [st_types, has_peaks, has_timeseries] = populate_data_types(app, layout)
-            % Data Type Tree From A Storm DB Record's layout (CHSStormDBImportUI.storm_layout; No Storm Data Loaded). NodeData
+            % Data Type Tree From A Storm DB Record's layout (chess.Project.storm_layout; No Storm Data Loaded). NodeData
             % Holds Library Symbol. No layout (Storm DB File Missing Or Unreadable, stormdb_missing_note): Empty Tree
             delete(app.DataTypesTree.Children(:));
             st_types = cell(0, 1);
@@ -746,12 +747,12 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Inputs Table: Pertinent Rows Only (Library Template), Values From controller.inputs (All Workflows)
             app.store_table_values();
             [pse_name, alt_name] = app.controller.active_names();
-            pse_obj = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+            pse_obj = chessProjectView.geometry(app.controller.project, pse_name, alt_name);
             if isempty(pse_obj)
                 app.WorkflowInputsTable.Data = cell(0, 3);
                 return
             end
-            tpl = app.controller.project.get_library_template(pse_obj.pse_type);
+            tpl = chessProjectView.template(pse_obj.pse_type);
             resp_checked = app.get_checked_symbols(app.ResponsesTree);
             rows = cell(0, 4);
             % Forcing: Storm Duration And Per-Storm Timeseries Durations Always Shown (Every PSE Type; Dn50 Uses Them)
@@ -768,9 +769,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 case 2 % Deterministic: No Hazard Curve, CL Or LCS Inputs
                 case 3 % LCS
                     rows = [rows; tpl.mcs];
-                    % CSR-DPA (Library chess_csr): Rubble Mound Timeseries Runs Only; Its Settings Only While csr_call_dpa Is 1.
+                    % CSR-DPA (Library chess.Model.LifeCycle): Rubble Mound Timeseries Runs Only; Its Settings Only While csr_call_dpa Is 1.
                     % Hidden Values Stay In controller.inputs
-                    if chessProject.get_struc_type(pse_obj.pse_type) == 3 && ismember('use_timeseries', app.get_checked_symbols(app.DataTypesTree))
+                    if chessProjectView.structure_type(pse_obj.pse_type) == 3 && ismember('use_timeseries', app.get_checked_symbols(app.DataTypesTree))
                         csr = tpl.csr;
                         is_call = strcmp(csr(:, 1), 'csr_call_dpa');
                         dpa_on = csr{is_call, 4};
@@ -783,6 +784,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         rows = [rows; csr];
                     end
             end
+            rows = chessProjectView.convert_rows(rows, app.controller.project.unit_system);
             % 0/1 Switch Rows (Template Description Marks Them) Shown As Checkboxes: Logical Values In The Data Cell
             is_flag = contains(rows(:, 2), {'(0/1)', '(0 - Off / 1 - On)'});
             % Field Label = Description [Units]
@@ -816,14 +818,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             projList = alphabetical({app.controller.projects.name});
             app.ProjectDropDown.Items = projList;
             app.ProjectDropDown.Value = app.controller.project.name;
-            app.ProjectPathEditField.Value = app.controller.project.get_project_field('path', '', '', 'proj');
+            app.ProjectPathEditField.Value = app.controller.project.root_folder;
             % PSE & Alternative Dropdowns
             [pse_name, alt_name] = app.controller.active_names();
-            pseList = alphabetical(app.controller.project.pse_list);
+            pseList = alphabetical(app.controller.project.pse_names());
             app.PSEDropDown.Items = pseList;
             if ~isempty(pse_name)
                 app.PSEDropDown.Value = pse_name;
-                app.AlternativeDropDown.Items = alphabetical(app.controller.project.get_project_field('alternative_list', pse_name, '', 'pse'));
+                app.AlternativeDropDown.Items = alphabetical(app.controller.project.alternative_names(pse_name));
             else
                 app.AlternativeDropDown.Items = {};
             end
@@ -844,11 +846,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Response Tree From Library Template "Structure Responses" (NodeData Holds Library Symbol)
             delete(app.ResponsesTree.Children(:));
             [pse_name, alt_name] = app.controller.active_names();
-            pse_obj = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
+            pse_obj = chessProjectView.geometry(app.controller.project, pse_name, alt_name);
             if isempty(pse_obj)
                 return
             end
-            tpl = app.controller.project.get_library_template(pse_obj.pse_type);
+            tpl = chessProjectView.template(pse_obj.pse_type);
             resp_sym = tpl.responses(:, 1);
             for rr = 1:length(resp_sym)
                 % Response Switches Are Described As "Compute..."; Parameter Rows Go To Inputs Table
@@ -861,7 +863,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 end
                 txt = tpl.responses{rr, 2};
                 % Multi-Line Stage 1: Hm0t Is Its Stage 2 Forcing, Always On (chessController.run_config; Re-Checked By set_input_table)
-                if strcmp(resp_sym{rr}, 'compute_wave_transmission') && app.controller.project.alt_stage(pse_name, alt_name) == 1
+                if strcmp(resp_sym{rr}, 'compute_wave_transmission') && app.controller.project.stage(pse_name, alt_name) == 1
                     txt = [txt ' (Multi-Line Stage 1: Always On)'];
                 end
                 uitreenode(app.ResponsesTree, "Text", txt, 'NodeData', resp_sym{rr});
@@ -946,7 +948,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Nothing To Show Without An Alternative And A Storm DB
             dbList = [];
             if app.controller.has_active_alt()
-                dbList = app.controller.project.get_project_field('stormDB_list', '', '', 'proj');
+                dbList = app.controller.project.storm_databases;
             end
             if isempty(dbList)
                 app.reset_tab('sim');
@@ -954,11 +956,11 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             [pse_name, alt_name] = app.controller.active_names();
 
-            % 1. Storm DB (New Context: The Alternative's Newest Simulation, chessProject.default_db; Else Keep User Choice)
+            % 1. Storm DB (New Context: The Alternative's Newest Simulation, chess.Project.default_storm_database; Else Keep User Choice)
             db_names = {dbList.db_name};
             current_db = app.StormDBDropDown_run.Value;
             app.StormDBDropDown_run.Items = db_names;
-            default_db = app.controller.project.default_db(pse_name, alt_name);
+            default_db = app.controller.project.default_storm_database(pse_name, alt_name);
             if ~isempty(req) && any(strcmp(req.db, db_names))
                 app.StormDBDropDown_run.Value = req.db;
             elseif new_context && ~isempty(default_db)
@@ -977,7 +979,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.set_dropdown_items(app.StormTypeDropDown_2, st_types);
 
             % 3. Tides (File Names Shown, Full Paths Passed To The Library As config.tide_file)
-            tide_files = app.controller.project.tide_files_list(:);
+            tide_files = app.controller.project.tide_files(:);
             [~, tide_names, tide_ext] = cellfun(@fileparts, tide_files, 'un', false);
             app.TidesFileDropDown.Items = [{'None'}; strcat(tide_names, tide_ext)];
             app.TidesFileDropDown.ItemsData = [{'None'}; tide_files];
@@ -1062,10 +1064,10 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             elseif has('tree')
                 app.update_project_tree();
             end
-            if has('stormdb') % Storm DB Viewer: The Alternative's Newest Simulation (chessProject.default_db), Else First
+            if has('stormdb') % Storm DB Viewer: The Alternative's Newest Simulation (chess.Project.default_storm_database), Else First
                 dbList = [];
                 if ~isempty(app.controller.project)
-                    dbList = app.controller.project.get_project_field('stormDB_list', '', '', 'proj');
+                    dbList = app.controller.project.storm_databases;
                 end
                 if isempty(dbList)
                     app.reset_tab('db');
@@ -1073,7 +1075,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     db_indx = [];
                     if app.controller.has_active_alt()
                         [pse_name, alt_name] = app.controller.active_names();
-                        db_indx = find(strcmp(app.controller.project.default_db(pse_name, alt_name), {dbList.db_name}), 1);
+                        db_indx = find(strcmp(app.controller.project.default_storm_database(pse_name, alt_name), {dbList.db_name}), 1);
                     end
                     if isempty(db_indx)
                         db_indx = 1;
@@ -1119,7 +1121,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             % Dialog Lists: Rows Without Repair (No Save Or Drift Question From Inside The Dialog)
             if isempty(sim_label)
-                alts = proj.alternative_list{strcmp(proj.pse_list, pse_name)};
+                alts = proj.alternative_names(pse_name);
                 app.auxLib.dropdown_list_dlgbox(sprintf(['Delete simulations of PSE "%s" with all their run files. Choose the ',...
                     'alternative, then one or more simulations (storm DB | workflow; Ctrl+click selects several).'], pse_name),...
                     title_str, 'Alternative:', alts, alt_name, @(a) app.controller.sim_labels(proj, pse_name, a), 'Delete');
@@ -1173,28 +1175,28 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             current = node.NodeData.name;
-            stage = 0; % Multi-Line Alternative: Its Suffix Is Kept (chessProject.stage_name_problem)
+            stage = 0; % Multi-Line Alternative: Its Suffix Is Kept (chess.Project.stage_name_problem)
             % parent_dir: Folder Holding The Item (A Folder Or File Of The New Name There Is Shown While Typing)
             switch level
                 case 'proj'
                     siblings = proj_names(~strcmp(proj_names, current));
                     title_str = 'Rename Project';
                     prompt = sprintf('New name for project "%s":', current);
-                    parent_dir = proj.path;
+                    parent_dir = proj.root_folder;
                 case 'pse'
-                    siblings = proj.pse_list(~strcmp(proj.pse_list, current));
+                    siblings = setdiff(proj.pse_names(), {current}, 'stable');
                     title_str = 'Rename PSE';
                     prompt = sprintf('New name for PSE "%s":', current);
-                    parent_dir = chess_paths(proj.path, proj.name).pse_root_dir;
+                    parent_dir = chess.ProjectPaths.build(proj.root_folder, proj.name).pse_root_dir;
                 case 'alt'
-                    alts = proj.alternative_list{strcmp(proj.pse_list, pse_name)};
+                    alts = proj.alternative_names(pse_name);
                     siblings = alts(~strcmp(alts, current));
                     title_str = 'Rename Alternative';
                     prompt = sprintf('New name for alternative "%s" (PSE %s):', current, pse_name);
-                    parent_dir = chess_paths(proj.path, proj.name, pse_name).pse_dir;
-                    stage = proj.alt_stage(pse_name, alt_name);
+                    parent_dir = chess.ProjectPaths.build(proj.root_folder, proj.name, pse_name).pse_dir;
+                    stage = proj.stage(pse_name, alt_name);
                     if stage > 0
-                        prompt = sprintf('%s\nMulti-line stage %d: keep the "%s" ending.', prompt, stage, chessProject.stage_suffix(stage));
+                        prompt = sprintf('%s\nMulti-line stage %d: keep the "%s" ending.', prompt, stage, chess.Project.stage_suffix(stage));
                     end
             end
             app.auxLib.editfield_input_dlgbox(prompt, title_str, current, @name_check, 'Rename');
@@ -1212,9 +1214,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.show_messages(msgs);
 
             function msg = name_check(v)
-                msg = chessProject.name_problem(v, siblings, current, parent_dir);
+                msg = chess.Project.name_problem(v, siblings, current, parent_dir);
                 if isempty(msg)
-                    msg = chessProject.stage_name_problem(v, stage);
+                    msg = chess.Project.stage_name_problem(v, stage);
                 end
             end
         end
@@ -1372,7 +1374,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         lbl = 'Color By:';
                         ds_query = struct('storm_type', app.StormTypeDropDown_results.Value,...
                             'data_type', app.DataTypeDropDown_results.Value, 'match_type', app.MatchTypeDropDown_results.Value);
-                        c_items = app.controller.det_fields(aux_methods.pull_data(ds_query, app.controller.results.Resp));
+                        c_items = app.controller.det_fields(chess.Visualization.aux_methods.pull_data(ds_query, app.controller.results.Resp));
                         c = uidropdown(gl, 'Items', c_items);
                         if any(strcmp(c_items, opts.c_field))
                             c.Value = opts.c_field;
@@ -1569,7 +1571,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             [s1_row, ml_msg] = app.apply_multiline_locks();
             app.populate_inputs_table();
             % Multi-Line Stage 2: Inputs Describing Stage 1's Forcing Shown From Its Run (Registry Row inherited, Library
-            % multiline_inherited_fields; Not Editable: WorkflowInputsTableCellEdit)
+            % chess.Model.multiline_inherited_fields; Not Editable: WorkflowInputsTableCellEdit)
             if ~isempty(s1_row)
                 for fld = fieldnames(s1_row.inherited)'
                     row = strcmp(app.WorkflowInputsTable.Data(:, 1), fld{1});
@@ -1617,7 +1619,8 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     set_value(app.StormTypeDropDown_2, config.storm_sampling);
                     set_value(app.TidesFileDropDown, config.tide_file);
                     app.ApplyDepthLimitationCheckBox.Value = logical(config.apply_depth_limitation);
-                    app.SeaLevelChangeEditField.Value = config.swl_slr;
+                    shown = chess.Config.from_SI(config, app.controller.project.unit_system); % Saved config Is SI: Run Tab Shows The Project Unit System
+                    app.SeaLevelChangeEditField.Value = round(shown.swl_slr, 12, 'significant');
                     % Responses: Checked Where Config Switch Is On
                     resp = app.get_tree_symbols(app.ResponsesTree);
                     set_checked(app.ResponsesTree, resp(cellfun(@(x) isfield(config, x) && config.(x) == 1, resp)));
@@ -1629,22 +1632,27 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     if config.use_timeseries == 1, dt = [dt, {'use_timeseries'}]; end
                     set_checked(app.DataTypesTree, dt);
                     % Inputs Of Every Workflow From Config
-                    pse_geo = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                    tpl = app.controller.project.get_library_template(pse_geo.pse_type);
+                    pse_geo = chessProjectView.geometry(app.controller.project, pse_name, alt_name);
+                    tpl = chessProjectView.template(pse_geo.pse_type);
                     is_param = ~startsWith(tpl.responses(:, 2), 'Comput');
                     inputs = [app.controller.FORCING_INPUTS(:); tpl.responses(is_param, 1); tpl.mcs(:, 1); tpl.csr(:, 1); tpl.pros(:, 1)];
                     app.controller.clear_table_inputs();
                     app.WorkflowInputsTable.Data = cell(0, 3); % Else populate_inputs_table Stores The Visible (Previous) Values Over The Config's
+                    unit_names = chess.Config.unit_fields(); % Rounded So The Exact Hotstart Comparison Of A Re-Run Stays Stable
                     for kk = 1:length(inputs)
-                        if isfield(config, inputs{kk})
-                            app.controller.set_input(inputs{kk}, config.(inputs{kk}));
+                        if isfield(shown, inputs{kk})
+                            value = shown.(inputs{kk});
+                            if ismember(inputs{kk}, unit_names) && isnumeric(value)
+                                value = round(value, 12, 'significant');
+                            end
+                            app.controller.set_input(inputs{kk}, value);
                         end
                     end
                 case 3 % Keep Current Inputs: Snapshot Values Where The Template Has The Response/Row (PSE Type Can Differ),
                     % Template Defaults Only For Responses, Data Types And Rows The Previous State Lacked
                     restore_snapshot({'StormDBDropDown_run'}); % New Context: Storm DB Already Chosen (populateSimulationTab)
-                    pse_geo = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-                    tpl = app.controller.project.get_library_template(pse_geo.pse_type);
+                    pse_geo = chessProjectView.geometry(app.controller.project, pse_name, alt_name);
+                    tpl = chessProjectView.template(pse_geo.pse_type);
                     on = tpl.responses(cellfun(@(x) isequal(x, 1), tpl.responses(:, 4)), 1);
                     set_checked(app.ResponsesTree, [app.get_checked_symbols(app.ResponsesTree), setdiff(on(:)', snapshot_value('ResponseSymbols'))]);
                     gen = tpl.general;
@@ -1886,8 +1894,9 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     act_row = proj_row;
                 end
                 % Loop Across PSEs (Read Lists Directly, No Working Index Side Effects)
-                for jj = alphabetical_order(wObj.pse_list)
-                    pse_name = wObj.pse_list{jj};
+                pse_names = wObj.pse_names();
+                for jj = alphabetical_order(pse_names)
+                    pse_name = pse_names{jj};
                     items(end+1, :) = {proj_row, pse_name, struct('type', 'pse', 'name', pse_name)}; %#ok<AGROW>
                     pse_row = size(items, 1);
                     if is_act && strcmp(pse_name, act_pse)
@@ -1895,13 +1904,13 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     end
                     s1_rows = [];
                     if wObj.is_multiline(pse_name)
-                        s1_rows = app.sim_rows(wObj, pse_name, wObj.stage1_alt(pse_name));
+                        s1_rows = app.sim_rows(wObj, pse_name, wObj.stage1_alternative(pse_name));
                     end
                     % Loop Across Alternatives (Multi-Line: Stage Marker In The Text; Names Are Read From NodeData.name)
-                    altList = wObj.alternative_list{jj};
+                    altList = wObj.alternative_names(pse_name);
                     for ii = alphabetical_order(altList)
                         alt_text = altList{ii};
-                        stage = wObj.alt_stage(pse_name, altList{ii});
+                        stage = wObj.stage(pse_name, altList{ii});
                         if stage > 0
                             alt_text = sprintf('%s  [multi-line stage %d]', alt_text, stage);
                         end
@@ -1913,7 +1922,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                         % Simulation Bundles (Storm DB | Workflow): A Click Loads That Run
                         rows = app.sim_rows(wObj, pse_name, altList{ii});
                         for ss = 1:numel(rows)
-                            label = chessProject.sim_label(rows(ss));
+                            label = chess.Project.run_label(rows(ss));
                             sim_text = label;
                             if stage == 2 && app.controller.sim_is_stale(rows(ss), s1_rows)
                                 sim_text = [label '  [stale]'];
@@ -2085,7 +2094,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             app.set_dropdown_items(app.StormIDDropDown_results, a_items);
             app.StormIDDropDown_results.Enable = a_on;
         end
-
     end
 
 
@@ -2109,7 +2117,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % CHESS_Library Path: The App Lives In CHESS_Library\GUI, So The Library Is Its Parent Folder
             app_dir = fileparts(mfilename('fullpath'));
             lib_dir = fileparts(app_dir);
-            if ~isfile(fullfile(lib_dir, 'Setup', 'create_structure_geometry.m'))
+            if ~isfile(fullfile(lib_dir, '+chess', 'Model.m'))
                 app.auxLib.error_dlgbox(['CHESS_Library not found. The app must be located in CHESS_Library' filesep 'GUI.']);
             else
                 addpath(lib_dir);
@@ -2190,7 +2198,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if ~all(file == 0)
                 % Save out Project state
                 app.controller.save_project();
-                % Create Project Archive: <name>/ + The Region's CHS_Dependencies Files (chessProject.export_archive)
+                % Create Project Archive: <name>/ + The Region's CHS_Dependencies Files (chess.Project.export_archive)
                 try
                     note = app.controller.project.export_archive(fullfile(fPath, file));
                 catch ME
@@ -2239,7 +2247,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if isempty(app.controller.project)
                 return
             end
-            % Call PSE Creation UI; Created: Selected And Saved, Else The In-Progress PSE Removed (chessController.finish_element)
+            % Call PSE Creation UI; Created: Selected And Saved (chessController.finish_element)
             obj = PSECreationUI(event.Source.Text, app.controller.project, '', app.UIFigure);
             uiwait(obj.uifig);
             app.controller.finish_element(obj.pse_created, obj.pse_name, obj.alt_name, 'pse');
@@ -2251,7 +2259,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         % Menu selected function: AlternativeMenu
         function AlternativeMenuSelected(app, event)
             % Get PSE List For Active Project
-            pseList = app.controller.project.get_project_field('pse_list', '', '', 'proj');
+            pseList = app.controller.project.pse_names();
             % Ask User For PSE Template
             app.auxLib.dropdown_input_dlgbox('Choose PSE to use as template for alternative.', pseList, 'Add New Alternative To Project PSE', 'OK');
             pse_name = app.auxLib.dialog_answer;
@@ -2265,14 +2273,14 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             % PSE Type: The Active Alternative's When The Chosen PSE Is The Active One, Else The First Alternative's
-            pse_geo = app.controller.project.get_project_field('pse_geometry', pse_name, '', 'pse');
-            pse_type = pse_geo{1}.pse_type;
+            alts = app.controller.project.alternative_names(pse_name);
+            pse_type = chessProjectView.pse_type(app.controller.project.alternative(pse_name, alts{1}).structure_type);
             [act_pse, act_alt] = app.controller.active_names();
             if strcmp(act_pse, pse_name) && ~isempty(act_alt)
-                act_geo = app.controller.project.get_project_field('pse_geometry', pse_name, act_alt, 'alt');
+                act_geo = chessProjectView.geometry(app.controller.project, pse_name, act_alt);
                 pse_type = act_geo.pse_type;
             end
-            % Call PSE Creation UI; Created: Selected And Saved, Else The In-Progress Alternative Removed
+            % Call PSE Creation UI; Created: Selected And Saved
             obj = PSECreationUI(pse_type, app.controller.project, pse_name, app.UIFigure);
             uiwait(obj.uifig);
             app.controller.finish_element(obj.pse_created, obj.pse_name, obj.alt_name, 'alt');
@@ -2296,7 +2304,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             proj = app.controller.project;
             switch event.Source.Text
                 case 'PSE'
-                    choices = proj.get_project_field('pse_list', '', '', 'proj');
+                    choices = proj.pse_names();
                     if isempty(choices)
                         return
                     end
@@ -2312,7 +2320,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     end
                     err = app.controller.remove_element('pse', pse_name, '');
                 case 'Alternative'
-                    choices = proj.get_project_field('pse_list', '', '', 'proj');
+                    choices = proj.pse_names();
                     if isempty(choices)
                         return
                     end
@@ -2321,7 +2329,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     if isempty(pse_name)
                         return
                     end
-                    choices = proj.get_project_field('alternative_list', pse_name, '', 'pse');
+                    choices = proj.alternative_names(pse_name);
                     app.auxLib.dropdown_input_dlgbox(['Remove alternative from PSE ' pse_name '.'], choices, 'Project Management: Remove');
                     alt_name = app.auxLib.dialog_answer;
                     if isempty(alt_name)
@@ -2333,7 +2341,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     end
                     err = app.controller.remove_element('alt', pse_name, alt_name);
                 case 'Tides'
-                    tide_files = proj.get_project_field('tide_files_list', '', '', 'proj');
+                    tide_files = proj.tide_files;
                     if isempty(tide_files)
                         return
                     end
@@ -2426,7 +2434,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if isequal(tab, app.PSEViewerTab) % PSE Geometry (With Offshore Slope/Elevation Text Box)
                 app.plot_pse_geometry(axes('Parent', figure()), base_fnt, true);
             elseif isequal(tab, app.StormDBViewerTab) % Peaks: Data Space | Timeseries: Event Hydrograph
-                if app.db_info_ok(app.controller.project.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db'))
+                if app.db_info_ok(app.controller.project.storm_database(app.StormDBDropDown.Value))
                     app.plot_storm_db(axes('Parent', figure()), base_fnt);
                 end
             else % Results: Selected Plot Type (Multi-Panel Plots Reuse The Results Pop-Out)
@@ -2437,7 +2445,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                     app.plot_project_responses(figure(), base_fnt);
                 end
             end
-
         end
 
         % Menu selected function: ImportCHSStudyHDF5Menu
@@ -2445,26 +2452,23 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if isempty(app.controller.project)
                 return
             end
-            % Initialize CHS Library (The Project's CHS_Dependencies And Region: The Wizard Keeps Them). The Project's Storm DB
-            % Names And Their Usage (Alternatives, Run Files): A Clash Is An Overwrite, Confirmed In The Wizard At Import
+            % Storm DB Import Wizard On The Active Project (A New Wizard Every Time). Every Step Is The Library's
+            % (chess.Project.inspect_storm_data, build_storm_database, add_built_storm_database, The Steps Of
+            % chess.Project.import_storm_database): At Import The Storm DB Is Already In The Project
             proj = app.controller.project;
-            paths = chess_paths(proj.path, proj.name);
-            wizard = CHSStormDBImportUI(proj.chs_dependencies, paths.event_db_dir,...
-                chessController.GRAVITY, proj.vdatum, proj.unitsys, app.UIFigure, proj.project_region(), {proj.stormDB_list.db_name},...
-                @(name) [proj.stormdb_usage(name), numel(proj.stormdb_run_files(name))]);
-            % Call import Wizard (A New Wizard Every Time; The Project Keeps Only Its Record, CHSStormDBImportUI.to_record)
+            wizard = CHSStormDBImportUI(proj, app.UIFigure);
             wizard.create_ui();
             uiwait(wizard.figUI); % Wait for uifigure to close
             if ~wizard.db_created
                 return
             end
-            % Record Into The Project (chessController.add_stormdb: Overwrite, CHS_Dependencies, Save)
-            dbObj = wizard.to_record();
-            app.controller.add_stormdb(dbObj, wizard.overwrite_flag, paths.event_db_dir);
+            % The Session Follows (chessController.stormdb_imported: Cached Data, Saved Simulation Key, Save)
+            dbObj = wizard.record;
+            app.controller.stormdb_imported(dbObj, wizard.replaced, wizard.not_deleted);
             msgs = app.controller.take_messages();
             % Refresh UI & Show New DB On Storm DB Viewer
             app.refresh();
-            app.populate_stormDB_panel(dbObj, {proj.stormDB_list.db_name});
+            app.populate_stormDB_panel(dbObj, {proj.storm_databases.db_name});
             app.show_messages(msgs);
         end
 
@@ -2483,7 +2487,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         % Value changed function: StormDBDropDown
         function StormDBDropDown_dbValueChanged(app, event)
             %  Repopulate Storm DB Viewer Cascade For Selected DB
-            dbObj = app.controller.project.get_project_field('stormDB_list', app.StormDBDropDown.Value, '', 'db');
+            dbObj = app.controller.project.storm_database(app.StormDBDropDown.Value);
             app.populate_stormDB_panel(dbObj, app.StormDBDropDown.Items);
         end
 
@@ -2560,12 +2564,12 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             end
             symbol = app.WorkflowInputsTable.Data{row, 1};
             val = event.NewData;
-            % Multi-Line Stage 2: Inputs Of Stage 1's Forcing Come From Its Run (Library multiline_inherited_fields)
+            % Multi-Line Stage 2: Inputs Of Stage 1's Forcing Come From Its Run (Library chess.Model.multiline_inherited_fields)
             [pse_name, alt_name] = app.controller.active_names();
-            if app.controller.project.alt_stage(pse_name, alt_name) == 2 && ismember(symbol, multiline_inherited_fields())
+            if app.controller.project.stage(pse_name, alt_name) == 2 && ismember(symbol, chess.Model.multiline_inherited_fields())
                 app.WorkflowInputsTable.Data{row, col} = event.PreviousData;
                 app.auxLib.alert_dlgbox(sprintf('Multi-line stage 2: %s is taken from the stage 1 run (%s/%s).', symbol, pse_name,...
-                    app.controller.project.stage1_alt(pse_name)), 'Inputs: From Stage 1', 'info');
+                    app.controller.project.stage1_alternative(pse_name)), 'Inputs: From Stage 1', 'info');
                 return
             end
             if strcmp(symbol, 'csr_apply_structure_repair') && ~(isnumeric(val) && isscalar(val) && ismember(val, 0:3))
@@ -2586,7 +2590,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         function RemoveStormDatabaseMenuSelected(app, event)
             % Remove A Storm Database From The Active Project (chessController.stormdb_removal / remove_stormdb). Tied To
             % Simulations: Deleted With Its Files And Those Bundles' Run Files. Otherwise: Remove (Files Kept) Or Remove & Delete Files
-            if isempty(app.controller.project) || isempty(app.controller.project.stormDB_list)
+            if isempty(app.controller.project) || isempty(app.controller.project.storm_databases)
                 return
             end
             % Not While A Run Writes Into The Project Folders
@@ -2595,7 +2599,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             app.auxLib.dropdown_input_dlgbox(['Remove storm database from project ' app.controller.project.name '.'],...
-                {app.controller.project.stormDB_list.db_name}, 'Storm Database Management: Remove', 'Remove');
+                {app.controller.project.storm_databases.db_name}, 'Storm Database Management: Remove', 'Remove');
             db_name = app.auxLib.dialog_answer;
             if isempty(db_name)
                 return
@@ -2645,18 +2649,16 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 return
             end
             [pse_name, alt_name] = app.controller.active_names();
-            old_tbl = app.controller.project.get_project_field('pse_tables', pse_name, alt_name, 'alt');
-            geo = app.controller.project.get_project_field('pse_geometry', pse_name, alt_name, 'alt');
-            % Rebuild The Geometry (Library Rules); A Library Error Restores The Previous Table (pse_geometry Is Only Set On Success)
+            old_tbl = chessProjectView.input_table(app.controller.project, pse_name, alt_name);
+            % New Inputs Of The Alternative (Library Rules: They Must Build The Structure, chess.Project.set_inputs); A Library
+            % Error Leaves The Alternative As It Was And Restores The Table Cell
             symbol = app.PSETable.Data{row, 1};
             new_tbl = old_tbl;
             new_tbl{strcmp(old_tbl(:, 1), symbol), 4} = val;
-            app.controller.project.set_project_field('pse_tables', new_tbl, pse_name, alt_name, 'alt');
             try
-                app.controller.project.create_geometry(pse_name, alt_name, geo.pse_type);
+                app.controller.project.set_inputs(pse_name, alt_name, chessProjectView.table_inputs(new_tbl));
             catch ME
                 app.PSETable.Data{row, col} = event.PreviousData;
-                app.controller.project.set_project_field('pse_tables', old_tbl, pse_name, alt_name, 'alt');
                 app.auxLib.alert_dlgbox(['Could not rebuild the PSE geometry: ' ME.message], 'PSE Viewer: Invalid Value', 'error');
                 return
             end
@@ -2665,7 +2667,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             % Results). Same Key: No Saved Simulation Question
             app.controller.touch({'pse', 'constants', 'status'});
             app.refresh();
-
         end
 
         % Menu selected function: RemoveAlternativeSimulationMenu
@@ -2683,12 +2684,12 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
         function MultilineTransectMenuSelected(app, event)
             % Multi-Line Transect: A New Multi-Line PSE (Its '<name>_stage_1' Rubble Mound) Or A '<name>_stage_2' Alternative
             % (Any PSE Type) Of An Existing One, Through The PSE Creation Wizard (Locked Suffix). The Multi-Line Link
-            % (chessProject.link_multiline, chessController.finish_element) Is Written Only Once The Wizard Created The Alternative
+            % (Its Stage, chess.Project.add_alternative) Is Written Only Once The Wizard Created The Alternative
             if isempty(app.controller.project)
                 return
             end
             new_item = 'New multi-line PSE';
-            app.auxLib.dropdown_input_dlgbox('Choose multi-line transect first stage PSE', [{new_item}, app.controller.project.multiline_pses()],...
+            app.auxLib.dropdown_input_dlgbox('Choose multi-line transect first stage PSE', [{new_item}, app.controller.project.multiline_pse_names()'],...
                 'Choose multi-line transect first stage PSE', 'OK');
             choice = app.auxLib.dialog_answer;
             if isempty(choice)
@@ -2715,7 +2716,6 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
             if obj.pse_created
                 app.refresh();
             end
-
         end
 
         % Close request function: UIFigure
@@ -2738,7 +2738,7 @@ classdef CHESS_UI_canvas_exported < matlab.apps.AppBase
                 app.auxLib.alert_dlgbox(msg, title_str, 'info');
                 return
             end
-            pseList = app.controller.project.get_project_field('pse_list', '', '', 'proj');
+            pseList = app.controller.project.pse_names();
             if isempty(pseList)
                 return
             end

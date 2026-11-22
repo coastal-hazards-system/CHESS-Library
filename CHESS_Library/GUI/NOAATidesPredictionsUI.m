@@ -9,11 +9,11 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
         Datums from noaa_station_details.m (MSL by
         default; the user's datum is kept when switching stations if the
         new station offers it). Get Data writes one year of hourly
-        predictions (create_tide_file.m) to <project>\<name>\Tides\<file>.csv
-        and adds the file to wProj.tide_files_list.
+        predictions to <project>\<name>\Tides\<file>.csv
+        and adds the file to the project (chess.Project.download_tide_file).
 
     %% INPUTS
-        wProj: Active CHESS project (chessProject). | handle
+        wProj: Active CHESS project (chess.Project). | handle
         parent_fig: (Optional) Window this UI opens centered on ([]:
             screen). | matlab.ui.Figure
 
@@ -50,8 +50,8 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
     end
 
     properties (Access = private)
-        wProj % Active CHESS Project (Tide Files Are Saved In <project>\Tides And Added To wProj.tide_files_list)
-        stations % NOAA Harmonic Tide Prediction Stations, Sorted By State Code (Stations Outside US States Last) Then Name (Library: noaa_station_catalog)
+        wProj % Active CHESS Project (Tide Files Are Saved In <project>\Tides And Added To wProj.tide_files)
+        stations % NOAA Harmonic Tide Prediction Stations, Sorted By State Code (Stations Outside US States Last) Then Name (Library: chess.NOAA.noaa_station_catalog)
         datumsStationId = '' % Station Whose Datums Fill VerticalDatumDropDown ('': None Shown)
         stationDatums % Datums Already Loaded This Session, By Station Id (No Repeated Request When A Station Is Shown Again)
         preferredDatum = 'MSL' % Datum Kept When Switching Stations (Last User Choice)
@@ -171,7 +171,7 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
         end
 
         function load_station_datums(app)
-            % Datums Available At The Selected Station (Library: noaa_station_details). The Datum Must Match The CHS
+            % Datums Available At The Selected Station (Library: chess.NOAA.noaa_station_details). The Datum Must Match The CHS
             % Data Datum.
             station_id = app.StationDropDown.Value;
             if strcmp(station_id, app.datumsStationId)
@@ -188,7 +188,7 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
             app.UIFigure.Pointer = 'watch';
             drawnow;
             try
-                details = noaa_station_details(station_id, struct('greatlakes', false, 'harmonic_predictions', true,...
+                details = chess.NOAA.noaa_station_details(station_id, struct('greatlakes', false, 'harmonic_predictions', true,...
                     'water_level_inventory', false)); % Datums Only (No Water Level Inventory Request)
                 datums = details.datums;
             catch me
@@ -266,14 +266,14 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
             hold(ax, 'on');
             app.progressPatch = patch(ax, [0 0 0 0], [0 0 1 1], [0.30 0.60 0.85], 'EdgeColor', 'none');
             app.progressText = text(ax, 0.5, 0.5, '', 'HorizontalAlignment', 'center', 'FontSize', 10);
-            % Data Range: 1 Year From The Start Date (create_tide_file)
+            % Data Range: 1 Year From The Start Date (chess.NOAA.create_tide_file)
             app.StartDatePicker.Value = dateshift(datetime('today'), 'start', 'year');
             app.StartDatePickerValueChanged([]);
-            % Harmonic Tide Prediction Stations (Library: noaa_station_catalog)
+            % Harmonic Tide Prediction Stations (Library: chess.NOAA.noaa_station_catalog)
             app.UIFigure.Pointer = 'watch';
             drawnow;
             try
-                catalog = noaa_station_catalog(struct('lists', {{'tidepredictions'}}));
+                catalog = chess.NOAA.noaa_station_catalog(struct('lists', {{'tidepredictions'}}));
             catch me
                 app.UIFigure.Pointer = 'arrow';
                 app.StationDropDown.Items = {'-'};
@@ -318,7 +318,7 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
 
         % Value changed function: StartDatePicker
         function StartDatePickerValueChanged(app, event)
-            % End Date = Start + 1 Year - 1 Day (create_tide_file Downloads One Year)
+            % End Date = Start + 1 Year - 1 Day (chess.NOAA.create_tide_file Downloads One Year)
             if isnat(app.StartDatePicker.Value)
                 app.StartDatePicker.Value = dateshift(datetime('today'), 'start', 'year');
             end
@@ -328,15 +328,15 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
 
         % Button pushed function: GetDataButton
         function GetDataButtonPushed(app, event)
-            % Download One Year Of Hourly Predictions (Library: create_tide_file) Into <project>\Tides
+            % Download One Year Of Hourly Predictions Into The Project And Add The Tide File (Library:
+            % chess.Project.download_tide_file -> chess.NOAA.create_tide_file, <project>\Tides, Full Path Kept)
             [~, name, ~] = fileparts(strtrim(app.OutputFileEditField.Value));
             name = regexprep(name, '[\\/:*?"<>|]', '_');
             if isempty(name)
                 uialert(app.UIFigure, 'Enter an output file name.', 'Output File');
                 return
             end
-            out_dir = fullfile(app.wProj.path, app.wProj.name, 'Tides');
-            out_file = fullfile(out_dir, [name '.csv']);
+            out_file = app.wProj.tide_file_path(name);
             if isfile(out_file)
                 answer = uiconfirm(app.UIFigure, [name '.csv already exists in the project. Overwrite it?'], 'Output File',...
                     'Options', {'Overwrite', 'Cancel'}, 'DefaultOption', 2, 'CancelOption', 2);
@@ -344,24 +344,16 @@ classdef NOAATidesPredictionsUI < matlab.apps.AppBase
                     return
                 end
             end
-            if ~isfolder(out_dir)
-                mkdir(out_dir);
-            end
             app.GetDataButton.Enable = 'off';
             app.set_progress(0, 'Requesting predictions...');
             try
-                create_tide_file(app.datumsStationId, app.VerticalDatumDropDown.Value,...
-                    char(string(app.StartDatePicker.Value, 'yyyyMMdd')), out_file,...
-                    @(varargin) app.set_progress(varargin{:}), struct('harmonic_predictions', true));
+                app.wProj.download_tide_file(app.datumsStationId, app.VerticalDatumDropDown.Value,...
+                    char(string(app.StartDatePicker.Value, 'yyyyMMdd')), name, @(varargin) app.set_progress(varargin{:}));
             catch me
                 app.set_progress(0, '');
                 app.GetDataButton.Enable = 'on';
                 uialert(app.UIFigure, me.message, 'NOAA Tidal Predictions');
                 return
-            end
-            % Add To The Project (Full Path; The Run Tab Shows The File Name)
-            if ~any(strcmp(app.wProj.tide_files_list, out_file))
-                app.wProj.tide_files_list = [app.wProj.tide_files_list(:); {out_file}];
             end
             delete(app);
         end
