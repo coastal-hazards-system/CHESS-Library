@@ -14,10 +14,12 @@ function library_folder = chess_setup_path()
 %   Outputs:
 %     library_folder - full path of the CHESS_Library folder, char row vector
 %
-%   Tier: public
+%   The library itself is the chess package (CHESS_Library/+chess): its
+%   classes and functions are called as chess.<name>, e.g.
+%       model = chess.Model.create('CHESS_rubble_mound_inputs.xlsx');
 %
-%   See also call_input_parser, call_chs_data_formatter,
-%   call_chess_boundary_conditions, call_project_response.
+%   See also chess.Model, chess.ProtectionSystem, chess.CoastalHazardSystem,
+%   chess.ExtremeValueAnalysis.
 %
 %   Developed by: Fabian A. Garcia Moreno ERDC-CHL
 

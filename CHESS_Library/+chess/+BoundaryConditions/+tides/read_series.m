@@ -1,0 +1,39 @@
+function tide = read_series(tide_file)
+% read_series  Read the tide record of a tide file (cached per session).
+%   tide = read_series(tide_file)
+%
+%   Tide record of a tide file: the last column, header row skipped
+%   (chess.NOAA.create_tide_file layout: Date, Prediction [m]). A file found only on
+%   the MATLAB path is resolved to its full path first. Parsed files are
+%   cached for the MATLAB session (chess.BoundaryConditions.tides.random_tide runs once per dataset,
+%   draw_tide_indices once per run, the storm event viewer on every draw).
+%   A cached record is used only while the file's modification date and
+%   size are unchanged, so an edited or replaced file is read again.
+%   "clear read_series" empties the cache.
+%
+%   Inputs:
+%     tide_file - tide file path, char or string
+%   Outputs:
+%     tide - tide record (last column of the file; chess.NOAA.create_tide_file: [m]),
+%            column double
+%
+%   See also chess.NOAA.create_tide_file, chess.BoundaryConditions.tides.random_tide, draw_tide_indices.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
+
+persistent cache
+if isempty(cache)
+    cache = containers.Map('KeyType', 'char', 'ValueType', 'any');
+end
+% A File Found Only On The MATLAB Path (Callers Check exist(...,'file')): Resolved To Its Full Path First
+if ~isfile(tide_file) && ~isempty(which(tide_file))
+    tide_file = which(tide_file);
+end
+info = dir(tide_file);
+key = sprintf('%s|%.10f|%d', lower(char(tide_file)), info.datenum, info.bytes);
+if ~isKey(cache, key)
+    data = readmatrix(tide_file, 'NumHeaderLines', 1);
+    cache(key) = data(:, end);
+end
+tide = cache(key);
+end

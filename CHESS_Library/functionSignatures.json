@@ -1,0 +1,3171 @@
+{
+  "_schemaVersion": "1.0.0",
+  "chess.BoundaryConditions.storm_duration": {
+    "inputs": [
+      {"name": "x", "kind": "required", "type": ["double"]},
+      {"name": "t", "kind": "required", "type": ["double"]},
+      {"name": "frac", "kind": "ordered", "type": ["double"]},
+      {"name": "shift_threshold", "kind": "ordered", "type": ["logical"]},
+      {"name": "min_duration_hr", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "r"}
+    ]
+  },
+  "chess.BoundaryConditions.tides.random_tide": {
+    "inputs": [
+      {"name": "tide", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "start_hours", "kind": "required", "type": ["double"]},
+      {"name": "storm_lengths", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "SWL"}
+    ]
+  },
+  "chess.BoundaryConditions.tides.read_series": {
+    "inputs": [
+      {"name": "tide_file", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "tide", "type": ["double"]}
+    ]
+  },
+  "chess.BoundaryConditions.tides.start_hours": {
+    "inputs": [
+      {"name": "n_tide", "kind": "required", "type": ["double"]},
+      {"name": "t_size", "kind": "required", "type": ["cell"]},
+      {"name": "tide_indx", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "tide_indx"}
+    ]
+  },
+  "chess.BoundaryConditions.water_levels.sea_level_change": {
+    "inputs": [
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "sea_level_change", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "SWL"}
+    ]
+  },
+  "chess.BoundaryConditions.waves.depth_limitation": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "h", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Hm0"},
+      {"name": "Depth_Limited_Waves"}
+    ]
+  },
+  "chess.BoundaryConditions.waves.period_from_peak": {
+    "inputs": [
+      {"name": "T_in", "kind": "required", "type": ["double"]},
+      {"name": "kind", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "T"}
+    ]
+  },
+  "chess.BoundaryConditions.waves.wave_number": {
+    "inputs": [
+      {"name": "T", "kind": "required", "type": ["double"]},
+      {"name": "depth", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "km"},
+      {"name": "kmest"},
+      {"name": "ERROR"}
+    ]
+  },
+  "chess.CoastalHazardSystem": {
+    "inputs": [
+      {"name": "source", "kind": "required", "type": ["char"]},
+      {"name": "chs_dependencies", "kind": "required", "type": ["char"]},
+      {"name": "database_file", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.apply_datum_offset": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.CoastalHazardSystem"},
+      {"name": "offset", "kind": "required", "type": ["double"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.bias_and_uncertainty": {
+    "inputs": [
+      {"name": "chs_dependencies", "kind": "required", "type": ["char"]},
+      {"name": "region", "kind": "required", "type": ["char"]},
+      {"name": "sp_ID", "kind": "required", "type": ["double"]},
+      {"name": "sp_coords", "kind": "required", "type": ["double"]},
+      {"name": "prev_info", "kind": "ordered", "type": ["struct"]},
+      {"name": "prompt", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "bnu"}
+    ]
+  },
+  "chess.CoastalHazardSystem.build": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.CoastalHazardSystem"},
+      {"name": "storm_sampling", "kind": "required", "type": ["char"]},
+      {"name": "use_peaks", "kind": "required", "type": ["double"]},
+      {"name": "use_timeseries", "kind": "required", "type": ["double"]},
+      {"name": "create_wlp", "kind": "required", "type": ["double"]},
+      {"name": "create_whp", "kind": "required", "type": ["double"]},
+      {"name": "print_progress", "kind": "ordered", "type": ["numeric"]},
+      {"name": "progress_function", "kind": "ordered", "type": ["function_handle"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.build_storm_database": {
+    "inputs": [
+      {"name": "CHS_Data", "kind": "required", "type": ["struct"]},
+      {"name": "options", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "storm"},
+      {"name": "prob_mass"},
+      {"name": "db_info"}
+    ]
+  },
+  "chess.CoastalHazardSystem.covers": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.CoastalHazardSystem"},
+      {"name": "storm_sampling", "kind": "required", "type": ["char"]},
+      {"name": "use_peaks", "kind": "required", "type": ["double"]},
+      {"name": "use_timeseries", "kind": "required", "type": ["double"]},
+      {"name": "create_wlp", "kind": "required", "type": ["double"]},
+      {"name": "create_whp", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "covered"},
+      {"name": "storm_type_ok"},
+      {"name": "data_type_ok"},
+      {"name": "datasets_ok"}
+    ]
+  },
+  "chess.CoastalHazardSystem.create_db_info": {
+    "inputs": [
+      {"name": "bnu", "kind": "required", "type": ["struct"]},
+      {"name": "tc_bias_corrected", "kind": "required", "type": ["double"]},
+      {"name": "Nyrs_XC", "kind": "required", "type": ["double"]},
+      {"name": "Nstm_XC", "kind": "required", "type": ["double"]},
+      {"name": "source_file", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "db_info"}
+    ]
+  },
+  "chess.CoastalHazardSystem.curate_storm_forcing": {
+    "inputs": [
+      {"name": "dataset", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "dataset"}
+    ]
+  },
+  "chess.CoastalHazardSystem.data_attributes": {
+    "inputs": [
+      {"name": "CHS_Data", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "vertical_datum", "type": ["char"]},
+      {"name": "sp_coords", "type": ["double"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.delete_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.CoastalHazardSystem"}
+    ]
+  },
+  "chess.CoastalHazardSystem.dependencies_message": {
+    "inputs": [
+      {"name": "storm_sampling", "kind": "required", "type": ["char"]},
+      {"name": "region", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "msg", "type": ["char"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.dependency_files": {
+    "inputs": [
+      {"name": "chs_dependencies_folder", "kind": "required", "type": ["char"]},
+      {"name": "region", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "files", "type": ["struct"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.file_name_parts": {
+    "inputs": [
+      {"name": "file_names", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "parts", "type": ["struct"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.floor_wave_height": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Hm0"},
+      {"name": "Tp"}
+    ]
+  },
+  "chess.CoastalHazardSystem.import_user_storm": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.CoastalHazardSystem"},
+      {"name": "storm_sampling", "kind": "required", "type": ["char"]},
+      {"name": "use_peaks", "kind": "required", "type": ["double"]},
+      {"name": "use_timeseries", "kind": "required", "type": ["double"]},
+      {"name": "create_wlp", "kind": "required", "type": ["double"]},
+      {"name": "create_whp", "kind": "required", "type": ["double"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.inspect": {
+    "inputs": [
+      {"name": "source", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "info"}
+    ]
+  },
+  "chess.CoastalHazardSystem.is_valid_db_info": {
+    "inputs": [
+      {"name": "db_info", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "valid"}
+    ]
+  },
+  "chess.CoastalHazardSystem.load": {
+    "inputs": [
+      {"name": "database_file", "kind": "required", "type": ["char"]},
+      {"name": "chs_dependencies", "kind": "ordered", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "chs"}
+    ]
+  },
+  "chess.CoastalHazardSystem.read": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.CoastalHazardSystem"}
+    ],
+    "outputs": [
+      {"name": "storm"},
+      {"name": "prob_mass"}
+    ]
+  },
+  "chess.CoastalHazardSystem.savepoint_grid_row": {
+    "inputs": [
+      {"name": "files", "kind": "required", "type": ["struct"]},
+      {"name": "sp_ID", "kind": "required", "type": ["double"]},
+      {"name": "sp_coords", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "loc"}
+    ]
+  },
+  "chess.CoastalHazardSystem.set_study": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.CoastalHazardSystem"},
+      {"name": "region", "kind": "required", "type": ["char"]},
+      {"name": "savepoint_id", "kind": "required", "type": ["double"]},
+      {"name": "swl_uncertainty", "kind": "ordered", "type": ["double"]},
+      {"name": "hm0_uncertainty", "kind": "ordered", "type": ["double"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.source_contents": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.CoastalHazardSystem"}
+    ],
+    "outputs": [
+      {"name": "contents"}
+    ]
+  },
+  "chess.CoastalHazardSystem.storm_data_covers": {
+    "inputs": [
+      {"name": "storm", "kind": "required", "type": ["struct"]},
+      {"name": "prob_mass", "kind": "required", "type": ["struct"]},
+      {"name": "storm_sampling", "kind": "required", "type": ["char"]},
+      {"name": "use_peaks", "kind": "required", "type": ["double"]},
+      {"name": "use_timeseries", "kind": "required", "type": ["double"]},
+      {"name": "create_wlp", "kind": "required", "type": ["double"]},
+      {"name": "create_whp", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "stm_type_chk"},
+      {"name": "data_type_chk"},
+      {"name": "alt_chk"}
+    ]
+  },
+  "chess.CoastalHazardSystem.storm_file_names": {
+    "inputs": [
+      {"name": "file_names", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "storm_names"},
+      {"name": "is_storm"}
+    ]
+  },
+  "chess.CoastalHazardSystem.storm_file_slots": {
+    "inputs": [
+      {"name": "file_names", "kind": "required", "type": ["cell"]},
+      {"name": "request", "kind": "ordered", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "slots"},
+      {"name": "errors"},
+      {"name": "study"}
+    ]
+  },
+  "chess.CoastalHazardSystem.storm_mat_name_parts": {
+    "inputs": [
+      {"name": "file", "kind": "required", "type": ["file=*.mat"]}
+    ],
+    "outputs": [
+      {"name": "parts", "type": ["struct"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.strip_data_folders": {
+    "inputs": [
+      {"name": "CHS_Data", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "CHS_Data", "type": ["struct"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.study_identity": {
+    "inputs": [
+      {"name": "file_names", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "study"},
+      {"name": "errors"}
+    ]
+  },
+  "chess.CoastalHazardSystem.summarize_datasets": {
+    "inputs": [
+      {"name": "storm", "kind": "required", "type": ["struct"]},
+      {"name": "prob_mass", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "datasets"}
+    ]
+  },
+  "chess.CoastalHazardSystem.validate_user_prob_mass": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "prob_mass", "kind": "required", "type": ["struct"]},
+      {"name": "storm", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "prob_mass"}
+    ]
+  },
+  "chess.CoastalHazardSystem.validate_user_storm": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "storm", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "storm"}
+    ]
+  },
+  "chess.CoastalHazardSystem.zip_h5_attributes": {
+    "inputs": [
+      {"name": "zip_name", "kind": "required", "type": ["file=*.zip"]},
+      {"name": "h5_file", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "vertical_datum", "type": ["char"]},
+      {"name": "sp_coords", "type": ["double"]}
+    ]
+  },
+  "chess.CoastalHazardSystem.zip_h5_names": {
+    "inputs": [
+      {"name": "zip_name", "kind": "required", "type": ["file=*.zip"]}
+    ],
+    "outputs": [
+      {"name": "h5_names", "type": ["cell"]}
+    ]
+  },
+  "chess.Common.chess_units": {
+    "inputs": [
+      {"name": "unit_kind", "kind": "ordered", "type": ["char", "choices={'length','mass','density','force','pressure','time','angle','velocity','discharge_per_length','volume_per_length','force_per_length','dimensionless','system','convert'}"]},
+      {"name": "varargin", "kind": "ordered", "repeating": true}
+    ],
+    "outputs": [
+      {"name": "out", "type": [["char"], ["struct"], ["double"]]}
+    ]
+  },
+  "chess.Common.discrete_standard_normal_scores": {
+    "inputs": [
+      {"name": "storm_type", "kind": "required", "type": ["char", "choices={'XC','TC'}"]}
+    ],
+    "outputs": [
+      {"name": "z_scores", "type": ["double"]}
+    ]
+  },
+  "chess.Common.disp_toggle": {
+    "inputs": [
+      {"name": "response", "kind": "required", "type": ["logical"]},
+      {"name": "prompt", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.Common.drop_z0": {
+    "inputs": [
+      {"name": "data", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "data"}
+    ]
+  },
+  "chess.Common.haversine_km": {
+    "inputs": [
+      {"name": "lat1", "kind": "required", "type": ["double"]},
+      {"name": "lon1", "kind": "required", "type": ["double"]},
+      {"name": "lat2", "kind": "required", "type": ["double"]},
+      {"name": "lon2", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "d_km"}
+    ]
+  },
+  "chess.Common.lcs_columns": {
+    "inputs": [
+      {"name": "data_type", "kind": "ordered", "type": ["char", "choices={'Peaks','Timeseries'}"]}
+    ],
+    "outputs": [
+      {"name": "C", "type": ["struct"]}
+    ]
+  },
+  "chess.Common.mean_lake_level": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "lake_level"}
+    ]
+  },
+  "chess.Common.physical_constants": {
+    "inputs": [],
+    "outputs": [
+      {"name": "c", "type": ["struct"]}
+    ]
+  },
+  "chess.Common.pros_forcing_curves": {
+    "inputs": [],
+    "outputs": [
+      {"name": "names"}
+    ]
+  },
+  "chess.Common.replicate_z0_col": {
+    "inputs": [
+      {"name": "n_cols", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "z0"}
+    ]
+  },
+  "chess.Common.response_hazard_grid": {
+    "inputs": [
+      {"name": "name", "kind": "required", "type": ["char"]},
+      {"name": "response_values", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "grid"}
+    ]
+  },
+  "chess.Common.response_library_headers": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "staID", "kind": "required", "type": ["char"]},
+      {"name": "unit_system", "kind": "ordered", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "U_a"},
+      {"name": "U_r"},
+      {"name": "uncert_treatment_jpm"},
+      {"name": "unit_label"},
+      {"name": "var_name"},
+      {"name": "y_label"},
+      {"name": "y_scale_log"}
+    ]
+  },
+  "chess.Common.response_registry": {
+    "inputs": [
+      {"name": "options", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "out", "type": [["char"], ["struct"]]}
+    ]
+  },
+  "chess.Common.storm_types_for_sampling": {
+    "inputs": [
+      {"name": "storm_sampling", "kind": "required", "type": ["char", "choices={'XC','TC','CC'}"]},
+      {"name": "order", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "storm_types", "type": ["cell"]}
+    ]
+  },
+  "chess.Config.apply_rules": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]}
+    ]
+  },
+  "chess.Config.from_SI": {
+    "inputs": [
+      {"name": "s", "kind": "required", "type": ["struct"]},
+      {"name": "unit_system", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "s"}
+    ]
+  },
+  "chess.Config.input_rule": {
+    "inputs": [
+      {"name": "name", "kind": "required", "type": ["char"]},
+      {"name": "kind", "kind": "required", "type": ["char"]},
+      {"name": "varargin", "kind": "ordered", "repeating": true}
+    ],
+    "outputs": [
+      {"name": "rule"}
+    ]
+  },
+  "chess.Config.read": {
+    "inputs": [
+      {"name": "input_file", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]}
+    ]
+  },
+  "chess.Config.read_sections": {
+    "inputs": [
+      {"name": "file", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "sections", "type": ["struct"]},
+      {"name": "rows", "type": ["cell"]}
+    ]
+  },
+  "chess.Config.to_SI": {
+    "inputs": [
+      {"name": "s", "kind": "required", "type": ["struct"]},
+      {"name": "unit_system", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "s"}
+    ]
+  },
+  "chess.Config.unit_fields": {
+    "inputs": [],
+    "outputs": [
+      {"name": "names"},
+      {"name": "kinds"}
+    ]
+  },
+  "chess.Config.validate": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "problems"}
+    ]
+  },
+  "chess.Equations.ann_rubblemound_stability": {
+    "inputs": [
+      {"name": "Hs", "kind": "required", "type": ["double"]},
+      {"name": "Tm", "kind": "required", "type": ["double"]},
+      {"name": "Tm10", "kind": "required", "type": ["double"]},
+      {"name": "d", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "duration", "kind": "required", "type": ["double"]},
+      {"name": "hc", "kind": "required", "type": ["double"]},
+      {"name": "B", "kind": "required", "type": ["double"]},
+      {"name": "cot_a", "kind": "required", "type": ["double"]},
+      {"name": "cot_b", "kind": "required", "type": ["double"]},
+      {"name": "tan_m", "kind": "required", "type": ["double"]},
+      {"name": "P", "kind": "required", "type": ["double"]},
+      {"name": "gamma_f", "kind": "required", "type": ["double"]},
+      {"name": "S_SS", "kind": "required", "type": ["double"]},
+      {"name": "S_LS", "kind": "required", "type": ["double"]},
+      {"name": "delta", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Dn50_SS"},
+      {"name": "Dn50_LS"}
+    ]
+  },
+  "chess.Equations.berm_influence_factor": {
+    "inputs": [
+      {"name": "berm_width", "kind": "required", "type": ["double"]},
+      {"name": "berm_elevation", "kind": "required", "type": ["double"]},
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "berm_slope_tana", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "gamma_b"}
+    ]
+  },
+  "chess.Equations.damaging_depth": {
+    "inputs": [
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "Ts", "kind": "required", "type": ["double"]},
+      {"name": "offshore_elevation", "kind": "required", "type": ["double"]},
+      {"name": "Ks", "kind": "required", "type": ["double"]},
+      {"name": "hs", "kind": "required", "type": ["double"]},
+      {"name": "d", "kind": "required", "type": ["double"]},
+      {"name": "Bm", "kind": "required", "type": ["double"]},
+      {"name": "berm_slope_tana", "kind": "required", "type": ["double"]},
+      {"name": "offshore_slope_tana", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "DamDepthElev"},
+      {"name": "DamDepth"}
+    ]
+  },
+  "chess.Equations.Eurotop_r2p_q_Final": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "T_m10", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "slope", "kind": "required", "type": ["double"]},
+      {"name": "gamma_f", "kind": "required", "type": ["double"]},
+      {"name": "gamma_beta_r2p", "kind": "required", "type": ["double"]},
+      {"name": "gamma_beta_OT", "kind": "required", "type": ["double"]},
+      {"name": "gamma_star", "kind": "required", "type": ["double"]},
+      {"name": "gamma_v", "kind": "required", "type": ["double"]},
+      {"name": "gamma_b", "kind": "required", "type": ["double"]},
+      {"name": "wall_toe", "kind": "required", "type": ["double"]},
+      {"name": "P", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]},
+      {"name": "structure_type", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "R2p"},
+      {"name": "R2p_SWL"},
+      {"name": "q"},
+      {"name": "q_overflow"},
+      {"name": "q_wave_ot"}
+    ]
+  },
+  "chess.Equations.eurotop_wave_transmission": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "B", "kind": "required", "type": ["double"]},
+      {"name": "tana", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Kt"}
+    ]
+  },
+  "chess.Equations.floodwall_nappe_response": {
+    "inputs": [
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "q", "kind": "required", "type": ["double"]},
+      {"name": "h_wall", "kind": "required", "type": ["double"]},
+      {"name": "rho_w", "kind": "required", "type": ["double"]},
+      {"name": "crest_elev", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "X_low"},
+      {"name": "theta_low"},
+      {"name": "X_up"},
+      {"name": "theta_up"},
+      {"name": "Bx"},
+      {"name": "X_c_surge"},
+      {"name": "theta_center"},
+      {"name": "Bjet"},
+      {"name": "Vjet"},
+      {"name": "Fjet"}
+    ]
+  },
+  "chess.Equations.goda_Hmax": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "Ts", "kind": "required", "type": ["double"]},
+      {"name": "Rayleigh_H250", "kind": "required", "type": ["double"]},
+      {"name": "hs", "kind": "required", "type": ["double"]},
+      {"name": "d", "kind": "required", "type": ["double"]},
+      {"name": "Bm", "kind": "required", "type": ["double"]},
+      {"name": "berm_slope_tana", "kind": "required", "type": ["double"]},
+      {"name": "offshore_slope_tana", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Hmax"},
+      {"name": "hb"}
+    ]
+  },
+  "chess.Equations.goda_vertical_wall_pressure_distribution": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "Ts", "kind": "required", "type": ["double"]},
+      {"name": "hs", "kind": "required", "type": ["double"]},
+      {"name": "d", "kind": "required", "type": ["double"]},
+      {"name": "hc", "kind": "required", "type": ["double"]},
+      {"name": "wall", "kind": "required", "type": ["struct"]},
+      {"name": "units", "kind": "required", "type": ["char"]},
+      {"name": "options", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "P"},
+      {"name": "eta_star"}
+    ]
+  },
+  "chess.Equations.leeside_armor_stone_damage": {
+    "inputs": [
+      {"name": "SLast", "kind": "required", "type": ["double"]},
+      {"name": "H", "kind": "required", "type": ["double"]},
+      {"name": "Tmm1", "kind": "required", "type": ["double"]},
+      {"name": "u1p_last", "kind": "required", "type": ["double"]},
+      {"name": "LDn", "kind": "required", "type": ["double"]},
+      {"name": "Lslp", "kind": "required", "type": ["double"]},
+      {"name": "Sslp", "kind": "required", "type": ["double"]},
+      {"name": "WL", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "Nz", "kind": "required", "type": ["double"]},
+      {"name": "Delta", "kind": "required", "type": ["double"]},
+      {"name": "K_ls1", "kind": "required", "type": ["double"]},
+      {"name": "K_ls2", "kind": "required", "type": ["double"]},
+      {"name": "crest_width", "kind": "required", "type": ["double"]},
+      {"name": "crest_elevation", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]},
+      {"name": "compute_S_submerged", "kind": "required", "type": ["double"]},
+      {"name": "cutoff_switch", "kind": "required", "type": ["double"]},
+      {"name": "cutoff", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "S"},
+      {"name": "u1p"}
+    ]
+  },
+  "chess.Equations.leeside_stability_margin": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "Tm10", "kind": "required", "type": ["double"]},
+      {"name": "h", "kind": "required", "type": ["double"]},
+      {"name": "Nz", "kind": "required", "type": ["double"]},
+      {"name": "structure_height", "kind": "required", "type": ["double"]},
+      {"name": "crest_width", "kind": "required", "type": ["double"]},
+      {"name": "leeside_slope", "kind": "required", "type": ["double"]},
+      {"name": "seaside_slope", "kind": "required", "type": ["double"]},
+      {"name": "Dn_ls", "kind": "required", "type": ["double"]},
+      {"name": "armor_delta", "kind": "required", "type": ["double"]},
+      {"name": "S_ls", "kind": "required", "type": ["double"]},
+      {"name": "k_ls1", "kind": "required", "type": ["double"]},
+      {"name": "k_ls2", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "G_ls"}
+    ]
+  },
+  "chess.Equations.legacy_rubblemound_stability": {
+    "inputs": [
+      {"name": "Hs", "kind": "required", "type": ["double"]},
+      {"name": "Tm", "kind": "required", "type": ["double"]},
+      {"name": "Tm10", "kind": "required", "type": ["double"]},
+      {"name": "d", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "duration", "kind": "required", "type": ["double"]},
+      {"name": "hc", "kind": "required", "type": ["double"]},
+      {"name": "B", "kind": "required", "type": ["double"]},
+      {"name": "cot_a", "kind": "required", "type": ["double"]},
+      {"name": "cot_b", "kind": "required", "type": ["double"]},
+      {"name": "tan_m", "kind": "required", "type": ["double"]},
+      {"name": "P", "kind": "required", "type": ["double"]},
+      {"name": "gamma_f", "kind": "required", "type": ["double"]},
+      {"name": "S_SS", "kind": "required", "type": ["double"]},
+      {"name": "S_LS", "kind": "required", "type": ["double"]},
+      {"name": "delta", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "km1", "kind": "required", "type": ["double"]},
+      {"name": "km2", "kind": "required", "type": ["double"]},
+      {"name": "K_ls1", "kind": "required", "type": ["double"]},
+      {"name": "K_ls2", "kind": "required", "type": ["double"]},
+      {"name": "submerged_correction", "kind": "required"}
+    ],
+    "outputs": [
+      {"name": "Dn50_SS"},
+      {"name": "Dn50_LS"}
+    ]
+  },
+  "chess.Equations.melby_Dn50_seaside_stability": {
+    "inputs": [
+      {"name": "Hsig", "kind": "required", "type": ["double"]},
+      {"name": "Tm", "kind": "required", "type": ["double"]},
+      {"name": "h", "kind": "required", "type": ["double"]},
+      {"name": "duration", "kind": "required", "type": ["double"]},
+      {"name": "Sslp", "kind": "required", "type": ["double"]},
+      {"name": "delta", "kind": "required", "type": ["double"]},
+      {"name": "P", "kind": "required", "type": ["double"]},
+      {"name": "S", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]},
+      {"name": "km1", "kind": "required", "type": ["double"]},
+      {"name": "km2", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Dn50_Melby"}
+    ]
+  },
+  "chess.Equations.melby_momentum_flux": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "h", "kind": "required", "type": ["double"]},
+      {"name": "Tm", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Mf"},
+      {"name": "A0"},
+      {"name": "A1"}
+    ]
+  },
+  "chess.Equations.oblique_waves_influence_factor": {
+    "inputs": [
+      {"name": "Nstrm", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "gamma_beta_r2p"},
+      {"name": "gamma_beta_q"}
+    ]
+  },
+  "chess.Equations.rock_roughness_influence_factor": {
+    "inputs": [
+      {"name": "H", "kind": "required", "type": ["double"]},
+      {"name": "Tmm1", "kind": "required", "type": ["double"]},
+      {"name": "slope", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "gamma_f"},
+      {"name": "xi_m10"}
+    ]
+  },
+  "chess.Equations.seaside_armor_stone_damage": {
+    "inputs": [
+      {"name": "depth", "kind": "required", "type": ["double"]},
+      {"name": "SLast", "kind": "required", "type": ["double"]},
+      {"name": "Hsig", "kind": "required", "type": ["double"]},
+      {"name": "Tm", "kind": "required", "type": ["double"]},
+      {"name": "crest_elevation", "kind": "required", "type": ["double"]},
+      {"name": "Sslp", "kind": "required", "type": ["double"]},
+      {"name": "SDn", "kind": "required", "type": ["double"]},
+      {"name": "SG", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]},
+      {"name": "P", "kind": "required", "type": ["double"]},
+      {"name": "Nz", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "Szerolim", "kind": "required", "type": ["double"]},
+      {"name": "cutoff", "kind": "required", "type": ["double"]},
+      {"name": "WL", "kind": "required", "type": ["double"]},
+      {"name": "cutoff_switch", "kind": "required", "type": ["double"]},
+      {"name": "km1", "kind": "required", "type": ["double"]},
+      {"name": "km2", "kind": "required", "type": ["double"]},
+      {"name": "Ks", "kind": "required", "type": ["double"]},
+      {"name": "dS", "kind": "required", "type": ["double"]},
+      {"name": "compute_S_submerged", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "S"},
+      {"name": "Szero"}
+    ]
+  },
+  "chess.Equations.seaside_stability_margin": {
+    "inputs": [
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "Tm", "kind": "required", "type": ["double"]},
+      {"name": "h", "kind": "required", "type": ["double"]},
+      {"name": "Nz", "kind": "required", "type": ["double"]},
+      {"name": "Dn_ss", "kind": "required", "type": ["double"]},
+      {"name": "armor_delta", "kind": "required", "type": ["double"]},
+      {"name": "S_ss", "kind": "required", "type": ["double"]},
+      {"name": "cem_P", "kind": "required", "type": ["double"]},
+      {"name": "seaside_slope", "kind": "required", "type": ["double"]},
+      {"name": "km1", "kind": "required", "type": ["double"]},
+      {"name": "k_ss", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "G_ss"}
+    ]
+  },
+  "chess.Equations.stone_size_validity": {
+    "inputs": [
+      {"name": "Dn50_SS", "kind": "required", "type": ["double"]},
+      {"name": "Dn50_LS", "kind": "required", "type": ["double"]},
+      {"name": "Hs", "kind": "required", "type": ["double"]},
+      {"name": "Tm", "kind": "required", "type": ["double"]},
+      {"name": "Tm10", "kind": "required", "type": ["double"]},
+      {"name": "d", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "duration", "kind": "required", "type": ["double"]},
+      {"name": "B", "kind": "required", "type": ["double"]},
+      {"name": "cot_a", "kind": "required", "type": ["double"]},
+      {"name": "cot_b", "kind": "required", "type": ["double"]},
+      {"name": "delta", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]},
+      {"name": "submerged_correction", "kind": "required"}
+    ],
+    "outputs": [
+      {"name": "invalid_SS"},
+      {"name": "invalid_LS"},
+      {"name": "rule"}
+    ]
+  },
+  "chess.Equations.submerged_stone_armor_stability": {
+    "inputs": [
+      {"name": "Hs", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "h", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "Dn50", "kind": "required", "type": ["double"]},
+      {"name": "hc", "kind": "required", "type": ["double"]},
+      {"name": "S", "kind": "required", "type": ["double"]},
+      {"name": "delta", "kind": "required", "type": ["double"]},
+      {"name": "g", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Dn50"},
+      {"name": "Dn50_tag"}
+    ]
+  },
+  "chess.Equations.surface_roughness_influence_factor": {
+    "inputs": [
+      {"name": "gamma_f", "kind": "required", "type": ["double"]},
+      {"name": "Hm0", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "gamma_f"}
+    ]
+  },
+  "chess.Equations.u1p_calc": {
+    "inputs": [
+      {"name": "wdth", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "z1p", "kind": "required", "type": ["double"]},
+      {"name": "Tmm1", "kind": "required", "type": ["double"]},
+      {"name": "H", "kind": "required", "type": ["double"]},
+      {"name": "Sslp", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "u1p"}
+    ]
+  },
+  "chess.Equations.van_gent_Dn50_leeside_stability": {
+    "inputs": [
+      {"name": "S_ls", "kind": "required", "type": ["double"]},
+      {"name": "Hsig", "kind": "required", "type": ["double"]},
+      {"name": "Tm10", "kind": "required", "type": ["double"]},
+      {"name": "Tm", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "crest_width", "kind": "required", "type": ["double"]},
+      {"name": "Sslp", "kind": "required", "type": ["double"]},
+      {"name": "Lslp", "kind": "required", "type": ["double"]},
+      {"name": "duration", "kind": "required", "type": ["double"]},
+      {"name": "delta", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]},
+      {"name": "K_ls1", "kind": "required", "type": ["double"]},
+      {"name": "K_ls2", "kind": "required", "type": ["double"]},
+      {"name": "gamma_f", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Dn50_Lee"}
+    ]
+  },
+  "chess.Equations.van_gent_leeside_slope_factor": {
+    "inputs": [
+      {"name": "leeside_slope", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "Hm0", "kind": "required", "type": ["double"]},
+      {"name": "r", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "a_ls"}
+    ]
+  },
+  "chess.Equations.wall_influence_factor": {
+    "inputs": [
+      {"name": "crest_elevation", "kind": "required", "type": ["double"]},
+      {"name": "toe_elevation", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "strucType", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "gamma_v"},
+      {"name": "gamma_star"}
+    ]
+  },
+  "chess.Equations.z1p_calc": {
+    "inputs": [
+      {"name": "H", "kind": "required", "type": ["double"]},
+      {"name": "Tmm1", "kind": "required", "type": ["double"]},
+      {"name": "Rc", "kind": "required", "type": ["double"]},
+      {"name": "Sslp", "kind": "required", "type": ["double"]},
+      {"name": "grav", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "z1p"}
+    ]
+  },
+  "chess.Export.results": {
+    "inputs": [
+      {"name": "responses", "kind": "required", "type": ["struct"]},
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "paths", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "export_folder"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis": {
+    "inputs": [
+      {"name": "varargin", "kind": "ordered", "repeating": true}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.aef_to_aep": {
+    "inputs": [
+      {"name": "aef", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "aep"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.aep_to_aef": {
+    "inputs": [
+      {"name": "aep", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "aef"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.apply_uncertainty": {
+    "inputs": [
+      {"name": "value", "kind": "required", "type": ["double"]},
+      {"name": "absolute_uncertainty", "kind": "required", "type": ["double"]},
+      {"name": "relative_uncertainty", "kind": "required", "type": ["double"]},
+      {"name": "z_scores", "kind": "required", "type": ["double"]},
+      {"name": "option_name", "kind": "ordered", "type": ["char", "choices={'partition'}"]},
+      {"name": "partition", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "value"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.combine_storm_hazards": {
+    "inputs": [
+      {"name": "tc_prob", "kind": "required", "type": ["double"]},
+      {"name": "xc_prob", "kind": "required", "type": ["double"]},
+      {"name": "xc_resp_vector", "kind": "required", "type": ["double"]},
+      {"name": "aep_list", "kind": "required", "type": ["double"]},
+      {"name": "log_scale", "kind": "required", "type": ["double"]},
+      {"name": "prc", "kind": "required", "type": ["double"]},
+      {"name": "u_a", "kind": "required", "type": ["double"]},
+      {"name": "resp_var", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "aep_out"},
+      {"name": "combined_aep"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.combined_uncertainty": {
+    "inputs": [
+      {"name": "value", "kind": "required", "type": ["double"]},
+      {"name": "absolute_uncertainty", "kind": "required", "type": ["double"]},
+      {"name": "relative_uncertainty", "kind": "required", "type": ["double"]},
+      {"name": "treatment", "kind": "ordered", "type": ["char"]},
+      {"name": "tide_uncertainty", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "sigma"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.exceedance_at_grid": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ExtremeValueAnalysis"},
+      {"name": "levels", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "x_grid"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.exceedance_at_response": {
+    "inputs": [
+      {"name": "curve_aef", "kind": "required", "type": ["double"]},
+      {"name": "curve_response", "kind": "required"},
+      {"name": "levels", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "aef"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.hazard_plot_frequencies": {
+    "inputs": [],
+    "outputs": [
+      {"name": "aef"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.hazard_table_probabilities": {
+    "inputs": [
+      {"name": "use_aep", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "table_x"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.JointProbabilityMethod.compute_hazard": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ExtremeValueAnalysis.JointProbabilityMethod"},
+      {"name": "response", "kind": "required", "type": ["double"]},
+      {"name": "probability_mass", "kind": "required", "type": ["double"]},
+      {"name": "absolute_uncertainty", "kind": "required", "type": ["double"]},
+      {"name": "relative_uncertainty", "kind": "required", "type": ["double"]},
+      {"name": "skew_tides", "kind": "ordered", "type": ["double"]},
+      {"name": "label", "kind": "ordered", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "hazard"},
+      {"name": "obj"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.JointProbabilityMethod.plot_hazard_curve": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ExtremeValueAnalysis.JointProbabilityMethod"},
+      {"name": "hazard", "kind": "required", "type": ["struct"]}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.ProbabilisticSimulationTechnique.compute_hazard": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ExtremeValueAnalysis.ProbabilisticSimulationTechnique"},
+      {"name": "response", "kind": "required", "type": ["double"]},
+      {"name": "time", "kind": "ordered", "type": ["double"]},
+      {"name": "response_with_tides", "kind": "ordered", "type": ["double"]},
+      {"name": "label", "kind": "ordered", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "hazard"},
+      {"name": "obj"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.ProbabilisticSimulationTechnique.peaks_over_threshold": {
+    "inputs": [
+      {"name": "dt", "kind": "required", "type": ["double"]},
+      {"name": "Resp", "kind": "required", "type": ["struct"]},
+      {"name": "tLag", "kind": "required", "type": ["double"]},
+      {"name": "lambda", "kind": "required", "type": ["double"]},
+      {"name": "Nyrs", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "POTout"},
+      {"name": "Threshold"}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.ProbabilisticSimulationTechnique.plot_hazard_curve": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ExtremeValueAnalysis.ProbabilisticSimulationTechnique"},
+      {"name": "hazard", "kind": "required", "type": ["struct"]}
+    ]
+  },
+  "chess.ExtremeValueAnalysis.uncertainty_after_partition": {
+    "inputs": [
+      {"name": "absolute_uncertainty", "kind": "required", "type": ["double"]},
+      {"name": "relative_uncertainty", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "absolute_uncertainty"},
+      {"name": "relative_uncertainty"}
+    ]
+  },
+  "chess.Hotstart": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "saved_config", "kind": "ordered", "type": ["struct"]}
+    ]
+  },
+  "chess.Hotstart.any_field_changed": {
+    "inputs": [
+      {"name": "a", "kind": "required", "type": ["struct"]},
+      {"name": "b", "kind": "required", "type": ["struct"]},
+      {"name": "field_names", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "changed"},
+      {"name": "changed_field"}
+    ]
+  },
+  "chess.Hotstart.apply": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Hotstart"},
+      {"name": "level", "kind": "required", "type": ["char", "choices={'full','reuse_sampling','resample','cold'}"]},
+      {"name": "is_life_cycle", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]}
+    ]
+  },
+  "chess.Hotstart.dependency_fields": {
+    "inputs": [],
+    "outputs": [
+      {"name": "dependency_fields"}
+    ]
+  },
+  "chess.Hotstart.forcing_coverage": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "project_forcing", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "covers"},
+      {"name": "missing"}
+    ]
+  },
+  "chess.Hotstart.forcing_covers": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Hotstart"}
+    ],
+    "outputs": [
+      {"name": "covers"},
+      {"name": "project_forcing"},
+      {"name": "missing"}
+    ]
+  },
+  "chess.Hotstart.plan": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Hotstart"},
+      {"name": "is_life_cycle", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "level"},
+      {"name": "reason"},
+      {"name": "why"}
+    ]
+  },
+  "chess.Hotstart.resolve": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Hotstart"}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]}
+    ]
+  },
+  "chess.Model": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "protection_system", "kind": "required", "type": [["chess.ProtectionSystem"], ["struct"]]},
+      {"name": "storm_database", "kind": "ordered", "type": "chess.CoastalHazardSystem"}
+    ]
+  },
+  "chess.Model.apply_storm_database_info": {
+    "inputs": [
+      {"name": "db_info", "kind": "required", "type": ["struct"]},
+      {"name": "config", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]}
+    ]
+  },
+  "chess.Model.build_forcing": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model"},
+      {"name": "storm", "kind": "ordered", "type": ["struct"]},
+      {"name": "prob_mass", "kind": "ordered", "type": ["struct"]},
+      {"name": "progress_function", "kind": "ordered", "type": ["function_handle"]}
+    ],
+    "outputs": [
+      {"name": "forcing"}
+    ]
+  },
+  "chess.Model.check_offshore_elevation": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]}
+    ]
+  },
+  "chess.Model.compute_hydraulic_responses": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model"},
+      {"name": "forcing", "kind": "required", "type": [["struct"], ["cell"]]},
+      {"name": "storm_maxima", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "responses"}
+    ]
+  },
+  "chess.Model.compute_responses": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model"},
+      {"name": "forcing", "kind": "required", "type": [["struct"], ["cell"]]}
+    ],
+    "outputs": [
+      {"name": "responses"}
+    ]
+  },
+  "chess.Model.couple_to_stage1": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "structure", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]},
+      {"name": "structure", "type": ["struct"]}
+    ]
+  },
+  "chess.Model.create": {
+    "inputs": [
+      {"name": "source", "kind": "required", "type": [["char"], ["struct"]]}
+    ],
+    "outputs": [
+      {"name": "model"}
+    ]
+  },
+  "chess.Model.Deterministic.workflow_input_rules": {
+    "inputs": [],
+    "outputs": [
+      {"name": "rules"}
+    ]
+  },
+  "chess.Model.export_results": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model"},
+      {"name": "responses", "kind": "ordered", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "export_folder"}
+    ]
+  },
+  "chess.Model.for_workflow": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "protection_system", "kind": "required", "type": [["chess.ProtectionSystem"], ["struct"]]},
+      {"name": "storm_database", "kind": "ordered", "type": "chess.CoastalHazardSystem"}
+    ],
+    "outputs": [
+      {"name": "model"}
+    ]
+  },
+  "chess.Model.input_rules": {
+    "inputs": [
+      {"name": "workflow", "kind": "required", "type": ["numeric", "scalar"]}
+    ],
+    "outputs": [
+      {"name": "rules"}
+    ]
+  },
+  "chess.Model.LifeCycle.armor_reliability": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model.LifeCycle"},
+      {"name": "life_cycles", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "PF_Summary"},
+      {"name": "Reliab_Summary"}
+    ]
+  },
+  "chess.Model.LifeCycle.convergence_check": {
+    "inputs": [
+      {"name": "lambda", "kind": "required", "type": ["double"]},
+      {"name": "N", "kind": "required", "type": ["double"]},
+      {"name": "nLC", "kind": "required", "type": ["double"]},
+      {"name": "tol", "kind": "required", "type": ["double"]},
+      {"name": "c", "kind": "required", "type": ["double"]},
+      {"name": "p", "kind": "required", "type": ["double"]},
+      {"name": "stm_type", "kind": "required", "type": ["char"]},
+      {"name": "quiet", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "res"}
+    ]
+  },
+  "chess.Model.LifeCycle.convergence_checks": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "prob_mass", "kind": "required", "type": ["struct"]},
+      {"name": "stm_types", "kind": "ordered", "type": ["cell"]},
+      {"name": "quiet", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "checks"}
+    ]
+  },
+  "chess.Model.LifeCycle.damage_progression": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model.LifeCycle"},
+      {"name": "life_cycles", "kind": "required", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "results"}
+    ]
+  },
+  "chess.Model.LifeCycle.reference_reuse": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "reuse"}
+    ]
+  },
+  "chess.Model.LifeCycle.sampling_mode": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "mode"}
+    ]
+  },
+  "chess.Model.LifeCycle.workflow_input_rules": {
+    "inputs": [],
+    "outputs": [
+      {"name": "rules"}
+    ]
+  },
+  "chess.Model.LifeCycle.yearly_curve": {
+    "inputs": [
+      {"name": "data", "kind": "required", "type": ["double"]},
+      {"name": "resp_vec", "kind": "required", "type": ["cell"]},
+      {"name": "nYears", "kind": "required", "type": ["double"]},
+      {"name": "p", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Smax"},
+      {"name": "SPcurves"},
+      {"name": "yBox"}
+    ]
+  },
+  "chess.Model.multiline_inherited_fields": {
+    "inputs": [],
+    "outputs": [
+      {"name": "fields"}
+    ]
+  },
+  "chess.Model.prepare_storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model"}
+    ]
+  },
+  "chess.Model.Pros.combine_hazard_curves": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model.Pros"},
+      {"name": "tc_curves", "kind": "required"},
+      {"name": "xc_curves", "kind": "required"}
+    ],
+    "outputs": [
+      {"name": "cc_curves"}
+    ]
+  },
+  "chess.Model.Pros.frequency_based_hazard_curves": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model.Pros"},
+      {"name": "hazard_curves", "kind": "required", "type": ["struct"]},
+      {"name": "storm_type", "kind": "required", "type": ["char", "choices={'XC','TC','CC'}"]},
+      {"name": "response_name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "fb_curve"}
+    ]
+  },
+  "chess.Model.Pros.response_based_hazard_curves": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model.Pros"},
+      {"name": "responses", "kind": "required", "type": ["struct"]},
+      {"name": "probability_mass", "kind": "ordered", "type": ["double"]},
+      {"name": "outPath", "kind": "ordered", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "hazard_curves"}
+    ]
+  },
+  "chess.Model.Pros.workflow_input_rules": {
+    "inputs": [],
+    "outputs": [
+      {"name": "rules"}
+    ]
+  },
+  "chess.Model.run": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Model"}
+    ],
+    "outputs": [
+      {"name": "responses"},
+      {"name": "forcing"}
+    ]
+  },
+  "chess.Model.workflows": {
+    "inputs": [
+      {"name": "workflow_number", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "workflows"}
+    ]
+  },
+  "chess.NOAA.create_tide_file": {
+    "inputs": [
+      {"name": "station", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "datum", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "start_date", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "outName", "kind": "required", "type": ["file=*.csv"]},
+      {"name": "progress_fcn", "kind": "ordered", "type": ["function_handle"]},
+      {"name": "options", "kind": "ordered", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "data_table", "type": ["table"]}
+    ]
+  },
+  "chess.NOAA.download_noaa_tide_predictions": {
+    "inputs": [
+      {"name": "station_id", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "datum", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "first", "kind": "required", "type": ["datetime"]},
+      {"name": "last", "kind": "required", "type": ["datetime"]},
+      {"name": "interval", "kind": "ordered", "type": ["char", "choices={'1','6','15','30','h','hilo'}"]},
+      {"name": "options", "kind": "ordered", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "predictions", "type": ["table"]}
+    ]
+  },
+  "chess.NOAA.download_noaa_water_levels": {
+    "inputs": [
+      {"name": "station_id", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "api_product", "kind": "required", "type": ["char", "choices={'water_level','hourly_height','high_low','daily_mean','monthly_mean'}"]},
+      {"name": "datum", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "first", "kind": "required", "type": [["datetime"], ["double"]]},
+      {"name": "last", "kind": "required", "type": [["datetime"], ["double"]]},
+      {"name": "options", "kind": "ordered", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "water_levels", "type": ["table"]},
+      {"name": "windows", "type": ["table"]}
+    ]
+  },
+  "chess.NOAA.noaa_datum_code": {
+    "inputs": [
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "code"}
+    ]
+  },
+  "chess.NOAA.noaa_request_chunks": {
+    "inputs": [
+      {"name": "first", "kind": "required", "type": ["datetime"]},
+      {"name": "last", "kind": "required", "type": ["datetime"]},
+      {"name": "api_product", "kind": "required", "type": ["char", "choices={'water_level','hourly_height','high_low','daily_mean','monthly_mean','predictions'}"]}
+    ],
+    "outputs": [
+      {"name": "chunk_first", "type": ["datetime"]},
+      {"name": "chunk_last", "type": ["datetime"]}
+    ]
+  },
+  "chess.NOAA.noaa_station_catalog": {
+    "inputs": [
+      {"name": "options", "kind": "ordered", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "catalog"}
+    ]
+  },
+  "chess.NOAA.noaa_station_details": {
+    "inputs": [
+      {"name": "station_id", "kind": "required", "type": ["char"]},
+      {"name": "options", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "details"}
+    ]
+  },
+  "chess.NOAA.noaa_station_list": {
+    "inputs": [
+      {"name": "ids", "kind": "required", "type": ["cell"]},
+      {"name": "options", "kind": "ordered", "type": ["table"]}
+    ],
+    "outputs": [
+      {"name": "StationList"},
+      {"name": "not_found"}
+    ]
+  },
+  "chess.NOAA.noaa_water_level_downloader": {
+    "inputs": [
+      {"name": "idList", "kind": "required", "type": [["char"], ["cell"], ["string"]]},
+      {"name": "StationList", "kind": "required", "type": ["struct"]},
+      {"name": "requested_datum", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "products", "kind": "required", "type": [["char", "choices={'Verified 6-Minute Water Level','Preliminary 6-Minute Water Level','Verified Hourly Height Water Level','Verified High/Low Water Level','Verified Daily Mean Water Level','Verified Monthly Mean Water Level'}"], ["cell"], ["string"]]},
+      {"name": "opMode", "kind": "required", "type": ["numeric", "choices={1,2}"]},
+      {"name": "dBeg", "kind": "required", "type": [["datetime"], ["numeric"], ["char"]]},
+      {"name": "dEnd", "kind": "ordered", "type": [["datetime"], ["numeric"], ["char"]]}
+    ],
+    "outputs": [
+      {"name": "Sdata", "type": ["struct"]},
+      {"name": "notFound", "type": ["cell"]}
+    ]
+  },
+  "chess.NOAA.noaa_web_request": {
+    "inputs": [
+      {"name": "url", "kind": "required", "type": ["char"]},
+      {"name": "options", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "reply_text"}
+    ]
+  },
+  "chess.NOAA.parse_noaa_csv": {
+    "inputs": [
+      {"name": "reply_text", "kind": "required", "type": ["char"]},
+      {"name": "value_name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "data"},
+      {"name": "no_data"}
+    ]
+  },
+  "chess.NOAA.parse_noaa_data_inventory": {
+    "inputs": [
+      {"name": "xml_text", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "segments"}
+    ]
+  },
+  "chess.NOAA.plot_noaa_stations": {
+    "inputs": [
+      {"name": "catalog", "kind": "required", "type": ["table"]},
+      {"name": "polygon", "kind": "ordered", "type": ["struct"]},
+      {"name": "parent", "kind": "ordered", "type": ["handle"]}
+    ],
+    "outputs": [
+      {"name": "map_axes"}
+    ]
+  },
+  "chess.NOAA.select_noaa_stations": {
+    "inputs": [
+      {"name": "catalog", "kind": "required", "type": ["table"]},
+      {"name": "selection", "kind": "ordered", "type": ["cell"]}
+    ],
+    "outputs": [
+      {"name": "selected"},
+      {"name": "selected_rows"}
+    ]
+  },
+  "chess.Project.acquire_lock": {
+    "inputs": [
+      {"name": "project_folder", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "lock"},
+      {"name": "holder"},
+      {"name": "problem"}
+    ]
+  },
+  "chess.Project.add_alternative": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "structure_type", "kind": "required", "type": ["double"]},
+      {"name": "inputs", "kind": "required", "type": ["struct"]},
+      {"name": "stage", "kind": "ordered", "type": ["double"]},
+      {"name": "check_inputs", "kind": "ordered", "type": ["logical"]}
+    ]
+  },
+  "chess.Project.add_built_storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]},
+      {"name": "database", "kind": "required", "type": "chess.CoastalHazardSystem"},
+      {"name": "replace", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "record"},
+      {"name": "replaced"},
+      {"name": "not_deleted"}
+    ]
+  },
+  "chess.Project.add_pse": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.Project.add_storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "record", "kind": "required", "type": ["struct"]}
+    ]
+  },
+  "chess.Project.add_tide_file": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "file", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.Project.alternative": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "record"}
+    ]
+  },
+  "chess.Project.alternative_names": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "names"}
+    ]
+  },
+  "chess.Project.build_storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "database", "kind": "required", "type": "chess.CoastalHazardSystem"},
+      {"name": "create_wlp", "kind": "ordered", "type": ["double"]},
+      {"name": "create_whp", "kind": "ordered", "type": ["double"]},
+      {"name": "datum_offset", "kind": "ordered", "type": ["double"]},
+      {"name": "progress_function", "kind": "ordered", "type": ["function_handle"]}
+    ]
+  },
+  "chess.Project.chs_dependencies_problem": {
+    "inputs": [
+      {"name": "chs_dependencies", "kind": "required", "type": ["char"]},
+      {"name": "region", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "problem"}
+    ]
+  },
+  "chess.Project.copy_pse": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "new_name", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.Project.create": {
+    "inputs": [
+      {"name": "name", "kind": "required", "type": ["char"]},
+      {"name": "root_folder", "kind": "required", "type": ["char"]},
+      {"name": "vertical_datum", "kind": "required", "type": ["char"]},
+      {"name": "confidence_limits", "kind": "required", "type": ["double"]},
+      {"name": "unit_system", "kind": "ordered", "type": ["char", "choices={'SI','Imperial'}"]}
+    ],
+    "outputs": [
+      {"name": "project"}
+    ]
+  },
+  "chess.Project.default_storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "name"}
+    ]
+  },
+  "chess.Project.delete_folder": {
+    "inputs": [
+      {"name": "folder", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "leftover"}
+    ]
+  },
+  "chess.Project.delete_run": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "storm_database", "kind": "required", "type": ["char"]},
+      {"name": "workflow", "kind": "required", "type": ["numeric", "scalar"]}
+    ],
+    "outputs": [
+      {"name": "not_deleted"}
+    ]
+  },
+  "chess.Project.discard_built_storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"}
+    ]
+  },
+  "chess.Project.download_tide_file": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "station", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "datum", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "start_date", "kind": "required", "type": [["char"], ["string"]]},
+      {"name": "file_name", "kind": "required", "type": ["char"]},
+      {"name": "progress_function", "kind": "ordered", "type": ["function_handle"]}
+    ],
+    "outputs": [
+      {"name": "file"}
+    ]
+  },
+  "chess.Project.drop_storm_database_runs": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.Project.empty_runs": {
+    "inputs": [],
+    "outputs": [
+      {"name": "rows", "type": ["cell"]}
+    ]
+  },
+  "chess.Project.empty_storm_databases": {
+    "inputs": [],
+    "outputs": [
+      {"name": "records"}
+    ]
+  },
+  "chess.Project.export_archive": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "zip_file", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "note"}
+    ]
+  },
+  "chess.Project.has_alternative": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "tf", "type": ["logical"]}
+    ]
+  },
+  "chess.Project.import_storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]},
+      {"name": "source", "kind": "required", "type": ["char"]},
+      {"name": "create_wlp", "kind": "ordered", "type": ["double"]},
+      {"name": "create_whp", "kind": "ordered", "type": ["double"]},
+      {"name": "datum_offset", "kind": "ordered", "type": ["double"]},
+      {"name": "replace", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "record"}
+    ]
+  },
+  "chess.Project.inspect_storm_data": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "source", "kind": "required", "type": ["char"]},
+      {"name": "chs_dependencies", "kind": "ordered", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "database"}
+    ]
+  },
+  "chess.Project.is_multiline": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "tf", "type": ["logical"]}
+    ]
+  },
+  "chess.Project.model": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "settings", "kind": "required", "type": ["struct"]},
+      {"name": "hotstart", "kind": "ordered", "type": ["char", "choices={'auto','cold'}"]}
+    ],
+    "outputs": [
+      {"name": "model"},
+      {"name": "plan"}
+    ]
+  },
+  "chess.Project.move_item": {
+    "inputs": [
+      {"name": "source", "kind": "required", "type": ["char"]},
+      {"name": "target", "kind": "required", "type": ["char"]},
+      {"name": "case_only", "kind": "ordered", "type": ["logical"]}
+    ]
+  },
+  "chess.Project.multiline_pse_names": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"}
+    ],
+    "outputs": [
+      {"name": "names"}
+    ]
+  },
+  "chess.Project.name_problem": {
+    "inputs": [
+      {"name": "name", "kind": "required", "type": ["char"]},
+      {"name": "sibling_names", "kind": "ordered", "type": ["cell"]},
+      {"name": "current_name", "kind": "ordered", "type": ["char"]},
+      {"name": "parent_folder", "kind": "ordered", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "problem"}
+    ]
+  },
+  "chess.Project.open": {
+    "inputs": [
+      {"name": "source", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "project"}
+    ]
+  },
+  "chess.Project.protection_system": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "protection_system"}
+    ]
+  },
+  "chess.Project.pse_names": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"}
+    ],
+    "outputs": [
+      {"name": "names"}
+    ]
+  },
+  "chess.Project.record_run": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "row", "kind": "required", "type": ["struct"]}
+    ]
+  },
+  "chess.Project.region": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"}
+    ],
+    "outputs": [
+      {"name": "region"}
+    ]
+  },
+  "chess.Project.release_lock": {
+    "inputs": [
+      {"name": "lock", "kind": "required", "type": ["struct"]}
+    ]
+  },
+  "chess.Project.remove_alternative": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "delete_files", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "leftover"}
+    ]
+  },
+  "chess.Project.remove_pse": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "delete_files", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "leftover"}
+    ]
+  },
+  "chess.Project.remove_storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.Project.remove_tide_file": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "file_name", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.Project.rename": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "level", "kind": "required", "type": ["char", "choices={'project','pse','alternative'}"]},
+      {"name": "new_name", "kind": "required", "type": ["char"]},
+      {"name": "pse", "kind": "ordered", "type": ["char"]},
+      {"name": "alternative", "kind": "ordered", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "info"}
+    ]
+  },
+  "chess.Project.replace_path_start": {
+    "inputs": [
+      {"name": "value", "kind": "required", "type": ["double"]},
+      {"name": "old_start", "kind": "required", "type": ["char"]},
+      {"name": "new_start", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "value"}
+    ]
+  },
+  "chess.Project.restore_interrupted_run": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "workflow", "kind": "required", "type": ["numeric", "scalar"]},
+      {"name": "storm_database", "kind": "required", "type": ["char"]}
+    ]
+  },
+  "chess.Project.run": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "settings", "kind": "required", "type": ["struct"]},
+      {"name": "hotstart", "kind": "ordered", "type": ["char", "choices={'auto','cold'}"]},
+      {"name": "progress_function", "kind": "ordered", "type": ["function_handle"]}
+    ],
+    "outputs": [
+      {"name": "responses"},
+      {"name": "info"}
+    ]
+  },
+  "chess.Project.run_config": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "settings", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "config", "type": ["struct"]},
+      {"name": "structure", "type": ["struct"]}
+    ]
+  },
+  "chess.Project.run_from_config": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "structure", "kind": "required", "type": ["struct"]},
+      {"name": "resp_file_date", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "row"}
+    ]
+  },
+  "chess.Project.run_label": {
+    "inputs": [
+      {"name": "row", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "label"}
+    ]
+  },
+  "chess.Project.run_settings": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "workflow", "kind": "required", "type": ["numeric", "scalar"]},
+      {"name": "storm_database", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "settings"}
+    ]
+  },
+  "chess.Project.runs": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "rows", "type": ["cell"]}
+    ]
+  },
+  "chess.Project.save": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"}
+    ]
+  },
+  "chess.Project.set_inputs": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]},
+      {"name": "inputs", "kind": "required", "type": ["struct"]}
+    ]
+  },
+  "chess.Project.stage": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "stage"}
+    ]
+  },
+  "chess.Project.stage1_alternative": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "name"}
+    ]
+  },
+  "chess.Project.stage2_alternatives": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "names"}
+    ]
+  },
+  "chess.Project.stage_name_problem": {
+    "inputs": [
+      {"name": "name", "kind": "required", "type": ["char"]},
+      {"name": "stage", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "problem"}
+    ]
+  },
+  "chess.Project.stage_suffix": {
+    "inputs": [
+      {"name": "stage", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "suffix"}
+    ]
+  },
+  "chess.Project.stale_stage2_runs": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "stale"}
+    ]
+  },
+  "chess.Project.storm_data_region_problem": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "database", "kind": "required", "type": "chess.CoastalHazardSystem"}
+    ],
+    "outputs": [
+      {"name": "problem"}
+    ]
+  },
+  "chess.Project.storm_database": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "record"}
+    ]
+  },
+  "chess.Project.storm_database_clash": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "in_project"},
+      {"name": "on_disk"},
+      {"name": "existing_name"}
+    ]
+  },
+  "chess.Project.storm_database_fields": {
+    "inputs": [],
+    "outputs": [
+      {"name": "fields"}
+    ]
+  },
+  "chess.Project.storm_database_name_problem": {
+    "inputs": [
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "problem"}
+    ]
+  },
+  "chess.Project.storm_database_names": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"}
+    ],
+    "outputs": [
+      {"name": "names"}
+    ]
+  },
+  "chess.Project.storm_database_run_files": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "files", "type": ["struct"]}
+    ]
+  },
+  "chess.Project.storm_database_runs": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "tied"}
+    ]
+  },
+  "chess.Project.storm_database_usage": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "count"}
+    ]
+  },
+  "chess.Project.storm_layout": {
+    "inputs": [
+      {"name": "storm", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "layout"}
+    ]
+  },
+  "chess.Project.structure": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "pse", "kind": "required", "type": ["char"]},
+      {"name": "alternative", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "structure", "type": ["struct"]}
+    ]
+  },
+  "chess.Project.structure_template": {
+    "inputs": [
+      {"name": "structure_type", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "template"}
+    ]
+  },
+  "chess.Project.sync_runs": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "scope", "kind": "ordered", "type": [["char"], ["cell"]]},
+      {"name": "mode", "kind": "ordered", "type": ["char", "choices={'sync','full'}"]}
+    ],
+    "outputs": [
+      {"name": "info"}
+    ]
+  },
+  "chess.Project.tide_file_path": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Project"},
+      {"name": "file_name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "file"}
+    ]
+  },
+  "chess.Project.workflow_number": {
+    "inputs": [
+      {"name": "workflow_name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "number"}
+    ]
+  },
+  "chess.ProjectPaths.build": {
+    "inputs": [
+      {"name": "varargin", "kind": "ordered", "repeating": true}
+    ],
+    "outputs": [
+      {"name": "paths", "type": ["struct"]}
+    ]
+  },
+  "chess.ProjectPaths.parse_run_file": {
+    "inputs": [
+      {"name": "file_name", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "run_file"}
+    ]
+  },
+  "chess.ProjectPaths.sampling_seed_file": {
+    "inputs": [
+      {"name": "pf_file", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "seed_file", "type": ["char"]}
+    ]
+  },
+  "chess.ProtectionSystem": {
+    "inputs": [
+      {"name": "pse_inputs", "kind": "ordered", "type": ["struct"]}
+    ]
+  },
+  "chess.ProtectionSystem.create": {
+    "inputs": [
+      {"name": "pse_inputs", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "pse"}
+    ]
+  },
+  "chess.ProtectionSystem.damaging_depth": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem"},
+      {"name": "Hm0_offshore", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "Ks", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "damaging_depth_elevation"},
+      {"name": "depth_above_offshore"}
+    ]
+  },
+  "chess.ProtectionSystem.Floodwall.nappe_jet": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.Floodwall"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "q", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "nappe"}
+    ]
+  },
+  "chess.ProtectionSystem.Floodwall.structure_input_rules": {
+    "inputs": [],
+    "outputs": [
+      {"name": "rules"}
+    ]
+  },
+  "chess.ProtectionSystem.Floodwall.wall_pressures": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.Floodwall"},
+      {"name": "Hm0_offshore", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "p1", "kind": "ordered", "type": ["double"]},
+      {"name": "distribution", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "pressures"},
+      {"name": "eta_star"}
+    ]
+  },
+  "chess.ProtectionSystem.input_rules": {
+    "inputs": [
+      {"name": "struc_type", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "rules"}
+    ]
+  },
+  "chess.ProtectionSystem.Levee.structure_input_rules": {
+    "inputs": [],
+    "outputs": [
+      {"name": "rules"}
+    ]
+  },
+  "chess.ProtectionSystem.overtopping_volume": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem"},
+      {"name": "q", "kind": "required", "type": ["double"]},
+      {"name": "dt", "kind": "required", "type": ["double"]},
+      {"name": "step", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Q_vol"}
+    ]
+  },
+  "chess.ProtectionSystem.plot_geometry": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem"},
+      {"name": "ax", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.leeside_armor_damage": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.RubbleMound"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "dt", "kind": "required", "type": ["double"]},
+      {"name": "previous_damage", "kind": "required", "type": ["double"]},
+      {"name": "previous_crest_velocity", "kind": "required", "type": ["double"]},
+      {"name": "cutoff_offset", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "S"},
+      {"name": "crest_velocity"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.leeside_crest_velocity": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.RubbleMound"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "runup"},
+      {"name": "crest_velocity"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.leeside_stability_margin": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.RubbleMound"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "storm_duration", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "margin"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.leeside_stone_size": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.RubbleMound"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "storm_duration", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Dn50"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.seaside_armor_damage": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.RubbleMound"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "dt", "kind": "required", "type": ["double"]},
+      {"name": "previous_damage", "kind": "required", "type": ["double"]},
+      {"name": "first_damaging_storm", "kind": "required", "type": ["logical"]},
+      {"name": "cutoff_offset", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "S"},
+      {"name": "S_zero"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.seaside_stability_margin": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.RubbleMound"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "storm_duration", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "margin"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.seaside_stone_size": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.RubbleMound"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "storm_duration", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Dn50"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.stone_sizes": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem.RubbleMound"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]},
+      {"name": "storm_duration", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Dn50_seaside"},
+      {"name": "Dn50_leeside"}
+    ]
+  },
+  "chess.ProtectionSystem.RubbleMound.structure_input_rules": {
+    "inputs": [],
+    "outputs": [
+      {"name": "rules"}
+    ]
+  },
+  "chess.ProtectionSystem.runup_and_overtopping": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "R2p"},
+      {"name": "R2p_SWL"},
+      {"name": "q"},
+      {"name": "q_overflow"},
+      {"name": "q_wave_ot"}
+    ]
+  },
+  "chess.ProtectionSystem.to_struct": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem"}
+    ],
+    "outputs": [
+      {"name": "structure", "type": ["struct"]}
+    ]
+  },
+  "chess.ProtectionSystem.transmitted_wave_height": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.ProtectionSystem"},
+      {"name": "Hm0_toe", "kind": "required", "type": ["double"]},
+      {"name": "Tp", "kind": "required", "type": ["double"]},
+      {"name": "SWL", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "Hm0_transmitted"},
+      {"name": "Kt"}
+    ]
+  },
+  "chess.Visualization.aux_methods.display_no_data": {
+    "inputs": [
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "base_fnt", "kind": "required", "type": ["double", "scalar"]},
+      {"name": "msg", "kind": "ordered", "type": ["char"]}
+    ]
+  },
+  "chess.Visualization.aux_methods.initiate_axes": {
+    "inputs": [
+      {"name": "parent", "kind": "required", "type": ["handle"]},
+      {"name": "x_label", "kind": "required", "type": ["char"]},
+      {"name": "y_label", "kind": "required", "type": ["char"]},
+      {"name": "title_str", "kind": "required", "type": ["char"]},
+      {"name": "base_fnt", "kind": "required", "type": ["double", "scalar"]},
+      {"name": "varargin", "kind": "ordered", "repeating": true}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.aux_methods.latex_escape": {
+    "inputs": [
+      {"name": "str", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "out", "type": [["char"], ["struct"]]}
+    ]
+  },
+  "chess.Visualization.aux_methods.pad_limits": {
+    "inputs": [
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "which", "kind": "required", "type": ["char"]},
+      {"name": "data", "kind": "required", "type": ["double"]},
+      {"name": "frac", "kind": "ordered", "type": ["double"]}
+    ]
+  },
+  "chess.Visualization.aux_methods.pull_data": {
+    "inputs": [
+      {"name": "query_names", "kind": "required", "type": ["cell"]},
+      {"name": "ds", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "data_out"}
+    ]
+  },
+  "chess.Visualization.aux_methods.tern": {
+    "inputs": [
+      {"name": "cond", "kind": "required", "type": ["double"]},
+      {"name": "a", "kind": "required", "type": ["struct"]},
+      {"name": "b", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "out", "type": [["char"], ["struct"]]}
+    ]
+  },
+  "chess.Visualization.CHESSPlots": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "Resp", "kind": "required", "type": ["struct"]},
+      {"name": "storm", "kind": "required", "type": ["struct"]},
+      {"name": "project_forcing", "kind": "required", "type": ["struct"]},
+      {"name": "dsw", "kind": "required", "type": ["struct"]},
+      {"name": "structure", "kind": "required", "type": ["struct"]},
+      {"name": "base_fnt", "kind": "required", "type": ["double", "scalar"]},
+      {"name": "unit_system", "kind": "required", "type": ["char", "choices={'SI','Imperial'}"]}
+    ],
+    "outputs": [
+      {"name": "sp", "type": ["chess.Visualization.CHESSPlotsBase"]}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "Resp", "kind": "required", "type": ["struct"]},
+      {"name": "storm", "kind": "required", "type": ["struct"]},
+      {"name": "project_forcing", "kind": "required", "type": ["struct"]},
+      {"name": "dsw", "kind": "required", "type": ["struct"]},
+      {"name": "structure", "kind": "required", "type": ["struct"]},
+      {"name": "base_fnt", "kind": "required", "type": ["double", "scalar"]},
+      {"name": "unit_system", "kind": "required", "type": ["char", "choices={'SI','Imperial'}"]}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.display_hazard_curves": {
+    "inputs": [
+      {"name": "hazard_curves", "kind": "required", "type": ["struct"]},
+      {"name": "unit_system", "kind": "required", "type": ["char"]},
+      {"name": "config", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "hazard_curves"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.event_controls": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "parent", "kind": "required", "type": ["handle"]},
+      {"name": "row", "kind": "required", "type": ["double"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]},
+      {"name": "choices", "kind": "required", "type": ["struct"]},
+      {"name": "emit", "kind": "required", "type": ["function_handle"]}
+    ],
+    "outputs": [
+      {"name": "ctrl"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.event_hydrograph_plot": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "event_id", "kind": "required", "type": ["double"]},
+      {"name": "field_to_plot", "kind": "required", "type": ["char"]},
+      {"name": "chs_data", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.event_selection": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "sel", "kind": "required", "type": ["struct"]},
+      {"name": "choices", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "sel"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.event_series_defaults": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "ser", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ser"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.pse_transect_plot": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "ax", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "ax"},
+      {"name": "Geo"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.refine_selection": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "sel", "kind": "required", "type": ["struct"]},
+      {"name": "unused3", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "sel"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.response_table": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "sel", "kind": "ordered", "type": ["struct"]},
+      {"name": "on_change", "kind": "ordered", "type": ["function_handle"]}
+    ],
+    "outputs": [
+      {"name": "fig"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.storm_data_space_plot": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "var_left", "kind": "required", "type": ["char"]},
+      {"name": "var_right", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.storm_event_viewer": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "parent", "kind": "required", "type": ["handle"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "response_to_view", "kind": "required", "type": ["char"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]},
+      {"name": "datum_offset", "kind": "required", "type": ["double"]},
+      {"name": "on_change", "kind": "required", "type": ["function_handle"]}
+    ],
+    "outputs": [
+      {"name": "fig"}
+    ]
+  },
+  "chess.Visualization.CHESSPlotsBase.subplot_manager": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.CHESSPlotsBase"},
+      {"name": "parent", "kind": "required", "type": ["handle"]},
+      {"name": "nRows", "kind": "required", "type": ["double"]},
+      {"name": "nCols", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "gl"},
+      {"name": "subplot_flag"}
+    ]
+  },
+  "chess.Visualization.det_methods": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "Resp", "kind": "required", "type": ["struct"]},
+      {"name": "storm", "kind": "required", "type": ["struct"]},
+      {"name": "project_forcing", "kind": "required", "type": ["struct"]},
+      {"name": "dsw", "kind": "required", "type": ["struct"]},
+      {"name": "structure", "kind": "required", "type": ["struct"]},
+      {"name": "base_fnt", "kind": "required", "type": ["double", "scalar"]},
+      {"name": "unit_system", "kind": "required", "type": ["char", "choices={'SI','Imperial'}"]}
+    ]
+  },
+  "chess.Visualization.det_methods.available_fields": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.det_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "fields"}
+    ]
+  },
+  "chess.Visualization.det_methods.event_choices": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.det_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ch"}
+    ]
+  },
+  "chess.Visualization.det_methods.event_series": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.det_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "response_to_view", "kind": "required", "type": ["char"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ser"}
+    ]
+  },
+  "chess.Visualization.det_methods.event_table": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.det_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "T"},
+      {"name": "info"}
+    ]
+  },
+  "chess.Visualization.det_methods.peaks_vs_timeseries_plot": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.det_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "field", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.det_methods.response_vs_forcing_plot": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.det_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "x_field", "kind": "required", "type": ["char"]},
+      {"name": "y_field", "kind": "required", "type": ["char"]},
+      {"name": "c_field", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.lcs_methods": {
+    "inputs": [
+      {"name": "config", "kind": "required", "type": ["struct"]},
+      {"name": "Resp", "kind": "required", "type": ["struct"]},
+      {"name": "storm", "kind": "required", "type": ["struct"]},
+      {"name": "project_forcing", "kind": "required", "type": ["struct"]},
+      {"name": "dsw", "kind": "required", "type": ["struct"]},
+      {"name": "structure", "kind": "required", "type": ["struct"]},
+      {"name": "base_fnt", "kind": "required", "type": ["double", "scalar"]},
+      {"name": "unit_system", "kind": "required", "type": ["char", "choices={'SI','Imperial'}"]}
+    ]
+  },
+  "chess.Visualization.lcs_methods.annual_response_distribution": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "field_to_plot", "kind": "required", "type": ["char"]},
+      {"name": "bin_edges", "kind": "required", "type": ["double"]},
+      {"name": "norm_type", "kind": "required", "type": ["char"]},
+      {"name": "cb_lim", "kind": "required", "type": ["double"]},
+      {"name": "grid_on", "kind": "required", "type": ["logical"]},
+      {"name": "cb_log", "kind": "required", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "ax"},
+      {"name": "bin_data"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.compute_annual_distribution": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "stm_data", "kind": "required", "type": ["cell"]},
+      {"name": "resp_vector", "kind": "required", "type": ["cell"]},
+      {"name": "nYears", "kind": "required", "type": ["double"]},
+      {"name": "x_scale_log", "kind": "required", "type": ["logical"]},
+      {"name": "is_count", "kind": "required", "type": ["logical"]},
+      {"name": "bin_edges", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "bin_data"},
+      {"name": "plot_edges"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.event_choices": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ch"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.event_controls": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "parent", "kind": "required", "type": ["handle"]},
+      {"name": "row", "kind": "required", "type": ["double"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]},
+      {"name": "choices", "kind": "required", "type": ["struct"]},
+      {"name": "emit", "kind": "required", "type": ["function_handle"]}
+    ],
+    "outputs": [
+      {"name": "ctrl"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.event_sampling_distribution": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "lc_index", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.event_series": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "response_to_view", "kind": "required", "type": ["char"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ser"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.event_table": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "T"},
+      {"name": "info"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.generate_bin_guess": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "resp_vector", "kind": "ordered", "type": ["cell"]},
+      {"name": "n_bins", "kind": "ordered", "type": ["double"]},
+      {"name": "use_log", "kind": "ordered", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "bin_edges"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.get_damaging_instances": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "field_to_plot", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "C", "type": ["struct"]},
+      {"name": "damage_indx"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.mound_damage_dashboard": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "field_to_plot", "kind": "required", "type": ["char"]},
+      {"name": "s_bin_edges", "kind": "required", "type": ["double"]},
+      {"name": "s_cb_lim", "kind": "required", "type": ["double"]}
+    ]
+  },
+  "chess.Visualization.lcs_methods.plot_annual_distribution": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "bin_data", "kind": "required", "type": ["double"]},
+      {"name": "bin_edges", "kind": "required", "type": ["double"]},
+      {"name": "use_log_x", "kind": "required", "type": ["logical"]},
+      {"name": "is_count", "kind": "required", "type": ["logical"]},
+      {"name": "cb_log", "kind": "required", "type": ["logical"]},
+      {"name": "cb_lim", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "ax"},
+      {"name": "pp"},
+      {"name": "hb"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.plot_mound_damaging_instances_distribution": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "field_to_plot", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.plot_mound_final_damage_state": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "field_to_plot", "kind": "required", "type": ["char"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.plot_pse_submergance_distribution": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "use_log_x", "kind": "required", "type": ["logical"]},
+      {"name": "is_count", "kind": "required", "type": ["logical"]},
+      {"name": "cb_log", "kind": "required", "type": ["logical"]},
+      {"name": "cb_lim", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.refine_selection": {
+    "inputs": [
+      {"name": "obj", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "sel", "kind": "required", "type": ["struct"]},
+      {"name": "choices", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "sel"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.sampling_scheme_dashboard": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]}
+    ]
+  },
+  "chess.Visualization.lcs_methods.slope_armor_damage_plot": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "field_to_plot", "kind": "required", "type": ["char"]},
+      {"name": "lc_index", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.lcs_methods.split_into_events": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.lcs_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "value_in", "kind": "required", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "chunked_events"}
+    ]
+  },
+  "chess.Visualization.pros_methods.event_choices": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.pros_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ch"}
+    ]
+  },
+  "chess.Visualization.pros_methods.event_controls": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.pros_methods"},
+      {"name": "parent", "kind": "required", "type": ["handle"]},
+      {"name": "row", "kind": "required", "type": ["double"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]},
+      {"name": "choices", "kind": "required", "type": ["struct"]},
+      {"name": "emit", "kind": "required", "type": ["function_handle"]}
+    ],
+    "outputs": [
+      {"name": "ctrl"}
+    ]
+  },
+  "chess.Visualization.pros_methods.event_series": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.pros_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "response_to_view", "kind": "required", "type": ["char"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ser"}
+    ]
+  },
+  "chess.Visualization.pros_methods.event_table": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.pros_methods"},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "sel", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "T"},
+      {"name": "info"}
+    ]
+  },
+  "chess.Visualization.pros_methods.frequency_based_comparison_plot": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.pros_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_query", "kind": "required", "type": ["struct"]},
+      {"name": "response_name", "kind": "required", "type": ["char"]},
+      {"name": "fb_curve", "kind": "ordered", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.pros_methods.get_aef": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.pros_methods"},
+      {"name": "response_vector", "kind": "required", "type": ["double"]},
+      {"name": "benchmark_aef", "kind": "required", "type": ["double"]},
+      {"name": "benchmark_hc", "kind": "required", "type": ["double"]},
+      {"name": "dsw", "kind": "ordered", "type": ["struct"]},
+      {"name": "resp_indx", "kind": "ordered", "type": ["double"]}
+    ],
+    "outputs": [
+      {"name": "data_out"},
+      {"name": "idx"}
+    ]
+  },
+  "chess.Visualization.pros_methods.hc_plot": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.pros_methods"},
+      {"name": "ax", "kind": "required", "type": ["double"]},
+      {"name": "ds_names", "kind": "required", "type": ["cell"]},
+      {"name": "field_to_plot", "kind": "required", "type": ["char"]},
+      {"name": "add_events", "kind": "required", "type": ["logical"]}
+    ],
+    "outputs": [
+      {"name": "ax"}
+    ]
+  },
+  "chess.Visualization.pros_methods.refine_selection": {
+    "inputs": [
+      {"name": "self", "kind": "required", "type": "chess.Visualization.pros_methods"},
+      {"name": "sel", "kind": "required", "type": ["struct"]},
+      {"name": "choices", "kind": "required", "type": ["struct"]}
+    ],
+    "outputs": [
+      {"name": "sel"}
+    ]
+  }
+}

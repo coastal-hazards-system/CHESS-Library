@@ -14,7 +14,10 @@ Dont_Scan
 Changelog
 CHESS_Outputs
 unit_test
+unit_test_oop
 
-
-!CHESS_Library/Structure_Responses/ANN/*.mat
+.claude
+!CHESS_Library/+chess/+Equations/*.mat
 CHESS_Library/Retired/
+*PLAN.md
+*CHANGES.md

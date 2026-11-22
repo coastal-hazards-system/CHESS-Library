@@ -1,0 +1,69 @@
+function CHS_Data = convert_zip(chs_zip, h5_names, print_progress, progress_fcn)
+% convert_zip  Convert the named CHS .h5 files of a CHS zip folder.
+%   CHS_Data = convert_zip(chs_zip, h5_names, print_progress)
+%   CHS_Data = convert_zip(..., progress_fcn)
+%
+%   Converts the named CHS .h5 files of a CHS zip folder with
+%   chess.CoastalHazardSystem.convert_h5 (local function convert_h5_files). The zip is
+%   unzipped into a system temp folder (tempname) that is removed on
+%   every exit (success, converter error, a cancel raised by
+%   progress_fcn). The .h5 files are matched by name in any case (dir
+%   '*.h5' is case-sensitive off Windows); a name not found is an error.
+%   CHS_Data.Filename holds the file name only (chess.CoastalHazardSystem.strip_data_folders).
+%   Shared by chess.Model.prepare_storm_database and the GUI storm database wizard
+%   (CHSStormDBImportUI.import_chs_modeling).
+%
+%   Inputs:
+%     chs_zip        - CHS zip folder, char
+%     h5_names       - .h5 file names to convert (no folders),
+%                      number_of_files x 1 cell
+%     print_progress - print progress to the command window (0/1), double
+%     progress_fcn   - (optional, default []) called before each file as
+%                      progress_fcn(jj, n, file_name); [] = command window
+%                      only, function_handle
+%   Outputs:
+%     CHS_Data - converted CHS files (Filename: name only, Conv_Data:
+%                chess.CoastalHazardSystem.convert_h5 output), 1 x number_of_files struct
+%
+%   See also chess.CoastalHazardSystem.convert_h5, chess.CoastalHazardSystem.strip_data_folders,
+%   chess.Model.prepare_storm_database, chess.CoastalHazardSystem.build_storm_database.
+%
+%   Developed by: Fabian A. Garcia Moreno ERDC-CHL
+if nargin < 4
+    progress_fcn = [];
+end
+temp_path = tempname;
+temp_cleanup = onCleanup(@() remove_temp_folder(temp_path)); %#ok<NASGU>
+unzip(chs_zip, temp_path);
+h5_files = dir(fullfile(temp_path, '**', '*'));
+h5_files = h5_files(~[h5_files.isdir]' & endsWith({h5_files.name}', '.h5', 'IgnoreCase', true));
+[~, h5_location] = ismember(lower(h5_names), lower({h5_files.name}'));
+if any(h5_location == 0)
+    error('chess:CoastalHazardSystem:convert_zip:h5NotFound', '%s not found in the unzipped CHS input ''%s''.', strjoin(reshape(h5_names(h5_location == 0), 1, []), ', '), chs_zip);
+end
+CHS_Data = convert_h5_files(fullfile({h5_files(h5_location).folder}', {h5_files(h5_location).name}'),...
+    print_progress, progress_fcn);
+CHS_Data = chess.CoastalHazardSystem.strip_data_folders(CHS_Data);
+end
+
+function Data_out = convert_h5_files(files_2_convert, print_progress, progress_fcn)
+n_files = length(files_2_convert);
+Data_out = struct('Filename', cell(1, n_files), ...
+                  'Conv_Data', cell(1, n_files));
+for jj = 1:n_files
+    chess.Common.disp_toggle(print_progress,['   - ' files_2_convert{jj} '...']);
+    if ~isempty(progress_fcn)
+        [~, f_name, f_ext] = fileparts(files_2_convert{jj});
+        progress_fcn(jj, n_files, [f_name f_ext]);
+    end
+    Data_out(jj).Filename = files_2_convert{jj};
+    Data_out(jj).Conv_Data = chess.CoastalHazardSystem.convert_h5(files_2_convert{jj});
+end
+chess.Common.disp_toggle(print_progress,'H5 conversion was successful...');
+end
+
+function remove_temp_folder(temp_path)
+if isfolder(temp_path)
+    rmdir(temp_path, 's');
+end
+end
