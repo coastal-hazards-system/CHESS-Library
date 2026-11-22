@@ -1,19 +1,20 @@
 function f = plot_storm_duration(T, X, Tm, row, y_label, title_str)
-% Plots One Storm Of An estimate_storm_durations Result: The Signal, Its Threshold(s), t1/t2 And The Peak
+% Plots One Storm Of A Storm Duration Table (One chess.BoundaryConditions.storm_duration Row Per Storm): The Signal, Its Threshold(s), t1/t2 And The Peak
 %   Nothing Is Recomputed: Every Marker Comes From The Table Row. Top: Full Record. Bottom: Zoom On t1..t2 (+/- 12 hr).
 %   Threshold (Red), Unshifted Threshold (Grey, Only When Shifted), t1/t2 (Blue), Peak (Red Circle).
 %
 %   f = plot_storm_duration(T, X, Tm, row, y_label, title_str)
-%       T: Output Table Of estimate_storm_durations (Extra Columns Such As storm_id Are Fine)
-%       X: The M x 1 Signal Cell Passed To estimate_storm_durations (Row i Of X Matches Row i Of T)
-%       Tm: The M x 1 Time Cell (datenum Or datetime), Or The Scalar Time Step [hr] Passed To estimate_storm_durations
+%       T: Table With One chess.BoundaryConditions.storm_duration Result Per Row (Extra Columns Such As storm_id Are Fine)
+%       X: The M x 1 Signal Cell (Row i Of X Matches Row i Of T)
+%       Tm: The M x 1 Time Cell (datenum Or datetime), Or The Scalar Time Step [hr]
 %       row: Row Of T To Plot (Default 1)
 %       y_label: y-Axis Label (Default 'Signal')
 %       title_str: Title Prefix (Default 'storm <storm_id>' When T Has A storm_id Column, Else 'row <row>')
 %       f: Figure Handle
 %
 %   Example:
-%       T = estimate_storm_durations(X, Tm, 0.95, true, 1);
+%       rows = cellfun(@(x, t) chess.BoundaryConditions.storm_duration(x, t, 0.95, true, 1), X, Tm, 'un', false);
+%       T = struct2table(vertcat(rows{:}), 'AsArray', true);
 %       plot_storm_duration(T, X, Tm, find(T.storm_id == 4102), 'SWL (m)');
 if nargin < 4 || isempty(row)
     row = 1;

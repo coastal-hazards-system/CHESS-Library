@@ -1,7 +1,8 @@
 %% MAIN: STORM DURATION FROM THRESHOLD CROSSINGS AROUND THE PEAK
-% Example driver for estimate_storm_durations (a set of storms, any signal), storm_duration_event (one storm) and
+% Example driver for chess.BoundaryConditions.storm_duration (one storm, any signal; looped here over a set of storms) and
 % plot_storm_duration (plot one storm). Run from the CHESS-Library repo root.
 clear; clc; close all
+addpath('CHESS_Library'); chess_setup_path; addpath(fullfile('CHESS_Library', 'Tools'));
 
 %% SETTINGS
 db_file = 'CHESS_Outputs/Chicago_GRR/Event_Database/SP02984.mat'; % One Processed SP (SP*.mat)
@@ -21,7 +22,8 @@ X = cellfun(@(m) m(:, col), D(:, 2), 'un', false); % SWL, Hm0
 % Get Timeseries Timestamp Col
 Tm = cellfun(@(m) m(:, 5), D(:, 2), 'un', false); %datenum
 % Run Zero up/down-crossing Analysis Centered Around Peak
-T = estimate_storm_durations(X, Tm, frac, shift_threshold, min_duration_hr);
+rows = cellfun(@(x, t) chess.BoundaryConditions.storm_duration(x, t, frac, shift_threshold, min_duration_hr), X, Tm, 'un', false);
+T = struct2table(vertcat(rows{:}), 'AsArray', true); % One Row Per Storm
 % Append Storm ID To Output Table
 T = [table(cell2mat(D(:, 1)),...
     'VariableNames', {'storm_id'}), T];
@@ -36,7 +38,7 @@ fprintf('Edge-flagged: %d | Threshold-shifted: %d | At the %g h minimum: %d\n', 
 %% 2. ONE STORM DIRECTLY (Any Signal + Times)
 storm_id = 4102;
 m = D{cell2mat(D(:, 1)) == storm_id, 2};
-r = storm_duration_event(m(:, col), m(:, 5), frac, shift_threshold, min_duration_hr);
+r = chess.BoundaryConditions.storm_duration(m(:, col), m(:, 5), frac, shift_threshold, min_duration_hr);
 disp(['Computed duration for storm ID ' num2str(storm_id) '....']);
 fprintf('\n%s storm %d: t1 %s | t2 %s | duration %.2f hr\n', sp, storm_id, string(r.t1), string(r.t2), r.duration_hr);
 

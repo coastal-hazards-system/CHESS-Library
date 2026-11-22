@@ -1,171 +1,152 @@
 clc;clear all;close all;
-addpath('CHESS_Library'); chess_setup_path; % Library On The Path, Tools/ And Retired/ Kept Off
+addpath('CHESS_Library'); chess_setup_path; % Library On The Path (chess.* Classes And Functions), Tools/ And Retired/ Kept Off
 % diary 'Log.txt';
 %% USER INPUTS
-%{
-CHS Grid File 
-CHS Bias And Uncertainty 
-%}
 % Define CHESS Input File Name
 chess_input_file = 'CHESS_rubble_mound_inputs.xlsx'; % Include relative path if not in parent directory
 
 %% STEP 1: SET-UP PROJECT ENVIRONMENT
 %{
  Description:
-   In order to use the full functionalities included within the CHESS
-   library it is necesary to provide an input file. Please copy and fill
-   out the provided "CHESS_rubble_mound_inputs.xlsx" template. Do not change the
-   values written under "Model Variable Symbol" as this will brake the
-   toolbox in its entirety.
-  Outputs:
-   1. config: Contains parsed information from CHESS input file | 1 x 1 | structure, with nFields 
-   2. structure: Contains parsed information for the specified structure type. | 1x1 | structure, with nFields
+   chess.Model.create reads the input file (copy and fill out the provided
+   "CHESS_rubble_mound_inputs.xlsx" template; do not change the values
+   written under "Model Variable Symbol"), checks every input against the
+   rules of the workflow and of the structure (chess.Config.validate: a
+   missing or invalid input stops here, with the full list), checks the
+   storm data given in chs_zip, prepares the project folders, applies the
+   configuration rules, resolves the hotstart level and builds the
+   protection system. It returns the model of the requested workflow:
+        1 -> chess.Model.Pros           Probabilistic Response Of Structures (PROS, response based)
+        2 -> chess.Model.Deterministic  Deterministic structure responses (DET)
+        3 -> chess.Model.LifeCycle      Life Cycle Simulation & Coastal Structure Reliability (LCS)
+        4 -> chess.Model.Pros           PROS, frequency based
+  The model holds:
+   model.config             parsed inputs plus the derived fields | 1 x 1 struct
+   model.protection_system  chess.ProtectionSystem.Levee, .Floodwall or .RubbleMound
+   model.storm_database     chess.CoastalHazardSystem (storm data description)
+   model.hotstart           chess.Hotstart (reuse of a saved run)
+   model.paths              output folders and files
 %}
 t1 = tic;
-% Parse CHESS Configuration File
-[config, structure] = call_input_parser(chess_input_file);
+model = chess.Model.create(chess_input_file);
 t1 = toc(t1);
 
-%% STEP 2: IMPORT, PROCESS & FORMAT COASTAL HAZARD SYSTEM (CHS) DATA (h5 -> MATLAB Memory)
+%% STEP 2: IMPORT, PROCESS & FORMAT COASTAL HAZARD SYSTEM (CHS) DATA (h5 -> storm database)
 %{
  Description:
-   First step of any project is to screen and format the forcing data. In
-   this case we are showcasing the use of CHS data. CHS host tropical (TC)
-   and extratropical (XC) "Peaks" and "Timeseries" data in a save point
-   context. Within each save point you can find ADCIRC & wave model
-   (STWAVE/SWAN/WAM) storm data. The function "call_chs_data_formatter.m"
-   reads the provided CHS zip folder (or files) and imports, formats and 
-   screens storm data. Additional screening and datasets can be
-   constructed if corresponding timeseries files are provided.
-
-Inputs:
-  Files:
-    1. CHS HDF5 files (or packaged in .zip from CHS). Files must include
-    at least 1 data pair ( ADCIRC & Wave Model ) of "Peaks" datasets for a
-    given storm type (XC or TC). If data pair corresponding timeseries
-    files are included then additional screening (timeseries inspection)
-    and datasets are created (WLP and/or WHP) at the request of the user 
-    (config). Max amount of files accepted is 8 -> 2 data pairs
-    (4 Peaks files) + corresponding timeseries files (4 timeseries files).
-   Vars:
-    1. config
-
-Outputs: 
-  Output variables will be in the form of MATLAB data structures in order
-  to keep everything organized through the whole process. Structures will
-  have additional levels if needed. Structure levels include: storm type
-  (XC, TC or CC), data type (Peaks or Timeseries), dataset (Maxima, WLP,
-  WHP). 
-
-  Files (.mat):
-    1. Raw converted CHS HDF5 files -> exported to <outfolder>\<project>\Event_Database
-    as <db>_raw_files.mat (<db> = config.storm_db, default <CHS region>_SP####)
-    2. Formated and screened CHS File Data, prob_masses -> <outfolder>\<project>\Event_Database\<db>.mat;
-    parsed inputs (config) -> <outfolder>\<project>\PSE\<struc_id>\<case_name>\<workflow folder>\
-    <db>_<workflow>_config_file.mat (layout: Setup/chess_paths.m)
-  Vars:
-    1. config: Contains parsed information from CHESS input file | 1 x 1 | structure, with nFields 
-
-    2. storm: Contains screened and formated CHS storm data. | 1 X 1 | structure, with nfields
-              Peaks storm data is formatted in an nStorms x 2
-              cell array ({storm ID, 1 x 5 [SWL Hm0 Tp wDir datenum]}).
-              Timeseries storm data is formatted in an nStorms x 2
-              cell array ({storm ID, storm hydrograph}) where the
-              storm hydrograph is an M x 6 array
-              ([SWL Hm0 Tp wDir datenum dt]). The storm duration is
-              not stored: it comes from config.storm_duration or is
-              computed from the SWL timeseries.
-
-    3. prob_mass: Contains screened and formated CHS storm data probability masses. | 1 X 1 | structure, with nfields
-                  For specified CHS region includes Param, TC_SRR, TC_Freq,
-                  dist, TotalFreq, smpl0, smpl1. LCS workflows use all
-                  these variables. RB workflows only use TC_freq.
-
+   Makes sure the storm database holds what the run requests. The CHS zip
+   folder (or files) is converted, screened and formatted once and saved to
+     <outfolder>\<project>\Event_Database\<db>.mat           (storm, prob_mass, db_info)
+     <outfolder>\<project>\Event_Database\<db>_raw_files.mat (converted CHS files)
+   An existing database that covers the request is kept as is.
+   The storm data itself can be read with
+     [storm, prob_mass] = model.storm_database.read();
 %}
 t2 = tic;
-% Call CHS Set-up Function 
-[storm, ~, prob_mass, config] = call_chs_data_formatter(config);
+model.prepare_storm_database();
 t2 = toc(t2);
 
 %% STEP 3: CREATE PROJECT FORCING (BOUNDARY CONDITIONS)
 %{
  Description:
-   Once input storm data has been formated the next step is to generate the
-   project forcing. call_chess_boundary_conditions builds it in one call:
-   build (the input storm data is transformed (reshaped) according to the
-   user specified workflow), uncertainty (PROS) and forcing adjustments
-   (SLR, random tides, depth limitation), then saves it once. A complete
-   cached project forcing (hotstart) is loaded instead. Optional 5th input:
-   progress_fcn(step, message); default prints to the command window. CHESS provides users with 2 Response Base
-   methods: CHESS: PROS (Design) & CHESS:LCS (Performance). Additionally, there is a
-   Frequency Base method (CHESS: PROS-FB) that leverages CHESS: PROS to compute storm
-   forcing (SWL, Hm0, Tp) hazard curves and computes structure responses as
-   f(hazards). Workflow ID specification on config file are:
-        1 -> CHESS: Probabilistic Response Of Structures (PROS)
-        3-> StorSim: Life Cycle Simulation (LCS) & Coastal Structure Reliability (LCS-CSR)
-        4-> CHESS: PROS-Frequency Base (PROS-FB)
-Inputs:
-   Vars:
-    1. config
-    2. storm 
-    3. prob_mass
-    4. structure
-
-Outputs: 
-  Output variables will be in the form of MATLAB data structures in order
-  to keep everything organized through the whole process. Structures will
-  have additional levels if needed. Structure levels include: storm type
-  (XC, TC or CC), data type (Peaks or Timeseries), dataset (Maxima, WLP,
-  WHP). 
-
-  Files (.mat):
-    1. Project forcing data -> exported to project folder with
-    suffix " _project_forcing"
-  
-  Vars:
-    1. project_forcing: Contains reshaped storm data. | 1 x 1 | structure, with nFields 
-
-    First Level:
-    Size (# of LC's, 1) -> (Rows,Col)
-    Each row contains a matrix which size depends on the ammount of
-    storms sampled for that specific life cycle.
-    
-    Peaks LC Format (Maxima, WHP, WLP):
-        Size (# of LC's, 8) -> (Rows,Col)
-        (01) Year                         [-]
-        (02) Cyclone Type                 [XC=0; TC=1]
-        (03) Same year counter            [-]
-        (04) Water Level                  [meters, MSL]
-        (05) Wave Height                  [meters]
-        (06) Peak Wave Period             [seconds]
-        (07) Wave Direction               [degrees; N=0, E=+90, S=+/-180, W=-90]
-        (08) Storm Duration               [hours]
-    
-     Timeseries LC Format:
-        (01) Storm ID                 [-]
-        (02) Time Series Length       [-]
-        (03) Timestep Counter         [-]
-        (04) Date/Time                [-]
-        (05) Water Level              [meters, MSL]
-        (06) Wave Height              [meters]
-        (07) Peak Wave Period         [seconds]
-        (08) Wave Direction           [degrees; N=0, E=+90, S=+/-180, W=-90]
-        (09) Storm Duration           [days]
-        (10) Simulation Year          [years]
-
+   Builds the project forcing in one call: build (the storm data is laid
+   out for the workflow), uncertainty (PROS) and forcing adjustments (sea
+   level change, random tides, depth limitation), then saves it once to
+   <db>_<workflow>_project_forcing.mat. A complete saved project forcing
+   (hotstart) is loaded instead.
+   forcing.<Peaks|Timeseries>.<Default|WLP|WHP>.<XC|TC|CC>
 %}
 t3 = tic;
-[project_forcing, config] = call_chess_boundary_conditions(config, storm, prob_mass, structure);
+forcing = model.build_forcing();
 t3 = toc(t3);
 
-%% STEP 4: COMPUTE  PROJECT RESPONSES 
+%% STEP 4: COMPUTE PROJECT RESPONSES
+%{
+ Description:
+   Computes the responses of every requested forcing dataset with the
+   workflow of the model and saves them to
+     <db>_<workflow>_project_responses.mat                   (Resp)
+   The result tables are also written as CSV files (and the config as
+   JSON) to the Export folder next to it:
+     PROS: one hazard curve file per response, one summary file per
+           confidence limit (..._summary_CL50.csv, ...)
+     DET:  one row per storm, every maximum with its own date
+     LCS:  reliability and damage summaries
+   A saved run is exported again with model.export_results().
+%}
 t4 = tic;
-Resp = call_project_response(config, project_forcing, structure);
+responses = model.compute_responses(forcing);
 t4 = toc(t4);
 
-%% PRINT TIME 
+%% PRINT TIME
 disp(['Simulation Completed. Total run time: ' num2str(round(sum([t1,t2,t3,t4])/60,2)) ' mins...']);
 % diary 'off';
 
+%% ALL STEPS IN ONE CALL
+% model = chess.Model.create(chess_input_file);
+% [responses, forcing] = model.run();
 
+%% RUNS FROM A PROJECT (chess.Project)
+%{
+ Description:
+   A project keeps PSEs, alternatives, storm databases and runs in one
+   record, the same one the GUI opens (CHESS_UI_Call): a project built
+   here opens in the GUI, and a GUI project runs from a script.
+     <root_folder>\<project>\CHESS_project_<project>.mat     project file
+     <root_folder>\<project>\Event_Database\                 storm databases
+     <root_folder>\<project>\PSE\<pse>\<alternative>\<PROS|DET|LCS>\   run files
+   Uncomment the lines below to use it (help chess.Project lists every
+   method).
 
+ % New project (nothing is written until save)
+ project = chess.Project.create('My_Project', 'CHESS_Outputs', 'NAVD88', [5 50 95]); % name, root folder, vertical datum, confidence limits
+ project.chs_dependencies = 'CHS_Dependencies';                                      % CHS_Dependencies folder of the region
+
+ % Storm database: built from a CHS .zip (or CHS_Data .mat, or storm .mat)
+ % and added to the project. Further inputs: create_wlp, create_whp (0/1),
+ % datum_offset [m] and replace. A storm database of that name already in
+ % the project or its Event_Database folder is kept as is (nothing is
+ % built); replace = true builds it again and deletes its runs.
+ % Tide file: project.download_tide_file
+ project.import_storm_database('SP01234', 'CHS_files.zip');
+
+ % PSE and alternative: structure type (1 levee, 2 floodwall, 3 rubble mound)
+ % and its inputs, one field per geometry and property input (SI). The
+ % template of the structure type lists them with their default values
+ template = chess.Project.structure_template(3);
+ rows = [template.geometry; template.properties];        % {symbol, description, units, value}
+ inputs = cell2struct(rows(:, 4), rows(:, 1), 1);
+ inputs.crest_elevation = 4.5;
+ project.add_alternative('Breakwater', 'Existing', 3, inputs);
+ inputs.crest_elevation = 5.5;
+ project.add_alternative('Breakwater', 'Raised_Crest', 3, inputs);
+ project.save();
+
+ % Run: default settings of the workflow (1 PROS-RB, 2 DET, 3 LCS, 4 PROS-FB),
+ % changed where needed. The run is recorded in the project and the
+ % project is saved
+ settings = project.run_settings('Breakwater', 'Existing', 1, 'SP01234');
+ settings.swl_slr = 0.3;
+ [responses, info] = project.run('Breakwater', 'Existing', settings);
+ disp(info.hotstart_level);                              % 'cold', 'reuse_sampling' or 'full' (saved forcing reused)
+
+ % Same settings for every alternative of the PSE
+ for alternative = project.alternative_names('Breakwater')'
+     settings = project.run_settings('Breakwater', alternative{1}, 1, 'SP01234');
+     settings.swl_slr = 0.3;
+     project.run('Breakwater', alternative{1}, settings);
+ end
+
+ % Existing project (also one made with the GUI): open, look, run again
+ project = chess.Project.open('CHESS_Outputs\My_Project');
+ project.sync_runs();                                    % runs in line with the run files on disk
+ disp(project.pse_names());
+ rows = project.runs('Breakwater', 'Existing');          % one row per storm database and workflow
+ disp(arrayfun(@chess.Project.run_label, rows, 'un', false));
+
+ % Step by step, as STEPS 3 and 4 above (the project is not updated: run does that)
+ model = project.model('Breakwater', 'Existing', settings);
+ [storm, prob_mass] = model.storm_database.read();
+ forcing = model.build_forcing(storm, prob_mass);
+ responses = model.compute_responses(forcing);
+%}
