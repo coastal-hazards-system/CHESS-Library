@@ -33,7 +33,7 @@ classdef pros_methods < chess.Visualization.CHESSPlotsBase
             % hc_plot  Plot the PROS hazard curve of one response or forcing variable.
             %   ax = hc_plot(self, ax, ds_names, field_to_plot, add_events)
             %       draws the best estimate and confidence level curves
-            %       against AEF [1/yr] (down to 1e-4) or AEP (down to 1e-3,
+            %       against AEF [1/yr] (10 down to 1e-3) or AEP (1 down to 1e-3,
             %       config.pros_use_aep == 1) on a reversed log axis. A
             %       field missing from the results gives a no-data note.
             %
@@ -73,9 +73,9 @@ classdef pros_methods < chess.Visualization.CHESSPlotsBase
                 x_lim = [10^-3, 1];
             else
                 x_label = 'Annual Exceedance Frequency, AEF [1/yr]';
-                xticks_data = fliplr([10^0, 10^-1, 10^-2, 10^-3, 10^-4]);
-                xticks_data_lbl = fliplr({'10^0', '10^{-1}', '10^{-2}', '10^{-3}', '10^{-4}'});
-                x_lim = [10^-4 1];
+                xticks_data = fliplr([10^1, 10^0, 10^-1, 10^-2, 10^-3]);
+                xticks_data_lbl = fliplr({'10^1', '10^0', '10^{-1}', '10^{-2}', '10^{-3}'});
+                x_lim = [10^-3, 10];
             end
             % Initialize Axes
             ax = chess.Visualization.aux_methods.initiate_axes(ax, x_label, plt.y_label, plt.title, self.base_fnt);
@@ -189,12 +189,7 @@ classdef pros_methods < chess.Visualization.CHESSPlotsBase
             if isempty(fb_curve) || ~any(isfinite(fb_curve.y_plot), 'all')
                 chess.Visualization.aux_methods.display_no_data(ax, self.base_fnt, 'Frequency-based (FB) curve not available');
             else
-                if self.config.pros_use_aep == 1
-                    min_x = 10^-3;
-                else
-                    min_x = 10^-4;
-                end
-                in_range = fb_curve.x_plot(:, 1) >= min_x;
+                in_range = fb_curve.x_plot(:, 1) >= 10^-3; % x_plot Stops At 1e-3 (AEF And AEP)
                 fb_x = fb_curve.x_plot(in_range, 1);
                 fb_y = fb_curve.y_plot(in_range, :);
                 fb_styles = {'k:','b:','r:','m:','c:'};
